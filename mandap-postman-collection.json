@@ -1,0 +1,578 @@
+{
+  "info": {
+    "name": "Mandap Association Platform API",
+    "description": "Complete API collection for testing Mandap Association Platform endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "🔐 Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@mandap.com\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.token) {",
+                  "        pm.collectionVariables.set('authToken', response.token);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            }
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Admin User\",\n  \"phone\": \"9876543210\",\n  \"email\": \"admin@mandap.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            }
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"admin123\",\n  \"newPassword\": \"newpassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/change-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "change-password"]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "logout"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🧑‍💼 Vendors",
+      "item": [
+        {
+          "name": "Get All Vendors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/vendors?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "vendors"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Vendor by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/vendors/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "vendors", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "vendor_id_here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Vendor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"businessName\": \"Doe Catering Services\",\n  \"category\": \"Catering\",\n  \"phone\": \"9876543210\",\n  \"email\": \"john@doecatering.com\",\n  \"address\": {\n    \"street\": \"123 Main Street\",\n    \"city\": \"Mumbai\",\n    \"district\": \"Mumbai\",\n    \"state\": \"Maharashtra\",\n    \"pincode\": \"400001\"\n  },\n  \"membershipExpiry\": \"2025-12-31T23:59:59.000Z\",\n  \"services\": [\"Wedding Catering\", \"Corporate Events\"],\n  \"pricing\": {\n    \"startingPrice\": 5000,\n    \"currency\": \"INR\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/vendors",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "vendors"]
+            }
+          }
+        },
+        {
+          "name": "Update Vendor",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe Updated\",\n  \"phone\": \"9876543211\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/vendors/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "vendors", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "vendor_id_here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Vendor",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/vendors/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "vendors", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "vendor_id_here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Vendor Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/vendors/stats/overview",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "vendors", "stats", "overview"]
+            }
+          }
+        },
+        {
+          "name": "Verify Vendor",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/vendors/:id/verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "vendors", ":id", "verify"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "vendor_id_here"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📅 Events",
+      "item": [
+        {
+          "name": "Get All Events",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/events?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "events"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Event by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/events/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "events", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "event_id_here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Annual Meeting 2025\",\n  \"description\": \"Annual general meeting of all members\",\n  \"type\": \"Meeting\",\n  \"date\": \"2025-03-15T10:00:00.000Z\",\n  \"startTime\": \"10:00\",\n  \"endTime\": \"14:00\",\n  \"location\": {\n    \"address\": \"Community Hall\",\n    \"city\": \"Mumbai\",\n    \"district\": \"Mumbai\",\n    \"state\": \"Maharashtra\",\n    \"pincode\": \"400001\"\n  },\n  \"organizer\": \"Mandap Association\",\n  \"contactPerson\": {\n    \"name\": \"Admin User\",\n    \"phone\": \"9876543210\"\n  },\n  \"priority\": \"High\",\n  \"targetAudience\": [\"All Members\"],\n  \"maxAttendees\": 100,\n  \"registrationRequired\": true,\n  \"registrationDeadline\": \"2025-03-10T23:59:59.000Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/events",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "events"]
+            }
+          }
+        },
+        {
+          "name": "Update Event",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Annual Meeting 2025\",\n  \"maxAttendees\": 150\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/events/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "events", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "event_id_here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Event",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/events/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "events", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "event_id_here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Upcoming Events",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/events/upcoming?limit=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "events", "upcoming"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Event Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/events/stats/overview",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "events", "stats", "overview"]
+            }
+          }
+        },
+        {
+          "name": "Update Event Status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Completed\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/events/:id/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "events", ":id", "status"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "event_id_here"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏢 Board of Directors",
+      "item": [
+        {
+          "name": "Get All BOD Members",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bod",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bod"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👥 Members",
+      "item": [
+        {
+          "name": "Get All Members",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/members",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "members"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏛️ Associations",
+      "item": [
+        {
+          "name": "Get All Associations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/associations",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "associations"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📁 File Upload",
+      "item": [
+        {
+          "name": "Upload Image",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/upload/image",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "upload", "image"]
+            }
+          }
+        },
+        {
+          "name": "Upload Document",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "document",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/upload/document",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "upload", "document"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📊 Health & System",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+
+
+
+
+
