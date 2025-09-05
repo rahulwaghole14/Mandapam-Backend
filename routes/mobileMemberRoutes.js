@@ -62,21 +62,19 @@ router.put('/profile', protectMobile, [
       });
     }
 
-    const member = await Member.findByIdAndUpdate(
-      req.user.id,
-      {
-        ...req.body,
-        updatedAt: new Date()
-      },
-      { new: true, runValidators: true }
-    );
-
+    const member = await Member.findByPk(req.user.id);
+    
     if (!member) {
       return res.status(404).json({
         success: false,
         message: 'Member not found'
       });
     }
+
+    // Update member fields
+    await member.update({
+      ...req.body
+    });
 
     res.status(200).json({
       success: true,
@@ -156,45 +154,6 @@ router.get('/members', protectMobile, async (req, res) => {
   }
 });
 
-// @desc    Get specific member details
-// @route   GET /api/mobile/members/:id
-// @access  Private
-router.get('/members/:id', protectMobile, async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // Validate MongoDB ObjectId format
-    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid member ID format'
-      });
-    }
-
-    const member = await Member.findById(id)
-      .select('-createdBy -updatedBy');
-
-    if (!member) {
-      return res.status(404).json({
-        success: false,
-        message: 'Member not found'
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      member
-    });
-
-  } catch (error) {
-    console.error('Get member error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while fetching member'
-    });
-  }
-});
-
 // @desc    Search members
 // @route   GET /api/mobile/members/search
 // @access  Private
@@ -211,46 +170,52 @@ router.get('/members/search', protectMobile, async (req, res) => {
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
     // Build search query
-    const searchQuery = { isActive: true };
+    const whereClause = { isActive: true };
     
     if (q) {
-      searchQuery.$or = [
-        { name: new RegExp(q, 'i') },
-        { businessName: new RegExp(q, 'i') },
-        { phone: new RegExp(q, 'i') }
+      whereClause[Op.or] = [
+        { name: { [Op.iLike]: `%${q}%` } },
+        { businessName: { [Op.iLike]: `%${q}%` } },
+        { phone: { [Op.iLike]: `%${q}%` } }
       ];
     }
     
     if (businessType) {
-      searchQuery.businessType = businessType;
+      whereClause.businessType = businessType;
     }
     
     if (city) {
-      searchQuery.city = new RegExp(city, 'i');
+      whereClause.city = { [Op.iLike]: `%${city}%` };
     }
     
     if (associationName) {
-      searchQuery.associationName = new RegExp(associationName, 'i');
+      whereClause['$association.name$'] = { [Op.iLike]: `%${associationName}%` };
     }
 
-    const members = await Member.find(searchQuery)
-      .select('-createdBy -updatedBy')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await Member.countDocuments(searchQuery);
+    const members = await Member.findAndCountAll({
+      where: whereClause,
+      attributes: { exclude: ['createdBy', 'updatedBy'] },
+      order: [['created_at', 'DESC']],
+      offset,
+      limit,
+      include: [{
+        model: Association,
+        as: 'association',
+        attributes: ['name'],
+        required: associationName ? true : false
+      }]
+    });
 
     res.status(200).json({
       success: true,
-      count: members.length,
-      total,
+      count: members.rows.length,
+      total: members.count,
       page,
-      pages: Math.ceil(total / limit),
-      members
+      pages: Math.ceil(members.count / limit),
+      members: members.rows
     });
 
   } catch (error) {
@@ -271,46 +236,52 @@ router.get('/members/filter', protectMobile, async (req, res) => {
     
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
     // Build filter query
-    const filterQuery = { isActive: true };
+    const whereClause = { isActive: true };
     
     if (businessType) {
-      filterQuery.businessType = businessType;
+      whereClause.businessType = businessType;
     }
     
     if (city) {
-      filterQuery.city = new RegExp(city, 'i');
+      whereClause.city = { [Op.iLike]: `%${city}%` };
     }
     
     if (state) {
-      filterQuery.state = new RegExp(state, 'i');
+      whereClause.state = { [Op.iLike]: `%${state}%` };
     }
     
     if (associationName) {
-      filterQuery.associationName = new RegExp(associationName, 'i');
+      whereClause['$association.name$'] = { [Op.iLike]: `%${associationName}%` };
     }
     
     if (paymentStatus) {
-      filterQuery.paymentStatus = paymentStatus;
+      whereClause.paymentStatus = paymentStatus;
     }
 
-    const members = await Member.find(filterQuery)
-      .select('-createdBy -updatedBy')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await Member.countDocuments(filterQuery);
+    const members = await Member.findAndCountAll({
+      where: whereClause,
+      attributes: { exclude: ['createdBy', 'updatedBy'] },
+      order: [['created_at', 'DESC']],
+      offset,
+      limit,
+      include: [{
+        model: Association,
+        as: 'association',
+        attributes: ['name'],
+        required: associationName ? true : false
+      }]
+    });
 
     res.status(200).json({
       success: true,
-      count: members.length,
-      total,
+      count: members.rows.length,
+      total: members.count,
       page,
-      pages: Math.ceil(total / limit),
-      members
+      pages: Math.ceil(members.count / limit),
+      members: members.rows
     });
 
   } catch (error) {
@@ -318,6 +289,50 @@ router.get('/members/filter', protectMobile, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error while filtering members'
+    });
+  }
+});
+
+// @desc    Get specific member details
+// @route   GET /api/mobile/members/:id
+// @access  Private
+router.get('/members/:id', protectMobile, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Validate integer ID format
+    if (!id.match(/^\d+$/)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid member ID format'
+      });
+    }
+
+    const member = await Member.findByPk(id, {
+      include: [{
+        model: Association,
+        as: 'association',
+        attributes: ['id', 'name', 'description', 'city', 'state', 'phone', 'email']
+      }]
+    });
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        message: 'Member not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      member
+    });
+
+  } catch (error) {
+    console.error('Get member error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching member'
     });
   }
 });
