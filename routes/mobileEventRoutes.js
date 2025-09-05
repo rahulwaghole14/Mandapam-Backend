@@ -14,8 +14,13 @@ router.get('/events', protectMobile, async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const offset = (page - 1) * limit;
 
-    // Build filter object
-    const whereClause = { isPublic: true };
+    // Build filter object - only show current and future events
+    const now = new Date();
+    const whereClause = { 
+      isPublic: true,
+      isActive: true,
+      startDate: { [Op.gte]: now } // Only events starting from today onwards
+    };
     
     if (req.query.type) {
       whereClause.type = req.query.type;
@@ -132,8 +137,13 @@ router.get('/events/search', protectMobile, async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const offset = (page - 1) * limit;
 
-    // Build search query
-    const whereClause = { isPublic: true };
+    // Build search query - only show current and future events
+    const now = new Date();
+    const whereClause = { 
+      isPublic: true,
+      isActive: true,
+      startDate: { [Op.gte]: now } // Only events starting from today onwards
+    };
     
     if (q) {
       whereClause[Op.or] = [
