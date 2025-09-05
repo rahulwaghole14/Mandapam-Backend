@@ -257,6 +257,61 @@ router.get('/associations/search', protectMobile, async (req, res) => {
   }
 });
 
+// @desc    Get associations by city
+// @route   GET /api/mobile/associations/city/:city
+// @access  Private
+router.get('/associations/city/:city', protectMobile, async (req, res) => {
+  try {
+    const { city } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const offset = (page - 1) * limit;
+
+    // Build filter object for specific city
+    const whereClause = { 
+      isActive: true,
+      city: { [Op.iLike]: `%${city}%` }
+    };
+
+    // Build search query if provided
+    if (req.query.search) {
+      whereClause[Op.or] = [
+        { name: { [Op.iLike]: `%${req.query.search}%` } },
+        { phone: { [Op.iLike]: `%${req.query.search}%` } }
+      ];
+    }
+
+    // Additional state filter if provided
+    if (req.query.state) {
+      whereClause.state = { [Op.iLike]: `%${req.query.state}%` };
+    }
+
+    const associations = await Association.findAndCountAll({
+      where: whereClause,
+      order: [['name', 'ASC']],
+      offset,
+      limit
+    });
+
+    res.status(200).json({
+      success: true,
+      count: associations.rows.length,
+      total: associations.count,
+      page,
+      pages: Math.ceil(associations.count / limit),
+      city,
+      associations: associations.rows
+    });
+
+  } catch (error) {
+    console.error('Get associations by city error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching associations by city'
+    });
+  }
+});
+
 // @desc    Get association statistics
 // @route   GET /api/mobile/associations/stats
 // @access  Private
