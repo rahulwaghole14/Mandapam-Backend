@@ -40,8 +40,17 @@ app.use(helmet());
 const allowedOrigins = [
   'http://localhost:3000', 
   'http://localhost:3001', 
-  'http://localhost:8082', 
-  'http://localhost:8081',
+  'http://localhost:8080',
+  'http://localhost:8081', 
+  'http://localhost:8082',
+  'http://localhost:5173', // Vite default
+  'http://localhost:4200', // Angular default
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001',
+  'http://127.0.0.1:8080',
+  'http://127.0.0.1:8081',
+  'http://127.0.0.1:8082',
+  'http://127.0.0.1:5173',
   // Add your Render frontend URL here when deployed
   // 'https://your-frontend-app.onrender.com'
 ];
@@ -51,21 +60,26 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
+    // Log all incoming origins for debugging
+    console.log('CORS request from origin:', origin);
+    
     if (allowedOrigins.indexOf(origin) !== -1) {
+      console.log('✅ CORS allowed for origin:', origin);
       callback(null, true);
     } else {
-      // For production, you might want to be more restrictive
-      if (process.env.NODE_ENV === 'production') {
-        console.log('CORS blocked origin:', origin);
-        callback(new Error('Not allowed by CORS'));
-      } else {
+      // For development, be more permissive
+      if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
+        console.log('⚠️ CORS allowing unknown origin in development:', origin);
         callback(null, true);
+      } else {
+        console.log('❌ CORS blocked origin:', origin);
+        callback(new Error('Not allowed by CORS'));
       }
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
 }));
 
 // Rate limiting
