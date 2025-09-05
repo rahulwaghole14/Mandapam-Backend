@@ -67,51 +67,6 @@ router.get('/events', protectMobile, async (req, res) => {
   }
 });
 
-// @desc    Get specific event details
-// @route   GET /api/mobile/events/:id
-// @access  Private
-router.get('/events/:id', protectMobile, async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // Validate integer ID format
-    if (!id.match(/^\d+$/)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid event ID format'
-      });
-    }
-
-    const event = await Event.findByPk(id, {
-      attributes: { exclude: ['createdBy', 'updatedBy'] },
-      include: [{
-        model: Association,
-        as: 'association',
-        attributes: ['name']
-      }]
-    });
-
-    if (!event) {
-      return res.status(404).json({
-        success: false,
-        message: 'Event not found'
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      event
-    });
-
-  } catch (error) {
-    console.error('Get event error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while fetching event'
-    });
-  }
-});
-
 // @desc    Get upcoming events
 // @route   GET /api/mobile/events/upcoming
 // @access  Private
@@ -272,6 +227,51 @@ router.get('/events/stats', protectMobile, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error while fetching event statistics'
+    });
+  }
+});
+
+// @desc    Get specific event details
+// @route   GET /api/mobile/events/:id
+// @access  Private
+router.get('/events/:id', protectMobile, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Validate integer ID format
+    if (!id.match(/^\d+$/)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid event ID format'
+      });
+    }
+
+    const event = await Event.findByPk(id, {
+      attributes: { exclude: ['createdBy', 'updatedBy'] },
+      include: [{
+        model: Association,
+        as: 'association',
+        attributes: ['name']
+      }]
+    });
+
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      event
+    });
+
+  } catch (error) {
+    console.error('Get event error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching event'
     });
   }
 });

@@ -58,44 +58,6 @@ router.get('/associations', protectMobile, async (req, res) => {
   }
 });
 
-// @desc    Get specific association details
-// @route   GET /api/mobile/associations/:id
-// @access  Private
-router.get('/associations/:id', protectMobile, async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // Validate integer ID format
-    if (!id.match(/^\d+$/)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid association ID format'
-      });
-    }
-
-    const association = await Association.findByPk(id);
-
-    if (!association) {
-      return res.status(404).json({
-        success: false,
-        message: 'Association not found'
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      association
-    });
-
-  } catch (error) {
-    console.error('Get association error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while fetching association'
-    });
-  }
-});
-
 // @desc    Get all Board of Directors members
 // @route   GET /api/mobile/bod
 // @access  Private
@@ -318,6 +280,44 @@ router.get('/associations/stats', protectMobile, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error while fetching association statistics'
+    });
+  }
+});
+
+// @desc    Get specific association details
+// @route   GET /api/mobile/associations/:id
+// @access  Private
+router.get('/associations/:id', protectMobile, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Validate integer ID format
+    if (!id.match(/^\d+$/)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid association ID format'
+      });
+    }
+
+    const association = await Association.findByPk(id);
+
+    if (!association) {
+      return res.status(404).json({
+        success: false,
+        message: 'Association not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      association
+    });
+
+  } catch (error) {
+    console.error('Get association error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching association'
     });
   }
 });
