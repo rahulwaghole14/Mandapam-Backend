@@ -201,15 +201,22 @@ router.get('/events/stats', protectMobile, async (req, res) => {
       }
     });
 
-    const eventTypes = await Event.findAll({
+    // Get event types with counts using a simpler approach
+    const allEvents = await Event.findAll({
       where: { isPublic: true },
-      attributes: [
-        'type',
-        [sequelize.fn('COUNT', sequelize.col('id')), 'count']
-      ],
-      group: ['type'],
-      order: [[sequelize.fn('COUNT', sequelize.col('id')), 'DESC']]
+      attributes: ['type']
     });
+
+    // Count events by type
+    const eventTypeCounts = {};
+    allEvents.forEach(event => {
+      eventTypeCounts[event.type] = (eventTypeCounts[event.type] || 0) + 1;
+    });
+
+    // Convert to array format
+    const eventTypes = Object.entries(eventTypeCounts)
+      .map(([type, count]) => ({ type, count }))
+      .sort((a, b) => b.count - a.count);
 
     res.status(200).json({
       success: true,

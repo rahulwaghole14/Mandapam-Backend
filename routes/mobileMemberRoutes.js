@@ -404,7 +404,7 @@ router.get('/birthdays/today', protectMobile, async (req, res) => {
 router.get('/birthdays/upcoming', protectMobile, async (req, res) => {
   try {
     const today = new Date();
-    const todayMonth = today.getMonth() + 1; // MongoDB months are 1-12
+    const todayMonth = today.getMonth() + 1; // getMonth() returns 0-11, we need 1-12
     const todayDay = today.getDate();
 
     // Get all members with birth dates
@@ -428,41 +428,57 @@ router.get('/birthdays/upcoming', protectMobile, async (req, res) => {
     const upcomingBirthdays = allMembersWithBirthdays.filter(member => {
       if (!member.birthDate) return false;
       
-      const birthMonth = member.birthDate.getMonth() + 1;
-      const birthDay = member.birthDate.getDate();
-      
-      // Calculate days until birthday this year
-      const thisYearBirthday = new Date(today.getFullYear(), member.birthDate.getMonth(), member.birthDate.getDate());
-      const nextYearBirthday = new Date(today.getFullYear() + 1, member.birthDate.getMonth(), member.birthDate.getDate());
-      
-      let daysUntil;
-      if (thisYearBirthday >= today) {
-        daysUntil = Math.ceil((thisYearBirthday - today) / (1000 * 60 * 60 * 24));
-      } else {
-        daysUntil = Math.ceil((nextYearBirthday - today) / (1000 * 60 * 60 * 24));
+      try {
+        // Ensure birthDate is a proper Date object
+        const birthDate = new Date(member.birthDate);
+        if (isNaN(birthDate.getTime())) return false;
+        
+        const birthMonth = birthDate.getMonth() + 1;
+        const birthDay = birthDate.getDate();
+        
+        // Calculate days until birthday this year
+        const thisYearBirthday = new Date(today.getFullYear(), birthDate.getMonth(), birthDate.getDate());
+        const nextYearBirthday = new Date(today.getFullYear() + 1, birthDate.getMonth(), birthDate.getDate());
+        
+        let daysUntil;
+        if (thisYearBirthday >= today) {
+          daysUntil = Math.ceil((thisYearBirthday - today) / (1000 * 60 * 60 * 24));
+        } else {
+          daysUntil = Math.ceil((nextYearBirthday - today) / (1000 * 60 * 60 * 24));
+        }
+        
+        // Include birthdays in the next 7 days (1-7 days from now)
+        return daysUntil >= 1 && daysUntil <= 7;
+      } catch (dateError) {
+        console.error('Date processing error for member:', member.id, dateError);
+        return false;
       }
-      
-      // Include birthdays in the next 7 days (1-7 days from now)
-      return daysUntil >= 1 && daysUntil <= 7;
     });
 
     // Calculate age and days until birthday for each member
     const membersWithDetails = upcomingBirthdays.map(member => {
       const memberObj = member.toJSON();
       if (member.birthDate) {
-        const birthYear = new Date(member.birthDate).getFullYear();
-        const currentYear = today.getFullYear();
-        memberObj.age = currentYear - birthYear;
-        
-        // Calculate days until birthday
-        const thisYearBirthday = new Date(currentYear, new Date(member.birthDate).getMonth(), new Date(member.birthDate).getDate());
-        const nextYearBirthday = new Date(currentYear + 1, new Date(member.birthDate).getMonth(), new Date(member.birthDate).getDate());
-        
-        const daysUntil = thisYearBirthday >= today 
-          ? Math.ceil((thisYearBirthday - today) / (1000 * 60 * 60 * 24))
-          : Math.ceil((nextYearBirthday - today) / (1000 * 60 * 60 * 24));
-        
-        memberObj.daysUntilBirthday = daysUntil;
+        try {
+          const birthDate = new Date(member.birthDate);
+          const birthYear = birthDate.getFullYear();
+          const currentYear = today.getFullYear();
+          memberObj.age = currentYear - birthYear;
+          
+          // Calculate days until birthday
+          const thisYearBirthday = new Date(currentYear, birthDate.getMonth(), birthDate.getDate());
+          const nextYearBirthday = new Date(currentYear + 1, birthDate.getMonth(), birthDate.getDate());
+          
+          const daysUntil = thisYearBirthday >= today 
+            ? Math.ceil((thisYearBirthday - today) / (1000 * 60 * 60 * 24))
+            : Math.ceil((nextYearBirthday - today) / (1000 * 60 * 60 * 24));
+          
+          memberObj.daysUntilBirthday = daysUntil;
+        } catch (dateError) {
+          console.error('Date calculation error for member:', member.id, dateError);
+          memberObj.age = null;
+          memberObj.daysUntilBirthday = null;
+        }
       }
       memberObj.associationName = member.association?.name || 'Unknown Association';
       return memberObj;
