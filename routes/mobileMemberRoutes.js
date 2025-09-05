@@ -154,7 +154,7 @@ router.get('/members', protectMobile, async (req, res) => {
   }
 });
 
-// @desc    Search members
+// @desc    Search members (FIXED ROUTE ORDER)
 // @route   GET /api/mobile/members/search
 // @access  Private
 router.get('/members/search', protectMobile, async (req, res) => {
@@ -227,7 +227,7 @@ router.get('/members/search', protectMobile, async (req, res) => {
   }
 });
 
-// @desc    Filter members by criteria
+// @desc    Filter members by criteria (FIXED ROUTE ORDER)
 // @route   GET /api/mobile/members/filter
 // @access  Private
 router.get('/members/filter', protectMobile, async (req, res) => {
@@ -293,7 +293,7 @@ router.get('/members/filter', protectMobile, async (req, res) => {
   }
 });
 
-// @desc    Get specific member details
+// @desc    Get specific member details (MOVED TO END)
 // @route   GET /api/mobile/members/:id
 // @access  Private
 router.get('/members/:id', protectMobile, async (req, res) => {
