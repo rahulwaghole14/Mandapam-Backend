@@ -1,6 +1,6 @@
 const express = require('express');
-const Association = require('../models/Association');
-const BOD = require('../models/BOD');
+const { Association, BOD } = require('../models');
+const { Op } = require('sequelize');
 const { protectMobile } = require('../middleware/mobileAuthMiddleware');
 
 const router = express.Router();
@@ -12,51 +12,41 @@ router.get('/associations', protectMobile, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
     // Build filter object
-    const filter = { status: 'Active' };
+    const whereClause = { isActive: true };
     
     if (req.query.state) {
-      filter['address.state'] = new RegExp(req.query.state, 'i');
-    }
-    
-    if (req.query.district) {
-      filter['address.district'] = new RegExp(req.query.district, 'i');
+      whereClause.state = { [Op.iLike]: `%${req.query.state}%` };
     }
     
     if (req.query.city) {
-      filter['address.city'] = new RegExp(req.query.city, 'i');
+      whereClause.city = { [Op.iLike]: `%${req.query.city}%` };
     }
 
     // Build search query
-    let searchQuery = {};
     if (req.query.search) {
-      searchQuery = {
-        $or: [
-          { name: new RegExp(req.query.search, 'i') },
-          { contactPerson: new RegExp(req.query.search, 'i') }
-        ]
-      };
+      whereClause[Op.or] = [
+        { name: { [Op.iLike]: `%${req.query.search}%` } },
+        { phone: { [Op.iLike]: `%${req.query.search}%` } }
+      ];
     }
 
-    // Combine filters
-    const finalFilter = { ...filter, ...searchQuery };
-
-    const associations = await Association.find(finalFilter)
-      .sort({ name: 1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await Association.countDocuments(finalFilter);
+    const associations = await Association.findAndCountAll({
+      where: whereClause,
+      order: [['name', 'ASC']],
+      offset,
+      limit
+    });
 
     res.status(200).json({
       success: true,
-      count: associations.length,
-      total,
+      count: associations.rows.length,
+      total: associations.count,
       page,
-      pages: Math.ceil(total / limit),
-      associations
+      pages: Math.ceil(associations.count / limit),
+      associations: associations.rows
     });
 
   } catch (error) {
@@ -75,15 +65,15 @@ router.get('/associations/:id', protectMobile, async (req, res) => {
   try {
     const { id } = req.params;
     
-    // Validate MongoDB ObjectId format
-    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+    // Validate integer ID format
+    if (!id.match(/^\d+$/)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid association ID format'
       });
     }
 
-    const association = await Association.findById(id);
+    const association = await Association.findByPk(id);
 
     if (!association) {
       return res.status(404).json({
@@ -113,48 +103,44 @@ router.get('/bod', protectMobile, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
     // Build filter object
-    const filter = { isActive: true };
+    const whereClause = { isActive: true };
     
     if (req.query.designation) {
-      filter.designation = req.query.designation;
+      whereClause.position = req.query.designation;
     }
 
     // Build search query
-    let searchQuery = {};
     if (req.query.search) {
-      searchQuery = {
-        $or: [
-          { name: new RegExp(req.query.search, 'i') },
-          { designation: new RegExp(req.query.search, 'i') },
-          { email: new RegExp(req.query.search, 'i') }
-        ]
-      };
+      whereClause[Op.or] = [
+        { name: { [Op.iLike]: `%${req.query.search}%` } },
+        { position: { [Op.iLike]: `%${req.query.search}%` } },
+        { email: { [Op.iLike]: `%${req.query.search}%` } }
+      ];
     }
 
-    // Combine filters
-    const finalFilter = { ...filter, ...searchQuery };
-
-    const bod = await BOD.find(finalFilter)
-      .select('-createdBy -updatedBy')
-      .sort({ 
-        designation: 1, // Sort by designation priority
-        name: 1 
-      })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await BOD.countDocuments(finalFilter);
+    const bod = await BOD.findAndCountAll({
+      where: whereClause,
+      attributes: { exclude: ['createdBy', 'updatedBy'] },
+      order: [['position', 'ASC'], ['name', 'ASC']],
+      offset,
+      limit,
+      include: [{
+        model: Association,
+        as: 'association',
+        attributes: ['name']
+      }]
+    });
 
     res.status(200).json({
       success: true,
-      count: bod.length,
-      total,
+      count: bod.rows.length,
+      total: bod.count,
       page,
-      pages: Math.ceil(total / limit),
-      bod
+      pages: Math.ceil(bod.count / limit),
+      bod: bod.rows
     });
 
   } catch (error) {
@@ -173,16 +159,22 @@ router.get('/bod/:id', protectMobile, async (req, res) => {
   try {
     const { id } = req.params;
     
-    // Validate MongoDB ObjectId format
-    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+    // Validate integer ID format
+    if (!id.match(/^\d+$/)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid BOD member ID format'
       });
     }
 
-    const bodMember = await BOD.findById(id)
-      .select('-createdBy -updatedBy');
+    const bodMember = await BOD.findByPk(id, {
+      attributes: { exclude: ['createdBy', 'updatedBy'] },
+      include: [{
+        model: Association,
+        as: 'association',
+        attributes: ['name']
+      }]
+    });
 
     if (!bodMember) {
       return res.status(404).json({
@@ -212,12 +204,19 @@ router.get('/bod/designation/:designation', protectMobile, async (req, res) => {
   try {
     const { designation } = req.params;
     
-    const bodMembers = await BOD.find({ 
-      designation: designation,
-      isActive: true 
-    })
-    .select('-createdBy -updatedBy')
-    .sort({ name: 1 });
+    const bodMembers = await BOD.findAll({
+      where: { 
+        position: designation,
+        isActive: true 
+      },
+      attributes: { exclude: ['createdBy', 'updatedBy'] },
+      order: [['name', 'ASC']],
+      include: [{
+        model: Association,
+        as: 'association',
+        attributes: ['name']
+      }]
+    });
 
     res.status(200).json({
       success: true,
@@ -240,9 +239,9 @@ router.get('/bod/designation/:designation', protectMobile, async (req, res) => {
 // @access  Private
 router.get('/associations/search', protectMobile, async (req, res) => {
   try {
-    const { q, state, district, city } = req.query;
+    const { q, state, city } = req.query;
     
-    if (!q && !state && !district && !city) {
+    if (!q && !state && !city) {
       return res.status(400).json({
         success: false,
         message: 'Please provide search criteria'
@@ -251,44 +250,40 @@ router.get('/associations/search', protectMobile, async (req, res) => {
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
     // Build search query
-    const searchQuery = { status: 'Active' };
+    const whereClause = { isActive: true };
     
     if (q) {
-      searchQuery.$or = [
-        { name: new RegExp(q, 'i') },
-        { contactPerson: new RegExp(q, 'i') }
+      whereClause[Op.or] = [
+        { name: { [Op.iLike]: `%${q}%` } },
+        { phone: { [Op.iLike]: `%${q}%` } }
       ];
     }
     
     if (state) {
-      searchQuery['address.state'] = new RegExp(state, 'i');
-    }
-    
-    if (district) {
-      searchQuery['address.district'] = new RegExp(district, 'i');
+      whereClause.state = { [Op.iLike]: `%${state}%` };
     }
     
     if (city) {
-      searchQuery['address.city'] = new RegExp(city, 'i');
+      whereClause.city = { [Op.iLike]: `%${city}%` };
     }
 
-    const associations = await Association.find(searchQuery)
-      .sort({ name: 1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await Association.countDocuments(searchQuery);
+    const associations = await Association.findAndCountAll({
+      where: whereClause,
+      order: [['name', 'ASC']],
+      offset,
+      limit
+    });
 
     res.status(200).json({
       success: true,
-      count: associations.length,
-      total,
+      count: associations.rows.length,
+      total: associations.count,
       page,
-      pages: Math.ceil(total / limit),
-      associations
+      pages: Math.ceil(associations.count / limit),
+      associations: associations.rows
     });
 
   } catch (error) {
@@ -305,57 +300,17 @@ router.get('/associations/search', protectMobile, async (req, res) => {
 // @access  Private
 router.get('/associations/stats', protectMobile, async (req, res) => {
   try {
-    const stats = await Association.aggregate([
-      {
-        $group: {
-          _id: null,
-          totalAssociations: { $sum: 1 },
-          activeAssociations: {
-            $sum: { $cond: [{ $eq: ['$status', 'Active'] }, 1, 0] }
-          },
-          pendingAssociations: {
-            $sum: { $cond: [{ $eq: ['$status', 'Pending'] }, 1, 0] }
-          },
-          inactiveAssociations: {
-            $sum: { $cond: [{ $eq: ['$status', 'Inactive'] }, 1, 0] }
-          }
-        }
-      }
-    ]);
-
-    const associationsByState = await Association.aggregate([
-      { $match: { status: 'Active' } },
-      {
-        $group: {
-          _id: '$address.state',
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { count: -1 } }
-    ]);
-
-    const associationsByDistrict = await Association.aggregate([
-      { $match: { status: 'Active' } },
-      {
-        $group: {
-          _id: '$address.district',
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { count: -1 } },
-      { $limit: 10 }
-    ]);
+    const totalAssociations = await Association.count();
+    const activeAssociations = await Association.count({ where: { isActive: true } });
 
     res.status(200).json({
       success: true,
-      stats: stats[0] || {
-        totalAssociations: 0,
-        activeAssociations: 0,
+      stats: {
+        totalAssociations,
+        activeAssociations,
         pendingAssociations: 0,
-        inactiveAssociations: 0
-      },
-      associationsByState,
-      associationsByDistrict
+        inactiveAssociations: totalAssociations - activeAssociations
+      }
     });
 
   } catch (error) {

@@ -62,11 +62,13 @@ const Association = sequelize.define('Association', {
   registrationNumber: {
     type: DataTypes.STRING(50),
     allowNull: true,
-    unique: true
+    unique: true,
+    field: 'registration_number'
   },
   establishedYear: {
     type: DataTypes.INTEGER,
     allowNull: true,
+    field: 'established_year',
     validate: {
       min: 1800,
       max: new Date().getFullYear()
@@ -79,21 +81,26 @@ const Association = sequelize.define('Association', {
   isActive: {
     type: DataTypes.BOOLEAN,
     allowNull: false,
-    defaultValue: true
+    defaultValue: true,
+    field: 'is_active'
   },
   totalMembers: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    defaultValue: 0
+    defaultValue: 0,
+    field: 'total_members'
   },
   totalVendors: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    defaultValue: 0
+    defaultValue: 0,
+    field: 'total_vendors'
   }
 }, {
   tableName: 'associations',
-  timestamps: true
+  timestamps: true,
+  createdAt: 'created_at',
+  updatedAt: 'updated_at'
 });
 
 module.exports = Association;

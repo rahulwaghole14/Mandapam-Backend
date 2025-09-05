@@ -18,6 +18,7 @@ const BOD = sequelize.define('BOD', {
   position: {
     type: DataTypes.STRING(100),
     allowNull: false,
+    field: 'position',
     validate: {
       notEmpty: true,
       len: [2, 100]
@@ -58,7 +59,8 @@ const BOD = sequelize.define('BOD', {
   },
   profileImage: {
     type: DataTypes.STRING(255),
-    allowNull: true
+    allowNull: true,
+    field: 'profile_image'
   },
   bio: {
     type: DataTypes.TEXT,
@@ -75,6 +77,7 @@ const BOD = sequelize.define('BOD', {
   termStart: {
     type: DataTypes.DATEONLY,
     allowNull: true,
+    field: 'term_start',
     validate: {
       isDate: true
     }
@@ -82,6 +85,7 @@ const BOD = sequelize.define('BOD', {
   termEnd: {
     type: DataTypes.DATEONLY,
     allowNull: true,
+    field: 'term_end',
     validate: {
       isDate: true
     }
@@ -89,11 +93,13 @@ const BOD = sequelize.define('BOD', {
   isActive: {
     type: DataTypes.BOOLEAN,
     allowNull: false,
-    defaultValue: true
+    defaultValue: true,
+    field: 'is_active'
   },
   associationId: {
     type: DataTypes.INTEGER,
     allowNull: false,
+    field: 'association_id',
     references: {
       model: 'associations',
       key: 'id'
@@ -102,6 +108,8 @@ const BOD = sequelize.define('BOD', {
 }, {
   tableName: 'board_of_directors',
   timestamps: true,
+  createdAt: 'created_at',
+  updatedAt: 'updated_at',
   validate: {
     // Custom validation for term dates
     termValidation() {

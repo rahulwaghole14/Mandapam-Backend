@@ -1,5 +1,6 @@
 const express = require('express');
-const Event = require('../models/Event');
+const { Event, Association } = require('../models');
+const { Op, sequelize } = require('sequelize');
 const { protectMobile } = require('../middleware/mobileAuthMiddleware');
 
 const router = express.Router();
@@ -11,57 +12,50 @@ router.get('/events', protectMobile, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
     // Build filter object
-    const filter = { isPublic: true };
+    const whereClause = { isPublic: true };
     
     if (req.query.type) {
-      filter.type = req.query.type;
-    }
-    
-    if (req.query.status) {
-      filter.status = req.query.status;
+      whereClause.type = req.query.type;
     }
     
     if (req.query.city) {
-      filter['location.city'] = new RegExp(req.query.city, 'i');
-    }
-    
-    if (req.query.district) {
-      filter['location.district'] = new RegExp(req.query.district, 'i');
-    }
-
-    // Build search query
-    let searchQuery = {};
-    if (req.query.search) {
-      searchQuery = {
-        $or: [
-          { title: new RegExp(req.query.search, 'i') },
-          { description: new RegExp(req.query.search, 'i') },
-          { organizer: new RegExp(req.query.search, 'i') }
-        ]
+      whereClause.city = {
+        [Op.iLike]: `%${req.query.city}%`
       };
     }
 
-    // Combine filters
-    const finalFilter = { ...filter, ...searchQuery };
+    // Build search query
+    if (req.query.search) {
+      whereClause[Op.or] = [
+        { title: { [Op.iLike]: `%${req.query.search}%` } },
+        { description: { [Op.iLike]: `%${req.query.search}%` } },
+        { contactPerson: { [Op.iLike]: `%${req.query.search}%` } }
+      ];
+    }
 
-    const events = await Event.find(finalFilter)
-      .select('-createdBy -updatedBy')
-      .sort({ date: 1 }) // Sort by date ascending
-      .skip(skip)
-      .limit(limit);
-
-    const total = await Event.countDocuments(finalFilter);
+    const events = await Event.findAndCountAll({
+      where: whereClause,
+      attributes: { exclude: ['createdBy', 'updatedBy'] },
+      order: [['startDate', 'ASC']], // Sort by start date ascending
+      offset,
+      limit,
+      include: [{
+        model: Association,
+        as: 'association',
+        attributes: ['name']
+      }]
+    });
 
     res.status(200).json({
       success: true,
-      count: events.length,
-      total,
+      count: events.rows.length,
+      total: events.count,
       page,
-      pages: Math.ceil(total / limit),
-      events
+      pages: Math.ceil(events.count / limit),
+      events: events.rows
     });
 
   } catch (error) {
@@ -80,16 +74,22 @@ router.get('/events/:id', protectMobile, async (req, res) => {
   try {
     const { id } = req.params;
     
-    // Validate MongoDB ObjectId format
-    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+    // Validate integer ID format
+    if (!id.match(/^\d+$/)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid event ID format'
       });
     }
 
-    const event = await Event.findById(id)
-      .select('-createdBy -updatedBy');
+    const event = await Event.findByPk(id, {
+      attributes: { exclude: ['createdBy', 'updatedBy'] },
+      include: [{
+        model: Association,
+        as: 'association',
+        attributes: ['name']
+      }]
+    });
 
     if (!event) {
       return res.status(404).json({
@@ -119,30 +119,35 @@ router.get('/events/upcoming', protectMobile, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
     const now = new Date();
-    const filter = {
+    const whereClause = {
       isPublic: true,
-      date: { $gte: now },
-      status: { $in: ['Upcoming', 'Ongoing'] }
+      startDate: { [Op.gte]: now },
+      isActive: true
     };
 
-    const events = await Event.find(filter)
-      .select('-createdBy -updatedBy')
-      .sort({ date: 1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await Event.countDocuments(filter);
+    const events = await Event.findAndCountAll({
+      where: whereClause,
+      attributes: { exclude: ['createdBy', 'updatedBy'] },
+      order: [['startDate', 'ASC']],
+      offset,
+      limit,
+      include: [{
+        model: Association,
+        as: 'association',
+        attributes: ['name']
+      }]
+    });
 
     res.status(200).json({
       success: true,
-      count: events.length,
-      total,
+      count: events.rows.length,
+      total: events.count,
       page,
-      pages: Math.ceil(total / limit),
-      events
+      pages: Math.ceil(events.count / limit),
+      events: events.rows
     });
 
   } catch (error) {
@@ -159,9 +164,9 @@ router.get('/events/upcoming', protectMobile, async (req, res) => {
 // @access  Private
 router.get('/events/search', protectMobile, async (req, res) => {
   try {
-    const { q, type, city, district, status } = req.query;
+    const { q, type, city } = req.query;
     
-    if (!q && !type && !city && !district && !status) {
+    if (!q && !type && !city) {
       return res.status(400).json({
         success: false,
         message: 'Please provide search criteria'
@@ -170,50 +175,47 @@ router.get('/events/search', protectMobile, async (req, res) => {
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
     // Build search query
-    const searchQuery = { isPublic: true };
+    const whereClause = { isPublic: true };
     
     if (q) {
-      searchQuery.$or = [
-        { title: new RegExp(q, 'i') },
-        { description: new RegExp(q, 'i') },
-        { organizer: new RegExp(q, 'i') }
+      whereClause[Op.or] = [
+        { title: { [Op.iLike]: `%${q}%` } },
+        { description: { [Op.iLike]: `%${q}%` } },
+        { contactPerson: { [Op.iLike]: `%${q}%` } }
       ];
     }
     
     if (type) {
-      searchQuery.type = type;
+      whereClause.type = type;
     }
     
     if (city) {
-      searchQuery['location.city'] = new RegExp(city, 'i');
-    }
-    
-    if (district) {
-      searchQuery['location.district'] = new RegExp(district, 'i');
-    }
-    
-    if (status) {
-      searchQuery.status = status;
+      whereClause.city = { [Op.iLike]: `%${city}%` };
     }
 
-    const events = await Event.find(searchQuery)
-      .select('-createdBy -updatedBy')
-      .sort({ date: 1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await Event.countDocuments(searchQuery);
+    const events = await Event.findAndCountAll({
+      where: whereClause,
+      attributes: { exclude: ['createdBy', 'updatedBy'] },
+      order: [['startDate', 'ASC']],
+      offset,
+      limit,
+      include: [{
+        model: Association,
+        as: 'association',
+        attributes: ['name']
+      }]
+    });
 
     res.status(200).json({
       success: true,
-      count: events.length,
-      total,
+      count: events.rows.length,
+      total: events.count,
       page,
-      pages: Math.ceil(total / limit),
-      events
+      pages: Math.ceil(events.count / limit),
+      events: events.rows
     });
 
   } catch (error) {
@@ -225,58 +227,6 @@ router.get('/events/search', protectMobile, async (req, res) => {
   }
 });
 
-// @desc    Get events by date range
-// @route   GET /api/mobile/events/date-range
-// @access  Private
-router.get('/events/date-range', protectMobile, async (req, res) => {
-  try {
-    const { startDate, endDate } = req.query;
-    
-    if (!startDate || !endDate) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide startDate and endDate'
-      });
-    }
-
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
-    const skip = (page - 1) * limit;
-
-    const filter = {
-      isPublic: true,
-      date: {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
-      }
-    };
-
-    const events = await Event.find(filter)
-      .select('-createdBy -updatedBy')
-      .sort({ date: 1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await Event.countDocuments(filter);
-
-    res.status(200).json({
-      success: true,
-      count: events.length,
-      total,
-      page,
-      pages: Math.ceil(total / limit),
-      events
-    });
-
-  } catch (error) {
-    console.error('Get events by date range error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while fetching events by date range'
-    });
-  }
-});
-
 // @desc    Get event statistics
 // @route   GET /api/mobile/events/stats
 // @access  Private
@@ -284,55 +234,33 @@ router.get('/events/stats', protectMobile, async (req, res) => {
   try {
     const now = new Date();
     
-    const stats = await Event.aggregate([
-      { $match: { isPublic: true } },
-      {
-        $group: {
-          _id: null,
-          totalEvents: { $sum: 1 },
-          upcomingEvents: {
-            $sum: {
-              $cond: [
-                { $and: [{ $gte: ['$date', now] }, { $eq: ['$status', 'Upcoming'] }] },
-                1,
-                0
-              ]
-            }
-          },
-          ongoingEvents: {
-            $sum: {
-              $cond: [{ $eq: ['$status', 'Ongoing'] }, 1, 0]
-            }
-          },
-          completedEvents: {
-            $sum: {
-              $cond: [
-                { $and: [{ $lt: ['$date', now] }, { $eq: ['$status', 'Completed'] }] },
-                1,
-                0
-              ]
-            }
-          }
-        }
-      }
-    ]);
+    const totalEvents = await Event.count({
+      where: { isPublic: true }
+    });
 
-    const eventTypes = await Event.aggregate([
-      { $match: { isPublic: true } },
-      {
-        $group: {
-          _id: '$type',
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { count: -1 } }
-    ]);
+    const upcomingEvents = await Event.count({
+      where: {
+        isPublic: true,
+        startDate: { [Op.gte]: now },
+        isActive: true
+      }
+    });
+
+    const eventTypes = await Event.findAll({
+      where: { isPublic: true },
+      attributes: [
+        'type',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+      ],
+      group: ['type'],
+      order: [[sequelize.fn('COUNT', sequelize.col('id')), 'DESC']]
+    });
 
     res.status(200).json({
       success: true,
-      stats: stats[0] || {
-        totalEvents: 0,
-        upcomingEvents: 0,
+      stats: {
+        totalEvents,
+        upcomingEvents,
         ongoingEvents: 0,
         completedEvents: 0
       },

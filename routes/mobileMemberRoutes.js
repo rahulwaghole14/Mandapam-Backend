@@ -100,53 +100,51 @@ router.get('/members', protectMobile, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
     // Build filter object
-    const filter = { isActive: true };
+    const whereClause = { isActive: true };
     
     if (req.query.businessType) {
-      filter.businessType = req.query.businessType;
+      whereClause.businessType = req.query.businessType;
     }
     
     if (req.query.city) {
-      filter.city = new RegExp(req.query.city, 'i');
-    }
-    
-    if (req.query.associationName) {
-      filter.associationName = new RegExp(req.query.associationName, 'i');
-    }
-
-    // Build search query
-    let searchQuery = {};
-    if (req.query.search) {
-      searchQuery = {
-        $or: [
-          { name: new RegExp(req.query.search, 'i') },
-          { businessName: new RegExp(req.query.search, 'i') },
-          { phone: new RegExp(req.query.search, 'i') }
-        ]
+      whereClause.city = {
+        [Op.iLike]: `%${req.query.city}%`
       };
     }
 
-    // Combine filters
-    const finalFilter = { ...filter, ...searchQuery };
+    // Build search query
+    if (req.query.search) {
+      whereClause[Op.or] = [
+        { name: { [Op.iLike]: `%${req.query.search}%` } },
+        { businessName: { [Op.iLike]: `%${req.query.search}%` } },
+        { phone: { [Op.iLike]: `%${req.query.search}%` } }
+      ];
+    }
 
-    const members = await Member.find(finalFilter)
-      .select('-createdBy -updatedBy')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await Member.countDocuments(finalFilter);
+    const members = await Member.findAndCountAll({
+      where: whereClause,
+      attributes: { exclude: ['createdBy', 'updatedBy'] },
+      order: [['created_at', 'DESC']],
+      offset,
+      limit,
+      include: [{
+        model: Association,
+        as: 'association',
+        attributes: ['name'],
+        required: false
+      }]
+    });
 
     res.status(200).json({
       success: true,
-      count: members.length,
-      total,
+      count: members.rows.length,
+      total: members.count,
       page,
-      pages: Math.ceil(total / limit),
-      members
+      pages: Math.ceil(members.count / limit),
+      members: members.rows
     });
 
   } catch (error) {
@@ -337,12 +335,12 @@ router.get('/birthdays/today', protectMobile, async (req, res) => {
     const birthdayMembers = await Member.findAll({
       where: {
         isActive: true,
-        birthDate: {
+        birth_date: {
           [Op.ne]: null
         },
         [Op.and]: [
-          sequelize.where(sequelize.fn('EXTRACT', 'MONTH', sequelize.col('birthDate')), todayMonth),
-          sequelize.where(sequelize.fn('EXTRACT', 'DAY', sequelize.col('birthDate')), todayDay)
+          sequelize.where(sequelize.fn('EXTRACT', sequelize.literal("'MONTH' FROM birth_date")), todayMonth),
+          sequelize.where(sequelize.fn('EXTRACT', sequelize.literal("'DAY' FROM birth_date")), todayDay)
         ]
       },
       attributes: ['id', 'name', 'businessName', 'businessType', 'city', 'state', 'profileImage', 'birthDate', 'phone', 'email'],
@@ -398,7 +396,7 @@ router.get('/birthdays/upcoming', protectMobile, async (req, res) => {
     const allMembersWithBirthdays = await Member.findAll({
       where: {
         isActive: true,
-        birthDate: {
+        birth_date: {
           [Op.ne]: null
         }
       },

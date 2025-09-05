@@ -1,7 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
-const { Member, Association } = require('../models');
+const { Member, Association, OTP } = require('../models');
 const { Op } = require('sequelize');
 
 const router = express.Router();
@@ -84,7 +84,7 @@ router.post('/send-otp', [
     const recentOTPs = await OTP.count({
       where: {
         mobileNumber,
-        createdAt: {
+        created_at: {
           [Op.gte]: new Date(Date.now() - 15 * 60 * 1000)
         }
       }
@@ -155,19 +155,19 @@ router.post('/verify-otp', [
           [Op.gt]: new Date()
         }
       },
-      order: [['createdAt', 'DESC']] // Get the most recent OTP
+      order: [['created_at', 'DESC']] // Get the most recent OTP
     });
 
     if (!otpRecord) {
       // Check if there's any OTP with this mobile number and OTP (regardless of status)
       const anyOtp = await OTP.findOne({ 
         where: { mobileNumber, otp },
-        order: [['createdAt', 'DESC']]
+        order: [['created_at', 'DESC']]
       });
       
       if (anyOtp) {
         if (anyOtp.isUsed) {
-          console.log(`OTP already used for ${mobileNumber} at ${anyOtp.updatedAt}`);
+          console.log(`OTP already used for ${mobileNumber} at ${anyOtp.updated_at}`);
           return res.status(400).json({
             success: false,
             message: 'OTP has already been used. Please request a new OTP.'
@@ -188,7 +188,7 @@ router.post('/verify-otp', [
       });
     }
 
-    console.log(`✅ Valid OTP found for ${mobileNumber}, created at: ${otpRecord.createdAt}, expires at: ${otpRecord.expiresAt}`);
+    console.log(`✅ Valid OTP found for ${mobileNumber}, created at: ${otpRecord.created_at}, expires at: ${otpRecord.expiresAt}`);
 
     // Check attempt limit
     if (otpRecord.attempts >= 3) {

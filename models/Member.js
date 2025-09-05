@@ -18,6 +18,7 @@ const Member = sequelize.define('Member', {
   businessName: {
     type: DataTypes.STRING(200),
     allowNull: false,
+    field: 'business_name',
     validate: {
       notEmpty: true,
       len: [2, 200]
@@ -25,7 +26,8 @@ const Member = sequelize.define('Member', {
   },
   businessType: {
     type: DataTypes.ENUM('catering', 'sound', 'light', 'decorator', 'photography', 'videography', 'transport', 'other'),
-    allowNull: false
+    allowNull: false,
+    field: 'business_type'
   },
   address: {
     type: DataTypes.TEXT,
@@ -64,18 +66,21 @@ const Member = sequelize.define('Member', {
   gstNumber: {
     type: DataTypes.STRING(15),
     allowNull: true,
+    field: 'gst_number',
     validate: {
       is: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
     }
   },
   profileImage: {
     type: DataTypes.STRING(255),
-    allowNull: true
+    allowNull: true,
+    field: 'profile_image'
   },
   businessImages: {
     type: DataTypes.ARRAY(DataTypes.STRING),
     allowNull: true,
-    defaultValue: []
+    defaultValue: [],
+    field: 'business_images'
   },
   description: {
     type: DataTypes.TEXT,
@@ -101,21 +106,25 @@ const Member = sequelize.define('Member', {
   totalBookings: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    defaultValue: 0
+    defaultValue: 0,
+    field: 'total_bookings'
   },
   isActive: {
     type: DataTypes.BOOLEAN,
     allowNull: false,
-    defaultValue: true
+    defaultValue: true,
+    field: 'is_active'
   },
   isVerified: {
     type: DataTypes.BOOLEAN,
     allowNull: false,
-    defaultValue: false
+    defaultValue: false,
+    field: 'is_verified'
   },
   birthDate: {
     type: DataTypes.DATEONLY,
     allowNull: true,
+    field: 'birth_date',
     validate: {
       isDate: true,
       isAfter: '1900-01-01',
@@ -125,6 +134,7 @@ const Member = sequelize.define('Member', {
   associationId: {
     type: DataTypes.INTEGER,
     allowNull: false,
+    field: 'association_id',
     references: {
       model: 'associations',
       key: 'id'
@@ -133,6 +143,8 @@ const Member = sequelize.define('Member', {
 }, {
   tableName: 'members',
   timestamps: true,
+  createdAt: 'created_at',
+  updatedAt: 'updated_at',
   validate: {
     // Custom validation for birth date (must be at least 18 years old)
     birthDateValidation() {

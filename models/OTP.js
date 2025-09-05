@@ -10,6 +10,7 @@ const OTP = sequelize.define('OTP', {
   mobileNumber: {
     type: DataTypes.STRING(15),
     allowNull: false,
+    field: 'mobile_number',
     validate: {
       is: /^[0-9+\-\s()]+$/
     }
@@ -21,21 +22,30 @@ const OTP = sequelize.define('OTP', {
   isUsed: {
     type: DataTypes.BOOLEAN,
     allowNull: false,
-    defaultValue: false
+    defaultValue: false,
+    field: 'is_used'
   },
   expiresAt: {
     type: DataTypes.DATE,
-    allowNull: false
+    allowNull: false,
+    field: 'expires_at'
+  },
+  attempts: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0
   }
 }, {
   tableName: 'otps',
   timestamps: true,
+  createdAt: 'created_at',
+  updatedAt: 'updated_at',
   indexes: [
     {
-      fields: ['mobileNumber', 'isUsed']
+      fields: ['mobile_number', 'is_used']
     },
     {
-      fields: ['expiresAt']
+      fields: ['expires_at']
     }
   ]
 });

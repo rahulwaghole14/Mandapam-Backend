@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const Member = require('../models/Member');
+const { Member } = require('../models');
 
 // Mobile-specific authentication middleware
 const protectMobile = async (req, res, next) => {
@@ -22,7 +22,7 @@ const protectMobile = async (req, res, next) => {
       }
 
       // Get member from token
-      req.user = await Member.findById(decoded.id);
+      req.user = await Member.findByPk(decoded.id);
       
       if (!req.user) {
         return res.status(401).json({
@@ -66,7 +66,7 @@ const optionalMobileAuth = async (req, res, next) => {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
       if (decoded.userType === 'member') {
-        req.user = await Member.findById(decoded.id);
+        req.user = await Member.findByPk(decoded.id);
       }
     } catch (error) {
       // Ignore token errors for optional auth

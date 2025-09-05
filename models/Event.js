@@ -26,6 +26,7 @@ const Event = sequelize.define('Event', {
   startDate: {
     type: DataTypes.DATE,
     allowNull: false,
+    field: 'start_date',
     validate: {
       isDate: true
     }
@@ -33,6 +34,7 @@ const Event = sequelize.define('Event', {
   endDate: {
     type: DataTypes.DATE,
     allowNull: true,
+    field: 'end_date',
     validate: {
       isDate: true
     }
@@ -62,11 +64,13 @@ const Event = sequelize.define('Event', {
   },
   contactPerson: {
     type: DataTypes.STRING(100),
-    allowNull: true
+    allowNull: true,
+    field: 'contact_person'
   },
   contactPhone: {
     type: DataTypes.STRING(15),
     allowNull: true,
+    field: 'contact_phone',
     validate: {
       is: /^[0-9+\-\s()]+$/
     }
@@ -74,6 +78,7 @@ const Event = sequelize.define('Event', {
   contactEmail: {
     type: DataTypes.STRING(100),
     allowNull: true,
+    field: 'contact_email',
     validate: {
       isEmail: true
     }
@@ -81,6 +86,7 @@ const Event = sequelize.define('Event', {
   maxAttendees: {
     type: DataTypes.INTEGER,
     allowNull: true,
+    field: 'max_attendees',
     validate: {
       min: 1
     }
@@ -88,11 +94,13 @@ const Event = sequelize.define('Event', {
   currentAttendees: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    defaultValue: 0
+    defaultValue: 0,
+    field: 'current_attendees'
   },
   registrationFee: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: true,
+    field: 'registration_fee',
     validate: {
       min: 0
     }
@@ -100,12 +108,14 @@ const Event = sequelize.define('Event', {
   isActive: {
     type: DataTypes.BOOLEAN,
     allowNull: false,
-    defaultValue: true
+    defaultValue: true,
+    field: 'is_active'
   },
   isPublic: {
     type: DataTypes.BOOLEAN,
     allowNull: false,
-    defaultValue: true
+    defaultValue: true,
+    field: 'is_public'
   },
   image: {
     type: DataTypes.STRING(255),
@@ -114,6 +124,7 @@ const Event = sequelize.define('Event', {
   associationId: {
     type: DataTypes.INTEGER,
     allowNull: false,
+    field: 'association_id',
     references: {
       model: 'associations',
       key: 'id'
@@ -122,6 +133,8 @@ const Event = sequelize.define('Event', {
 }, {
   tableName: 'events',
   timestamps: true,
+  createdAt: 'created_at',
+  updatedAt: 'updated_at',
   validate: {
     // Custom validation for date range
     dateValidation() {
