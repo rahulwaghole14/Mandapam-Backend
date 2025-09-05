@@ -1,106 +1,117 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const { sequelize } = require('../config/database');
 
-const bodSchema = new mongoose.Schema({
+const BOD = sequelize.define('BOD', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
   name: {
-    type: String,
-    required: [true, 'Please add BOD member name'],
-    trim: true,
-    maxlength: [100, 'Name cannot be more than 100 characters']
-  },
-  designation: {
-    type: String,
-    required: [true, 'Please add designation'],
-    enum: [
-      'President',
-      'Vice President', 
-      'Secretary',
-      'Joint Secretary',
-      'Treasurer',
-      'Joint Treasurer',
-      'Executive Member',
-      'Member'
-    ]
-  },
-  contactNumber: {
-    type: String,
-    required: [true, 'Please add contact number'],
-    match: [/^[0-9]{10}$/, 'Please add a valid 10-digit contact number']
-  },
-  email: {
-    type: String,
-    required: [true, 'Please add email'],
-    match: [
-      /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/,
-      'Please add a valid email'
-    ]
-  },
-  profileImage: {
-    type: String,
-    default: null
-  },
-  isActive: {
-    type: Boolean,
-    default: true
-  },
-  dateOfJoining: {
-    type: Date,
-    default: Date.now
-  },
-  dateOfResignation: {
-    type: Date,
-    default: null
-  },
-  address: {
-    street: {
-      type: String,
-      trim: true
-    },
-    city: {
-      type: String,
-      trim: true
-    },
-    district: {
-      type: String,
-      trim: true
-    },
-    state: {
-      type: String,
-      trim: true
-    },
-    pincode: {
-      type: String,
-      match: [/^[0-9]{6}$/, 'Please add a valid 6-digit pincode']
+    type: DataTypes.STRING(100),
+    allowNull: false,
+    validate: {
+      notEmpty: true,
+      len: [2, 100]
     }
   },
+  position: {
+    type: DataTypes.STRING(100),
+    allowNull: false,
+    validate: {
+      notEmpty: true,
+      len: [2, 100]
+    }
+  },
+  email: {
+    type: DataTypes.STRING(100),
+    allowNull: true,
+    validate: {
+      isEmail: true
+    }
+  },
+  phone: {
+    type: DataTypes.STRING(15),
+    allowNull: true,
+    validate: {
+      is: /^[0-9+\-\s()]+$/
+    }
+  },
+  address: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  city: {
+    type: DataTypes.STRING(100),
+    allowNull: true
+  },
+  state: {
+    type: DataTypes.STRING(100),
+    allowNull: true
+  },
+  pincode: {
+    type: DataTypes.STRING(10),
+    allowNull: true,
+    validate: {
+      is: /^[0-9]{6}$/
+    }
+  },
+  profileImage: {
+    type: DataTypes.STRING(255),
+    allowNull: true
+  },
   bio: {
-    type: String,
-    maxlength: [500, 'Bio cannot be more than 500 characters']
+    type: DataTypes.TEXT,
+    allowNull: true
   },
-  socialLinks: {
-    linkedin: String,
-    twitter: String,
-    facebook: String
+  experience: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    validate: {
+      min: 0,
+      max: 100
+    }
   },
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+  termStart: {
+    type: DataTypes.DATEONLY,
+    allowNull: true,
+    validate: {
+      isDate: true
+    }
   },
-  updatedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+  termEnd: {
+    type: DataTypes.DATEONLY,
+    allowNull: true,
+    validate: {
+      isDate: true
+    }
+  },
+  isActive: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: true
+  },
+  associationId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'associations',
+      key: 'id'
+    }
   }
 }, {
-  timestamps: true
+  tableName: 'board_of_directors',
+  timestamps: true,
+  validate: {
+    // Custom validation for term dates
+    termValidation() {
+      if (this.termEnd && this.termStart) {
+        if (new Date(this.termEnd) < new Date(this.termStart)) {
+          throw new Error('Term end date must be after term start date');
+        }
+      }
+    }
+  }
 });
 
-// Create text index for search functionality
-bodSchema.index({ name: 'text', designation: 'text', email: 'text' });
-
-module.exports = mongoose.model('BOD', bodSchema);
-
-
-
-
-
-
+module.exports = BOD;

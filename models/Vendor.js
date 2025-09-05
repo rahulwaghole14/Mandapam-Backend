@@ -1,208 +1,129 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const { sequelize } = require('../config/database');
 
-const vendorSchema = new mongoose.Schema({
+const Vendor = sequelize.define('Vendor', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
   name: {
-    type: String,
-    required: [true, 'Please add vendor name'],
-    trim: true,
-    maxlength: [100, 'Name cannot be more than 100 characters']
-  },
-  businessName: {
-    type: String,
-    required: [true, 'Please add business name'],
-    trim: true,
-    maxlength: [150, 'Business name cannot be more than 150 characters']
-  },
-  category: {
-    type: String,
-    required: [true, 'Please add vendor category'],
-    enum: [
-      'Catering',
-      'Decoration',
-      'Photography',
-      'Videography',
-      'Music',
-      'Transport',
-      'Venue',
-      'Makeup',
-      'Jewelry',
-      'Clothing',
-      'Other'
-    ]
-  },
-  phone: {
-    type: String,
-    required: [true, 'Please add phone number'],
-    match: [/^[0-9]{10}$/, 'Please add a valid 10-digit phone number']
-  },
-  whatsapp: {
-    type: String,
-    match: [/^[0-9]{10}$/, 'Please add a valid 10-digit WhatsApp number']
-  },
-  email: {
-    type: String,
-    required: [true, 'Please add email'],
-    match: [
-      /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/,
-      'Please add a valid email'
-    ]
-  },
-  address: {
-    street: {
-      type: String,
-      required: [true, 'Please add street address'],
-      trim: true
-    },
-    city: {
-      type: String,
-      required: [true, 'Please add city'],
-      trim: true
-    },
-    district: {
-      type: String,
-      required: [true, 'Please add district'],
-      trim: true
-    },
-    state: {
-      type: String,
-      required: [true, 'Please add state'],
-      trim: true
-    },
-    pincode: {
-      type: String,
-      required: [true, 'Please add pincode'],
-      match: [/^[0-9]{6}$/, 'Please add a valid 6-digit pincode']
+    type: DataTypes.STRING(100),
+    allowNull: false,
+    validate: {
+      notEmpty: true,
+      len: [2, 100]
     }
   },
-  dateOfJoining: {
-    type: Date,
-    required: [true, 'Please add date of joining'],
-    default: Date.now
+  businessName: {
+    type: DataTypes.STRING(200),
+    allowNull: false,
+    validate: {
+      notEmpty: true,
+      len: [2, 200]
+    }
   },
-  membershipExpiry: {
-    type: Date,
-    required: [true, 'Please add membership expiry date']
+  businessType: {
+    type: DataTypes.ENUM('catering', 'sound', 'light', 'decorator', 'photography', 'videography', 'transport', 'other'),
+    allowNull: false
   },
-  status: {
-    type: String,
-    enum: ['Active', 'Inactive', 'Pending', 'Suspended'],
-    default: 'Active'
+  address: {
+    type: DataTypes.TEXT,
+    allowNull: true
   },
-  businessLogo: {
-    type: String,
-    default: null
+  city: {
+    type: DataTypes.STRING(100),
+    allowNull: true
   },
-  businessImages: [{
-    type: String
-  }],
+  state: {
+    type: DataTypes.STRING(100),
+    allowNull: true
+  },
+  pincode: {
+    type: DataTypes.STRING(10),
+    allowNull: true,
+    validate: {
+      is: /^[0-9]{6}$/
+    }
+  },
+  phone: {
+    type: DataTypes.STRING(15),
+    allowNull: false,
+    unique: true,
+    validate: {
+      is: /^[0-9+\-\s()]+$/
+    }
+  },
+  email: {
+    type: DataTypes.STRING(100),
+    allowNull: true,
+    validate: {
+      isEmail: true
+    }
+  },
+  gstNumber: {
+    type: DataTypes.STRING(15),
+    allowNull: true,
+    validate: {
+      is: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
+    }
+  },
+  profileImage: {
+    type: DataTypes.STRING(255),
+    allowNull: true
+  },
+  businessImages: {
+    type: DataTypes.ARRAY(DataTypes.STRING),
+    allowNull: true,
+    defaultValue: []
+  },
   description: {
-    type: String,
-    maxlength: [500, 'Description cannot be more than 500 characters']
+    type: DataTypes.TEXT,
+    allowNull: true
   },
-  services: [{
-    type: String,
-    trim: true
-  }],
-  pricing: {
-    startingPrice: {
-      type: Number,
-      min: [0, 'Starting price cannot be negative']
-    },
-    currency: {
-      type: String,
-      default: 'INR'
+  experience: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    validate: {
+      min: 0,
+      max: 100
     }
   },
   rating: {
-    type: Number,
-    min: [0, 'Rating cannot be negative'],
-    max: [5, 'Rating cannot be more than 5'],
-    default: 0
+    type: DataTypes.DECIMAL(3, 2),
+    allowNull: true,
+    defaultValue: 0.0,
+    validate: {
+      min: 0.0,
+      max: 5.0
+    }
   },
-  totalReviews: {
-    type: Number,
-    default: 0
+  totalBookings: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0
+  },
+  isActive: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: true
   },
   isVerified: {
-    type: Boolean,
-    default: false
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
   },
-  verifiedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  },
-  verifiedAt: {
-    type: Date
-  },
-  notes: {
-    type: String,
-    maxlength: [1000, 'Notes cannot be more than 1000 characters']
-  },
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  updatedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+  associationId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'associations',
+      key: 'id'
+    }
   }
 }, {
+  tableName: 'vendors',
   timestamps: true
 });
 
-// Index for better search performance
-vendorSchema.index({ 
-  name: 'text', 
-  businessName: 'text', 
-  'address.city': 'text', 
-  'address.district': 'text',
-  category: 1,
-  status: 1
-});
-
-// Virtual for membership status
-vendorSchema.virtual('membershipStatus').get(function() {
-  const now = new Date();
-  const expiry = new Date(this.membershipExpiry);
-  
-  if (expiry < now) {
-    return 'Expired';
-  } else if (expiry - now < 30 * 24 * 60 * 60 * 1000) { // 30 days
-    return 'Expiring Soon';
-  } else {
-    return 'Active';
-  }
-});
-
-// Virtual for days until expiry
-vendorSchema.virtual('daysUntilExpiry').get(function() {
-  const now = new Date();
-  const expiry = new Date(this.membershipExpiry);
-  const diffTime = expiry - now;
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays > 0 ? diffDays : 0;
-});
-
-// Method to check if membership is expiring soon
-vendorSchema.methods.isExpiringSoon = function(days = 30) {
-  const now = new Date();
-  const expiry = new Date(this.membershipExpiry);
-  const diffTime = expiry - now;
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays <= days && diffDays > 0;
-};
-
-// Method to check if membership is expired
-vendorSchema.methods.isExpired = function() {
-  const now = new Date();
-  const expiry = new Date(this.membershipExpiry);
-  return expiry < now;
-};
-
-// Ensure virtual fields are serialized
-vendorSchema.set('toJSON', { virtuals: true });
-vendorSchema.set('toObject', { virtuals: true });
-
-module.exports = mongoose.model('Vendor', vendorSchema);
-
+module.exports = Vendor;

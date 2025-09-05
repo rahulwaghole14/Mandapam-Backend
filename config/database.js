@@ -1,40 +1,59 @@
-const mongoose = require('mongoose');
+const { Sequelize } = require('sequelize');
+const dotenv = require('dotenv');
 
-const connectDB = async () => {
+dotenv.config();
+
+// PostgreSQL connection configuration
+const sequelize = new Sequelize(
+  process.env.DATABASE_URL || process.env.POSTGRES_URL || {
+    database: process.env.POSTGRES_DB || 'mandap_db',
+    username: process.env.POSTGRES_USER || 'postgres',
+    password: process.env.POSTGRES_PASSWORD || 'password',
+    host: process.env.POSTGRES_HOST || 'localhost',
+    port: process.env.POSTGRES_PORT || 5432,
+    dialect: 'postgres',
+    logging: process.env.NODE_ENV === 'development' ? console.log : false,
+    pool: {
+      max: 5,
+      min: 0,
+      acquire: 30000,
+      idle: 10000
+    },
+    define: {
+      timestamps: true,
+      underscored: true,
+      createdAt: 'created_at',
+      updatedAt: 'updated_at'
+    }
+  }
+);
+
+// Test the connection
+const testConnection = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/mandapDB', {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
-
-    console.log(`MongoDB Connected: ${conn.connection.host}`);
-    
-    // Handle connection events
-    mongoose.connection.on('error', (err) => {
-      console.error('MongoDB connection error:', err);
-    });
-
-    mongoose.connection.on('disconnected', () => {
-      console.log('MongoDB disconnected');
-    });
-
-    // Graceful shutdown
-    process.on('SIGINT', async () => {
-      await mongoose.connection.close();
-      console.log('MongoDB connection closed through app termination');
-      process.exit(0);
-    });
-
+    await sequelize.authenticate();
+    console.log('✅ PostgreSQL Connected Successfully');
+    return true;
   } catch (error) {
-    console.error('MongoDB connection error:', error);
-    process.exit(1);
+    console.error('❌ PostgreSQL Connection Error:', error.message);
+    return false;
   }
 };
 
-module.exports = connectDB;
+// Sync database (create tables if they don't exist)
+const syncDatabase = async (force = false) => {
+  try {
+    await sequelize.sync({ force });
+    console.log('✅ Database synchronized successfully');
+    return true;
+  } catch (error) {
+    console.error('❌ Database sync error:', error.message);
+    return false;
+  }
+};
 
-
-
-
-
-
+module.exports = {
+  sequelize,
+  testConnection,
+  syncDatabase
+};

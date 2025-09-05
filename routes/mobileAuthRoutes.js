@@ -1,21 +1,21 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
-const Member = require('../models/Member');
-const OTP = require('../models/OTP');
+const { Member, Association } = require('../models');
+const { Op } = require('sequelize');
 
 const router = express.Router();
 
 // Generate JWT Token for Members
 const generateMemberToken = (member) => {
   const tokenData = {
-    id: member._id,
+    id: member.id, // Use integer ID instead of ObjectId
     phone: member.phone,
     name: member.name,
     businessName: member.businessName,
     businessType: member.businessType,
     city: member.city,
-    associationName: member.associationName,
+    associationName: member.association?.name || 'Unknown Association',
     isActive: member.isActive,
     userType: 'member' // Distinguish from admin users
   };
@@ -61,7 +61,18 @@ router.post('/send-otp', [
     const { mobileNumber } = req.body;
 
     // Check if member exists
-    const member = await Member.findOne({ phone: mobileNumber, isActive: true });
+    const member = await Member.findOne({ 
+      where: { 
+        phone: mobileNumber, 
+        isActive: true 
+      },
+      include: [{
+        model: Association,
+        as: 'association',
+        attributes: ['name']
+      }]
+    });
+    
     if (!member) {
       return res.status(404).json({
         success: false,
@@ -70,9 +81,13 @@ router.post('/send-otp', [
     }
 
     // Check OTP request rate limit (max 10 requests per 15 minutes for development)
-    const recentOTPs = await OTP.countDocuments({
-      mobileNumber,
-      createdAt: { $gte: new Date(Date.now() - 15 * 60 * 1000) }
+    const recentOTPs = await OTP.count({
+      where: {
+        mobileNumber,
+        createdAt: {
+          [Op.gte]: new Date(Date.now() - 15 * 60 * 1000)
+        }
+      }
     });
 
     if (recentOTPs >= 10) {
@@ -87,7 +102,7 @@ router.post('/send-otp', [
     await OTP.create({
       mobileNumber,
       otp,
-      purpose: 'login'
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes expiry
     });
 
     // Send OTP
@@ -132,15 +147,23 @@ router.post('/verify-otp', [
 
     // Find the most recent valid OTP for this mobile number
     const otpRecord = await OTP.findOne({
-      mobileNumber,
-      otp,
-      isUsed: false,
-      expiresAt: { $gt: new Date() }
-    }).sort({ createdAt: -1 }); // Get the most recent OTP
+      where: {
+        mobileNumber,
+        otp,
+        isUsed: false,
+        expiresAt: {
+          [Op.gt]: new Date()
+        }
+      },
+      order: [['createdAt', 'DESC']] // Get the most recent OTP
+    });
 
     if (!otpRecord) {
       // Check if there's any OTP with this mobile number and OTP (regardless of status)
-      const anyOtp = await OTP.findOne({ mobileNumber, otp }).sort({ createdAt: -1 });
+      const anyOtp = await OTP.findOne({ 
+        where: { mobileNumber, otp },
+        order: [['createdAt', 'DESC']]
+      });
       
       if (anyOtp) {
         if (anyOtp.isUsed) {
@@ -176,7 +199,18 @@ router.post('/verify-otp', [
     }
 
     // Get member details
-    const member = await Member.findOne({ phone: mobileNumber, isActive: true });
+    const member = await Member.findOne({ 
+      where: { 
+        phone: mobileNumber, 
+        isActive: true 
+      },
+      include: [{
+        model: Association,
+        as: 'association',
+        attributes: ['name']
+      }]
+    });
+    
     if (!member) {
       return res.status(404).json({
         success: false,
@@ -185,13 +219,7 @@ router.post('/verify-otp', [
     }
 
     // Mark OTP as used
-    otpRecord.isUsed = true;
-    await otpRecord.save();
-
-    // Update member verification status
-    member.isMobileVerified = true;
-    member.mobileVerifiedAt = new Date();
-    await member.save();
+    await otpRecord.update({ isUsed: true });
 
     // Generate token
     const token = generateMemberToken(member);
@@ -201,7 +229,7 @@ router.post('/verify-otp', [
       message: 'Login successful',
       token,
       member: {
-        _id: member._id,
+        id: member.id,
         name: member.name,
         businessName: member.businessName,
         businessType: member.businessType,
@@ -209,7 +237,7 @@ router.post('/verify-otp', [
         city: member.city,
         state: member.state,
         pincode: member.pincode,
-        associationName: member.associationName,
+        associationName: member.association?.name || 'Unknown Association',
         profileImage: member.profileImage,
         email: member.email,
         isMobileVerified: member.isMobileVerified,

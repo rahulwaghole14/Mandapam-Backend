@@ -1,40 +1,43 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const { sequelize } = require('../config/database');
 
-const otpSchema = new mongoose.Schema({
+const OTP = sequelize.define('OTP', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
   mobileNumber: {
-    type: String,
-    required: true,
-    match: [/^[0-9]{10}$/, 'Please add a valid 10-digit mobile number']
+    type: DataTypes.STRING(15),
+    allowNull: false,
+    validate: {
+      is: /^[0-9+\-\s()]+$/
+    }
   },
   otp: {
-    type: String,
-    required: true,
-    length: 6
-  },
-  expiresAt: {
-    type: Date,
-    required: true,
-    default: () => new Date(Date.now() + 30 * 60 * 1000) // 30 minutes for development
-  },
-  attempts: {
-    type: Number,
-    default: 0,
-    max: 3
+    type: DataTypes.STRING(10),
+    allowNull: false
   },
   isUsed: {
-    type: Boolean,
-    default: false
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
   },
-  purpose: {
-    type: String,
-    enum: ['login', 'registration', 'password_reset'],
-    default: 'login'
+  expiresAt: {
+    type: DataTypes.DATE,
+    allowNull: false
   }
 }, {
-  timestamps: true
+  tableName: 'otps',
+  timestamps: true,
+  indexes: [
+    {
+      fields: ['mobileNumber', 'isUsed']
+    },
+    {
+      fields: ['expiresAt']
+    }
+  ]
 });
 
-// Auto-delete expired OTPs
-otpSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-
-module.exports = mongoose.model('OTP', otpSchema);
+module.exports = OTP;

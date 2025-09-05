@@ -1,98 +1,99 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const { sequelize } = require('../config/database');
 
-const associationSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: [true, 'Association name is required'],
-    trim: true,
-    maxlength: [100, 'Association name cannot exceed 100 characters']
+const Association = sequelize.define('Association', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
   },
-  address: {
-    city: {
-      type: String,
-      required: [true, 'City is required'],
-      trim: true,
-      maxlength: [50, 'City name cannot exceed 50 characters']
-    },
-    district: {
-      type: String,
-      required: [true, 'District is required'],
-      trim: true,
-      maxlength: [50, 'District name cannot exceed 50 characters']
-    },
-    state: {
-      type: String,
-      required: [true, 'State is required'],
-      trim: true,
-      maxlength: [50, 'State name cannot exceed 50 characters']
-    },
-    pincode: {
-      type: String,
-      required: [true, 'Pincode is required'],
-      match: [/^[0-9]{6}$/, 'Please enter a valid 6-digit pincode']
+  name: {
+    type: DataTypes.STRING(200),
+    allowNull: false,
+    validate: {
+      notEmpty: true,
+      len: [2, 200]
     }
   },
-  establishedDate: {
-    type: Date,
-    required: [true, 'Established date is required']
+  description: {
+    type: DataTypes.TEXT,
+    allowNull: true
   },
-  memberCount: {
-    type: Number,
-    default: 0,
-    min: [0, 'Member count cannot be negative']
+  address: {
+    type: DataTypes.TEXT,
+    allowNull: true
   },
-  status: {
-    type: String,
-    enum: ['Active', 'Pending', 'Inactive'],
-    default: 'Active'
+  city: {
+    type: DataTypes.STRING(100),
+    allowNull: true
   },
-  contactPerson: {
-    type: String,
-    trim: true,
-    maxlength: [100, 'Contact person name cannot exceed 100 characters']
+  state: {
+    type: DataTypes.STRING(100),
+    allowNull: true
+  },
+  pincode: {
+    type: DataTypes.STRING(10),
+    allowNull: true,
+    validate: {
+      is: /^[0-9]{6}$/
+    }
   },
   phone: {
-    type: String,
-    trim: true,
-    match: [/^[0-9+\-\s()]{10,15}$/, 'Please enter a valid phone number']
+    type: DataTypes.STRING(15),
+    allowNull: true,
+    validate: {
+      is: /^[0-9+\-\s()]+$/
+    }
   },
   email: {
-    type: String,
-    trim: true,
-    lowercase: true,
-    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email address']
+    type: DataTypes.STRING(100),
+    allowNull: true,
+    validate: {
+      isEmail: true
+    }
   },
   website: {
-    type: String,
-    trim: true,
-    match: [/^https?:\/\/.+/, 'Please enter a valid website URL starting with http:// or https://']
+    type: DataTypes.STRING(255),
+    allowNull: true,
+    validate: {
+      isUrl: true
+    }
   },
-  socialLinks: {
-    linkedin: {
-      type: String,
-      trim: true,
-      match: [/^https?:\/\/.+/, 'Please enter a valid LinkedIn URL starting with http:// or https://']
-    },
-    twitter: {
-      type: String,
-      trim: true,
-      match: [/^https?:\/\/.+/, 'Please enter a valid Twitter URL starting with http:// or https://']
-    },
-    facebook: {
-      type: String,
-      trim: true,
-      match: [/^https?:\/\/.+/, 'Please enter a valid Facebook URL starting with http:// or https://']
+  registrationNumber: {
+    type: DataTypes.STRING(50),
+    allowNull: true,
+    unique: true
+  },
+  establishedYear: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    validate: {
+      min: 1800,
+      max: new Date().getFullYear()
     }
   },
   logo: {
-    type: String,
-    trim: true
+    type: DataTypes.STRING(255),
+    allowNull: true
+  },
+  isActive: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: true
+  },
+  totalMembers: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0
+  },
+  totalVendors: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0
   }
 }, {
+  tableName: 'associations',
   timestamps: true
 });
 
-// Index for better search performance
-associationSchema.index({ name: 'text', 'address.city': 1, 'address.state': 1, status: 1 });
-
-module.exports = mongoose.model('Association', associationSchema);
+module.exports = Association;

@@ -1,7 +1,8 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const Member = require('../models/Member');
+const { Member, Association, sequelize } = require('../models');
 const { protectMobile } = require('../middleware/mobileAuthMiddleware');
+const { Op } = require('sequelize');
 
 const router = express.Router();
 
@@ -10,7 +11,13 @@ const router = express.Router();
 // @access  Private
 router.get('/profile', protectMobile, async (req, res) => {
   try {
-    const member = await Member.findById(req.user.id);
+    const member = await Member.findByPk(req.user.id, {
+      include: [{
+        model: Association,
+        as: 'association',
+        attributes: ['name']
+      }]
+    });
     
     if (!member) {
       return res.status(404).json({
@@ -327,30 +334,35 @@ router.get('/birthdays/today', protectMobile, async (req, res) => {
     const todayDay = today.getDate();
 
     // Find members whose birthday is today
-    const birthdayMembers = await Member.find({
-      isActive: true,
-      birthDate: {
-        $exists: true,
-        $ne: null
-      },
-      $expr: {
-        $and: [
-          { $eq: [{ $month: "$birthDate" }, todayMonth] },
-          { $eq: [{ $dayOfMonth: "$birthDate" }, todayDay] }
+    const birthdayMembers = await Member.findAll({
+      where: {
+        isActive: true,
+        birthDate: {
+          [Op.ne]: null
+        },
+        [Op.and]: [
+          sequelize.where(sequelize.fn('EXTRACT', 'MONTH', sequelize.col('birthDate')), todayMonth),
+          sequelize.where(sequelize.fn('EXTRACT', 'DAY', sequelize.col('birthDate')), todayDay)
         ]
-      }
-    })
-    .select('name businessName businessType city state associationName profileImage birthDate phone email')
-    .sort({ name: 1 });
+      },
+      attributes: ['id', 'name', 'businessName', 'businessType', 'city', 'state', 'profileImage', 'birthDate', 'phone', 'email'],
+      include: [{
+        model: Association,
+        as: 'association',
+        attributes: ['name']
+      }],
+      order: [['name', 'ASC']]
+    });
 
     // Calculate age for each member
     const membersWithAge = birthdayMembers.map(member => {
-      const memberObj = member.toObject();
+      const memberObj = member.toJSON();
       if (member.birthDate) {
-        const birthYear = member.birthDate.getFullYear();
+        const birthYear = new Date(member.birthDate).getFullYear();
         const currentYear = today.getFullYear();
         memberObj.age = currentYear - birthYear;
       }
+      memberObj.associationName = member.association?.name || 'Unknown Association';
       return memberObj;
     });
 
@@ -383,15 +395,21 @@ router.get('/birthdays/upcoming', protectMobile, async (req, res) => {
     const todayDay = today.getDate();
 
     // Get all members with birth dates
-    const allMembersWithBirthdays = await Member.find({
-      isActive: true,
-      birthDate: {
-        $exists: true,
-        $ne: null
-      }
-    })
-    .select('name businessName businessType city state associationName profileImage birthDate phone email')
-    .sort({ name: 1 });
+    const allMembersWithBirthdays = await Member.findAll({
+      where: {
+        isActive: true,
+        birthDate: {
+          [Op.ne]: null
+        }
+      },
+      attributes: ['id', 'name', 'businessName', 'businessType', 'city', 'state', 'profileImage', 'birthDate', 'phone', 'email'],
+      include: [{
+        model: Association,
+        as: 'association',
+        attributes: ['name']
+      }],
+      order: [['name', 'ASC']]
+    });
 
     // Filter members whose birthday is in the next 7 days
     const upcomingBirthdays = allMembersWithBirthdays.filter(member => {
@@ -417,15 +435,15 @@ router.get('/birthdays/upcoming', protectMobile, async (req, res) => {
 
     // Calculate age and days until birthday for each member
     const membersWithDetails = upcomingBirthdays.map(member => {
-      const memberObj = member.toObject();
+      const memberObj = member.toJSON();
       if (member.birthDate) {
-        const birthYear = member.birthDate.getFullYear();
+        const birthYear = new Date(member.birthDate).getFullYear();
         const currentYear = today.getFullYear();
         memberObj.age = currentYear - birthYear;
         
         // Calculate days until birthday
-        const thisYearBirthday = new Date(currentYear, member.birthDate.getMonth(), member.birthDate.getDate());
-        const nextYearBirthday = new Date(currentYear + 1, member.birthDate.getMonth(), member.birthDate.getDate());
+        const thisYearBirthday = new Date(currentYear, new Date(member.birthDate).getMonth(), new Date(member.birthDate).getDate());
+        const nextYearBirthday = new Date(currentYear + 1, new Date(member.birthDate).getMonth(), new Date(member.birthDate).getDate());
         
         const daysUntil = thisYearBirthday >= today 
           ? Math.ceil((thisYearBirthday - today) / (1000 * 60 * 60 * 24))
@@ -433,6 +451,7 @@ router.get('/birthdays/upcoming', protectMobile, async (req, res) => {
         
         memberObj.daysUntilBirthday = daysUntil;
       }
+      memberObj.associationName = member.association?.name || 'Unknown Association';
       return memberObj;
     });
 

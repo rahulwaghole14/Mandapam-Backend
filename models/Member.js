@@ -1,124 +1,159 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const { sequelize } = require('../config/database');
 
-const memberSchema = new mongoose.Schema({
+const Member = sequelize.define('Member', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
   name: {
-    type: String,
-    required: [true, 'Please add member name'],
-    trim: true,
-    maxlength: [100, 'Name cannot be more than 100 characters']
+    type: DataTypes.STRING(100),
+    allowNull: false,
+    validate: {
+      notEmpty: true,
+      len: [2, 100]
+    }
   },
   businessName: {
-    type: String,
-    required: [true, 'Please add business name'],
-    trim: true,
-    maxlength: [200, 'Business name cannot be more than 200 characters']
-  },
-  phone: {
-    type: String,
-    required: [true, 'Please add phone number'],
-    match: [/^[0-9]{10}$/, 'Please add a valid 10-digit phone number']
-  },
-  state: {
-    type: String,
-    required: [true, 'State is required'],
-    default: 'Maharashtra',
-    trim: true
+    type: DataTypes.STRING(200),
+    allowNull: false,
+    validate: {
+      notEmpty: true,
+      len: [2, 200]
+    }
   },
   businessType: {
-    type: String,
-    required: [true, 'Please select business type'],
-    enum: ['sound', 'decorator', 'catering', 'generator', 'madap', 'light'],
-    trim: true
+    type: DataTypes.ENUM('catering', 'sound', 'light', 'decorator', 'photography', 'videography', 'transport', 'other'),
+    allowNull: false
+  },
+  address: {
+    type: DataTypes.TEXT,
+    allowNull: true
   },
   city: {
-    type: String,
-    required: [true, 'City is required'],
-    trim: true
+    type: DataTypes.STRING(100),
+    allowNull: true
+  },
+  state: {
+    type: DataTypes.STRING(100),
+    allowNull: true
   },
   pincode: {
-    type: String,
-    required: [true, 'Pincode is required'],
-    match: [/^[0-9]{6}$/, 'Please add a valid 6-digit pincode'],
-    trim: true
+    type: DataTypes.STRING(10),
+    allowNull: true,
+    validate: {
+      is: /^[0-9]{6}$/
+    }
   },
-  associationName: {
-    type: String,
-    required: [true, 'Please select association name'],
-    trim: true
-  },
-  profileImage: {
-    type: String,
-    default: null
+  phone: {
+    type: DataTypes.STRING(15),
+    allowNull: false,
+    unique: true,
+    validate: {
+      is: /^[0-9+\-\s()]+$/
+    }
   },
   email: {
-    type: String,
-    required: false,
-    match: [/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/, 'Please add a valid email']
+    type: DataTypes.STRING(100),
+    allowNull: true,
+    validate: {
+      isEmail: true
+    }
+  },
+  gstNumber: {
+    type: DataTypes.STRING(15),
+    allowNull: true,
+    validate: {
+      is: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
+    }
+  },
+  profileImage: {
+    type: DataTypes.STRING(255),
+    allowNull: true
+  },
+  businessImages: {
+    type: DataTypes.ARRAY(DataTypes.STRING),
+    allowNull: true,
+    defaultValue: []
+  },
+  description: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  experience: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    validate: {
+      min: 0,
+      max: 100
+    }
+  },
+  rating: {
+    type: DataTypes.DECIMAL(3, 2),
+    allowNull: true,
+    defaultValue: 0.0,
+    validate: {
+      min: 0.0,
+      max: 5.0
+    }
+  },
+  totalBookings: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0
+  },
+  isActive: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: true
+  },
+  isVerified: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
   },
   birthDate: {
-    type: Date,
-    required: false,
+    type: DataTypes.DATEONLY,
+    allowNull: true,
     validate: {
-      validator: function(value) {
-        if (!value) return true; // Allow empty values
+      isDate: true,
+      isAfter: '1900-01-01',
+      isBefore: new Date().toISOString().split('T')[0]
+    }
+  },
+  associationId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'associations',
+      key: 'id'
+    }
+  }
+}, {
+  tableName: 'members',
+  timestamps: true,
+  validate: {
+    // Custom validation for birth date (must be at least 18 years old)
+    birthDateValidation() {
+      if (this.birthDate) {
         const today = new Date();
-        const birthDate = new Date(value);
+        const birthDate = new Date(this.birthDate);
         const age = today.getFullYear() - birthDate.getFullYear();
         const monthDiff = today.getMonth() - birthDate.getMonth();
         
-        // Check if birthday hasn't occurred this year
         if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-          return age - 1 >= 18; // Must be at least 18 years old
+          if (age - 1 < 18) {
+            throw new Error('Member must be at least 18 years old');
+          }
+        } else {
+          if (age < 18) {
+            throw new Error('Member must be at least 18 years old');
+          }
         }
-        return age >= 18; // Must be at least 18 years old
-      },
-      message: 'Member must be at least 18 years old'
+      }
     }
-  },
-  isActive: {
-    type: Boolean,
-    default: true
-  },
-  isMobileVerified: {
-    type: Boolean,
-    default: false
-  },
-  mobileVerifiedAt: {
-    type: Date
-  },
-  lastOTPRequest: {
-    type: Date
-  },
-  otpAttempts: {
-    type: Number,
-    default: 0
-  },
-  paymentStatus: {
-    type: String,
-    enum: ['Paid', 'Pending', 'Overdue', 'Not Required'],
-    default: 'Pending',
-    trim: true
-  },
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: false // Allow null for self-registered members
-  },
-  updatedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
   }
-}, {
-  timestamps: true
 });
 
-// Indexes for better query performance
-memberSchema.index({ name: 'text', businessName: 'text', phone: 'text' });
-memberSchema.index({ businessType: 1, city: 1, state: 1 });
-memberSchema.index({ associationName: 1, city: 1 });
-
-// Ensure virtual fields are serialized
-memberSchema.set('toJSON', { virtuals: true });
-memberSchema.set('toObject', { virtuals: true });
-
-module.exports = mongoose.model('Member', memberSchema);
+module.exports = Member;

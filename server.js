@@ -1,5 +1,4 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -8,6 +7,9 @@ const path = require('path');
 
 // Load environment variables
 dotenv.config();
+
+// Import database configuration
+const { sequelize, testConnection, syncDatabase } = require('./config/database');
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
@@ -287,13 +289,18 @@ app.use('*', (req, res) => {
 // Error handling middleware
 app.use(errorHandler);
 
-// MongoDB connection
+// PostgreSQL connection
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/mandapDB');
-    console.log(`MongoDB Connected: ${conn.connection.host}`);
+    const isConnected = await testConnection();
+    if (isConnected) {
+      // Sync database (create tables if they don't exist)
+      await syncDatabase(false); // Set to true to force recreate tables
+    } else {
+      throw new Error('Failed to connect to PostgreSQL');
+    }
   } catch (error) {
-    console.error('MongoDB connection error:', error);
+    console.error('PostgreSQL connection error:', error);
     process.exit(1);
   }
 };
