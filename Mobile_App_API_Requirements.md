@@ -22,7 +22,7 @@
   - City
   - Pincode
   - Association Name
-- **Optional Fields**: Email, Profile Image
+- **Optional Fields**: Email, Profile Image, Birth Date
 
 ## 3. Mobile App Features Confirmation
 Please confirm which features you have in your static app:

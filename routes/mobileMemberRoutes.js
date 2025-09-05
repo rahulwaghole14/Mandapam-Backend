@@ -42,7 +42,9 @@ router.put('/profile', protectMobile, [
   body('businessType', 'Business type is required').isIn(['sound', 'decorator', 'catering', 'generator', 'madap', 'light']),
   body('city', 'City is required').notEmpty().trim(),
   body('pincode', 'Pincode is required').matches(/^[0-9]{6}$/),
-  body('associationName', 'Association name is required').notEmpty().trim()
+  body('associationName', 'Association name is required').notEmpty().trim(),
+  body('birthDate').optional().isISO8601().withMessage('Birth date must be a valid date'),
+  body('email').optional().isEmail().withMessage('Please provide a valid email')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -311,6 +313,144 @@ router.get('/members/filter', protectMobile, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error while filtering members'
+    });
+  }
+});
+
+// @desc    Get today's member birthdays
+// @route   GET /api/mobile/birthdays/today
+// @access  Private
+router.get('/birthdays/today', protectMobile, async (req, res) => {
+  try {
+    const today = new Date();
+    const todayMonth = today.getMonth() + 1; // getMonth() returns 0-11, we need 1-12
+    const todayDay = today.getDate();
+
+    // Find members whose birthday is today
+    const birthdayMembers = await Member.find({
+      isActive: true,
+      birthDate: {
+        $exists: true,
+        $ne: null
+      },
+      $expr: {
+        $and: [
+          { $eq: [{ $month: "$birthDate" }, todayMonth] },
+          { $eq: [{ $dayOfMonth: "$birthDate" }, todayDay] }
+        ]
+      }
+    })
+    .select('name businessName businessType city state associationName profileImage birthDate phone email')
+    .sort({ name: 1 });
+
+    // Calculate age for each member
+    const membersWithAge = birthdayMembers.map(member => {
+      const memberObj = member.toObject();
+      if (member.birthDate) {
+        const birthYear = member.birthDate.getFullYear();
+        const currentYear = today.getFullYear();
+        memberObj.age = currentYear - birthYear;
+      }
+      return memberObj;
+    });
+
+    res.status(200).json({
+      success: true,
+      count: membersWithAge.length,
+      date: today.toISOString().split('T')[0], // YYYY-MM-DD format
+      message: membersWithAge.length > 0 
+        ? `Found ${membersWithAge.length} member(s) celebrating birthday today`
+        : 'No birthdays today',
+      members: membersWithAge
+    });
+
+  } catch (error) {
+    console.error('Get today birthdays error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching today\'s birthdays'
+    });
+  }
+});
+
+// @desc    Get upcoming member birthdays (next 7 days)
+// @route   GET /api/mobile/birthdays/upcoming
+// @access  Private
+router.get('/birthdays/upcoming', protectMobile, async (req, res) => {
+  try {
+    const today = new Date();
+    const todayMonth = today.getMonth() + 1; // MongoDB months are 1-12
+    const todayDay = today.getDate();
+
+    // Get all members with birth dates
+    const allMembersWithBirthdays = await Member.find({
+      isActive: true,
+      birthDate: {
+        $exists: true,
+        $ne: null
+      }
+    })
+    .select('name businessName businessType city state associationName profileImage birthDate phone email')
+    .sort({ name: 1 });
+
+    // Filter members whose birthday is in the next 7 days
+    const upcomingBirthdays = allMembersWithBirthdays.filter(member => {
+      if (!member.birthDate) return false;
+      
+      const birthMonth = member.birthDate.getMonth() + 1;
+      const birthDay = member.birthDate.getDate();
+      
+      // Calculate days until birthday this year
+      const thisYearBirthday = new Date(today.getFullYear(), member.birthDate.getMonth(), member.birthDate.getDate());
+      const nextYearBirthday = new Date(today.getFullYear() + 1, member.birthDate.getMonth(), member.birthDate.getDate());
+      
+      let daysUntil;
+      if (thisYearBirthday >= today) {
+        daysUntil = Math.ceil((thisYearBirthday - today) / (1000 * 60 * 60 * 24));
+      } else {
+        daysUntil = Math.ceil((nextYearBirthday - today) / (1000 * 60 * 60 * 24));
+      }
+      
+      // Include birthdays in the next 7 days (1-7 days from now)
+      return daysUntil >= 1 && daysUntil <= 7;
+    });
+
+    // Calculate age and days until birthday for each member
+    const membersWithDetails = upcomingBirthdays.map(member => {
+      const memberObj = member.toObject();
+      if (member.birthDate) {
+        const birthYear = member.birthDate.getFullYear();
+        const currentYear = today.getFullYear();
+        memberObj.age = currentYear - birthYear;
+        
+        // Calculate days until birthday
+        const thisYearBirthday = new Date(currentYear, member.birthDate.getMonth(), member.birthDate.getDate());
+        const nextYearBirthday = new Date(currentYear + 1, member.birthDate.getMonth(), member.birthDate.getDate());
+        
+        const daysUntil = thisYearBirthday >= today 
+          ? Math.ceil((thisYearBirthday - today) / (1000 * 60 * 60 * 24))
+          : Math.ceil((nextYearBirthday - today) / (1000 * 60 * 60 * 24));
+        
+        memberObj.daysUntilBirthday = daysUntil;
+      }
+      return memberObj;
+    });
+
+    res.status(200).json({
+      success: true,
+      count: membersWithDetails.length,
+      period: 'next 7 days',
+      message: membersWithDetails.length > 0 
+        ? `Found ${membersWithDetails.length} member(s) with upcoming birthdays`
+        : 'No upcoming birthdays in the next 7 days',
+      members: membersWithDetails
+    });
+
+  } catch (error) {
+    console.error('Get upcoming birthdays error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching upcoming birthdays'
     });
   }
 });

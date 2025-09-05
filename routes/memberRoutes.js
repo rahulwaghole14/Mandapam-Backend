@@ -152,7 +152,9 @@ router.post('/', [
   body('businessType', 'Business type is required').isIn(['sound', 'decorator', 'catering', 'generator', 'madap', 'light']),
   body('city', 'City is required').notEmpty().trim(),
   body('pincode', 'Pincode is required').matches(/^[0-9]{6}$/),
-  body('associationName', 'Association name is required').notEmpty().trim()
+  body('associationName', 'Association name is required').notEmpty().trim(),
+  body('birthDate').optional().isISO8601().withMessage('Birth date must be a valid date'),
+  body('email').optional().isEmail().withMessage('Please provide a valid email')
 ], authorize('admin'), async (req, res) => {
   try {
     console.log('Member POST request received:', req.body);
@@ -234,7 +236,9 @@ router.put('/:id', [
   body('businessType').optional().isIn(['sound', 'decorator', 'catering', 'generator', 'madap', 'light']).withMessage('Invalid business type'),
   body('city').optional().notEmpty().trim().withMessage('City cannot be empty'),
   body('pincode').optional().matches(/^[0-9]{6}$/).withMessage('Invalid pincode'),
-  body('associationName').optional().notEmpty().trim().withMessage('Association name cannot be empty')
+  body('associationName').optional().notEmpty().trim().withMessage('Association name cannot be empty'),
+  body('birthDate').optional().isISO8601().withMessage('Birth date must be a valid date'),
+  body('email').optional().isEmail().withMessage('Please provide a valid email')
 ], authorize('admin'), async (req, res) => {
   try {
     // Check for validation errors

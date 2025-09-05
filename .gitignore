@@ -46,11 +46,33 @@ jspm_packages/
 # dotenv environment variables file
 .env
 
-# IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache
+
+# next.js build output
+.next
+
+# nuxt.js build output
+.nuxt
+
+# vuepress build output
+.vuepress/dist
+
+# Serverless directories
+.serverless
+
+# FuseBox cache
+.fusebox/
+
+# DynamoDB Local files
+.dynamodb/
+
+# TernJS port file
+.tern-port
+
+# Uploads directory (for local development)
+uploads/
 
 # OS generated files
 .DS_Store
@@ -61,10 +83,13 @@ jspm_packages/
 ehthumbs.db
 Thumbs.db
 
-# Uploads directory (if you want to exclude uploaded files)
-uploads/*
-!uploads/.gitkeep
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
-# Build directories
-dist/
-build/
+# Temporary files
+*.tmp
+*.temp

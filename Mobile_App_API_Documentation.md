@@ -71,6 +71,7 @@ Content-Type: application/json
     "associationName": "Mumbai Mandap Association",
     "profileImage": "profile-image-url",
     "email": "john@example.com",
+    "birthDate": "1990-05-15T00:00:00.000Z",
     "isMobileVerified": true,
     "paymentStatus": "Paid",
     "isActive": true
@@ -92,7 +93,8 @@ Content-Type: application/json
   "pincode": "400001",
   "associationName": "Mumbai Mandap Association",
   "state": "Maharashtra",
-  "email": "john@example.com"
+  "email": "john@example.com",
+  "birthDate": "1990-05-15"
 }
 ```
 
@@ -111,7 +113,9 @@ Content-Type: application/json
 {
   "name": "John Doe Updated",
   "businessName": "Doe's Premium Sound Systems",
-  "city": "Mumbai"
+  "city": "Mumbai",
+  "birthDate": "1990-05-15",
+  "email": "john.updated@example.com"
 }
 ```
 
@@ -172,6 +176,100 @@ Authorization: Bearer <jwt_token>
 ```http
 GET /api/mobile/members/filter?businessType=sound&city=Mumbai&paymentStatus=Paid
 Authorization: Bearer <jwt_token>
+```
+
+#### **Get Today's Birthdays**
+```http
+GET /api/mobile/birthdays/today
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "count": 3,
+  "date": "2024-01-15",
+  "message": "Found 3 member(s) celebrating birthday today",
+  "members": [
+    {
+      "_id": "member_id_1",
+      "name": "Rajesh Kumar",
+      "businessName": "Kumar Sound Systems",
+      "businessType": "sound",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "associationName": "Mumbai Mandap Association",
+      "profileImage": "profile-image-url",
+      "birthDate": "1985-01-15T00:00:00.000Z",
+      "phone": "9876543210",
+      "email": "rajesh@example.com",
+      "age": 39
+    },
+    {
+      "_id": "member_id_2",
+      "name": "Priya Sharma",
+      "businessName": "Sharma Decorations",
+      "businessType": "decorator",
+      "city": "Pune",
+      "state": "Maharashtra",
+      "associationName": "Pune Mandap Association",
+      "profileImage": "profile-image-url",
+      "birthDate": "1990-01-15T00:00:00.000Z",
+      "phone": "9876543211",
+      "email": "priya@example.com",
+      "age": 34
+    }
+  ]
+}
+```
+
+#### **Get Upcoming Birthdays (Next 7 Days)**
+```http
+GET /api/mobile/birthdays/upcoming
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "count": 5,
+  "period": "next 7 days",
+  "message": "Found 5 member(s) with upcoming birthdays",
+  "members": [
+    {
+      "_id": "member_id_1",
+      "name": "Amit Patel",
+      "businessName": "Patel Catering",
+      "businessType": "catering",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "associationName": "Mumbai Mandap Association",
+      "profileImage": "profile-image-url",
+      "birthDate": "1988-01-18T00:00:00.000Z",
+      "phone": "9876543212",
+      "email": "amit@example.com",
+      "age": 36,
+      "daysUntilBirthday": 3
+    },
+    {
+      "_id": "member_id_2",
+      "name": "Sunita Singh",
+      "businessName": "Singh Lighting",
+      "businessType": "light",
+      "city": "Delhi",
+      "state": "Delhi",
+      "associationName": "Delhi Mandap Association",
+      "profileImage": "profile-image-url",
+      "birthDate": "1992-01-20T00:00:00.000Z",
+      "phone": "9876543213",
+      "email": "sunita@example.com",
+      "age": 32,
+      "daysUntilBirthday": 5
+    }
+  ]
+}
 ```
 
 ### **3. Event APIs**

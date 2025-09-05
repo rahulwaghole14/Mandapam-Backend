@@ -55,6 +55,26 @@ const memberSchema = new mongoose.Schema({
     required: false,
     match: [/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/, 'Please add a valid email']
   },
+  birthDate: {
+    type: Date,
+    required: false,
+    validate: {
+      validator: function(value) {
+        if (!value) return true; // Allow empty values
+        const today = new Date();
+        const birthDate = new Date(value);
+        const age = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+        
+        // Check if birthday hasn't occurred this year
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+          return age - 1 >= 18; // Must be at least 18 years old
+        }
+        return age >= 18; // Must be at least 18 years old
+      },
+      message: 'Member must be at least 18 years old'
+    }
+  },
   isActive: {
     type: Boolean,
     default: true

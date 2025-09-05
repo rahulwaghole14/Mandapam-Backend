@@ -238,7 +238,9 @@ router.post('/register', [
   body('city', 'City is required').notEmpty().trim(),
   body('pincode', 'Pincode is required').matches(/^[0-9]{6}$/),
   body('associationName', 'Association name is required').notEmpty().trim(),
-  body('state', 'State is required').notEmpty().trim()
+  body('state', 'State is required').notEmpty().trim(),
+  body('birthDate').optional().isISO8601().withMessage('Birth date must be a valid date'),
+  body('email').optional().isEmail().withMessage('Please provide a valid email')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -249,7 +251,7 @@ router.post('/register', [
       });
     }
 
-    const { name, businessName, businessType, phone, city, pincode, associationName, state, email } = req.body;
+    const { name, businessName, businessType, phone, city, pincode, associationName, state, email, birthDate } = req.body;
 
     // Check if member already exists
     const existingMember = await Member.findOne({ phone });
@@ -271,6 +273,7 @@ router.post('/register', [
       associationName,
       state: state || 'Maharashtra',
       email: email || null,
+      birthDate: birthDate || null,
       isActive: true,
       isMobileVerified: false,
       paymentStatus: 'Pending',
