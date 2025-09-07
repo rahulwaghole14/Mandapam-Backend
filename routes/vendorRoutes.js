@@ -82,7 +82,7 @@ router.get('/', [
     // Build sort object
     const order = [];
     if (sortBy === 'dateOfJoining') {
-      order.push(['createdAt', sortOrder.toUpperCase()]);
+      order.push(['created_at', sortOrder.toUpperCase()]);
     } else {
       order.push([sortBy, sortOrder.toUpperCase()]);
     }

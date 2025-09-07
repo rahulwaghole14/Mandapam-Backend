@@ -24,7 +24,7 @@ router.get('/', [
   query('district').optional().isString().trim(),
   query('dateFrom').optional().isISO8601().withMessage('Invalid date format'),
   query('dateTo').optional().isISO8601().withMessage('Invalid date format'),
-  query('sortBy').optional().isIn(['title', 'date', 'priority', 'createdAt']),
+  query('sortBy').optional().isIn(['title', 'date', 'priority', 'created_at']),
   query('sortOrder').optional().isIn(['asc', 'desc'])
 ], async (req, res) => {
   try {

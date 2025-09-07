@@ -113,6 +113,11 @@ const Vendor = sequelize.define('Vendor', {
     allowNull: false,
     defaultValue: false
   },
+  status: {
+    type: DataTypes.ENUM('Active', 'Pending', 'Inactive'),
+    allowNull: false,
+    defaultValue: 'Pending'
+  },
   associationId: {
     type: DataTypes.INTEGER,
     allowNull: false,

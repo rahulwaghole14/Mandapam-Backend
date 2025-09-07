@@ -58,7 +58,7 @@ router.get('/stats', async (req, res) => {
       BOD.count({ where }),
       BOD.count({ where: { ...where, isActive: true } }),
       Association.count({ where }),
-      Association.count({ where: { ...where, status: 'Active' } })
+      Association.count({ where: { ...where, isActive: true } })
     ]);
 
     // Calculate growth rate (comparing current month with previous month)
@@ -68,14 +68,14 @@ router.get('/stats', async (req, res) => {
     const currentMonthVendors = await Vendor.count({
       where: {
         ...where,
-        createdAt: { [Op.gte]: new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1) }
+        created_at: { [Op.gte]: new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1) }
       }
     });
     
     const previousMonthVendors = await Vendor.count({
       where: {
         ...where,
-        createdAt: { 
+        created_at: { 
           [Op.gte]: previousMonth, 
           [Op.lt]: new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1) 
         }
@@ -346,24 +346,26 @@ router.get('/associations-map', async (req, res) => {
     // Build filter for district-based access
     const filter = {};
     if (req.user.role === 'sub-admin') {
-      filter['address.district'] = req.user.district;
+      filter.district = req.user.district;
     }
 
     // Get associations with address information for map
-    const associations = await Association.find(filter)
-      .select('name address.city address.state address.district status memberCount createdAt')
-      .sort({ createdAt: -1 });
+    const associations = await Association.findAll({
+      where: filter,
+      attributes: ['id', 'name', 'city', 'state', 'district', 'isActive', 'totalMembers', 'created_at'],
+      order: [['created_at', 'DESC']]
+    });
 
     // Format associations data for map
     const mapData = associations.map(association => ({
-      id: association._id,
+      id: association.id,
       name: association.name,
-      city: association.address?.city || 'Unknown',
-      state: association.address?.state || 'Unknown',
-      district: association.address?.district || 'Unknown',
-      status: association.status,
-      memberCount: association.memberCount || 0,
-      createdAt: association.createdAt
+      city: association.city || 'Unknown',
+      state: association.state || 'Unknown',
+      district: association.district || 'Unknown',
+      status: association.isActive ? 'Active' : 'Inactive',
+      memberCount: association.totalMembers || 0,
+      createdAt: association.created_at
     }));
 
     res.status(200).json({
@@ -389,36 +391,34 @@ router.get('/monthly-member-growth', async (req, res) => {
     // Build filter for district-based access
     const filter = {};
     if (req.user.role === 'sub-admin') {
-      filter['address.district'] = req.user.district;
+      filter.district = req.user.district;
     }
 
     // Get monthly member counts for the specified year
-    const monthlyData = await Member.aggregate([
-      { $match: filter },
-      {
-        $match: {
-          createdAt: {
-            $gte: new Date(year, 0, 1),
-            $lt: new Date(year + 1, 0, 1)
-          }
+    const monthlyData = await Member.findAll({
+      where: {
+        ...filter,
+        created_at: {
+          [Op.gte]: new Date(year, 0, 1),
+          [Op.lt]: new Date(year + 1, 0, 1)
         }
       },
-      {
-        $group: {
-          _id: { $month: '$createdAt' },
-          membersJoined: { $sum: 1 }
-        }
-      },
-      { $sort: { _id: 1 } }
-    ]);
+      attributes: [
+        [Member.sequelize.fn('EXTRACT', Member.sequelize.literal('MONTH FROM created_at')), 'month'],
+        [Member.sequelize.fn('COUNT', Member.sequelize.col('id')), 'membersJoined']
+      ],
+      group: [Member.sequelize.fn('EXTRACT', Member.sequelize.literal('MONTH FROM created_at'))],
+      order: [[Member.sequelize.fn('EXTRACT', Member.sequelize.literal('MONTH FROM created_at')), 'ASC']],
+      raw: true
+    });
 
     // Format data to include all months with 0 for months without data
     const formattedData = [];
     for (let month = 1; month <= 12; month++) {
-      const monthData = monthlyData.find(item => item._id === month);
+      const monthData = monthlyData.find(item => parseInt(item.month) === month);
       formattedData.push({
         month,
-        membersJoined: monthData ? monthData.membersJoined : 0
+        membersJoined: monthData ? parseInt(monthData.membersJoined) : 0
       });
     }
 
@@ -446,7 +446,7 @@ router.get('/top-associations', async (req, res) => {
     // Build filter for district-based access
     const filter = {};
     if (req.user.role === 'sub-admin') {
-      filter['address.district'] = req.user.district;
+      filter.district = req.user.district;
     }
     console.log('User role:', req.user.role);
     console.log('User district:', req.user.district);
@@ -456,13 +456,15 @@ router.get('/top-associations', async (req, res) => {
     const lastYear = currentYear - 1;
 
       // Get associations with member counts for both years
-      const associations = await Association.find(filter)
-      .select('name address.city address.state address.district status memberCount createdAt')
-      .sort({ memberCount: -1 })
-      .limit(parseInt(limit));
+      const associations = await Association.findAll({
+        where: filter,
+        attributes: ['id', 'name', 'city', 'state', 'district', 'isActive', 'totalMembers', 'created_at'],
+        order: [['memberCount', 'DESC']],
+        limit: parseInt(limit)
+      });
 
     console.log('Found associations:', associations.length);
-    console.log('Associations:', associations.map(a => ({ name: a.name, city: a.address?.city, state: a.address?.state })));
+    console.log('Associations:', associations.map(a => ({ name: a.name, city: a.city, state: a.state })));
 
     // Calculate growth percentage for each association
     const associationsWithGrowth = await Promise.all(
@@ -470,20 +472,24 @@ router.get('/top-associations', async (req, res) => {
         console.log(`Processing association: ${association.name}`);
         
         // Get member count for current year
-        const currentYearMembers = await Member.countDocuments({
-          associationName: association.name,
-          createdAt: {
-            $gte: new Date(currentYear, 0, 1),
-            $lt: new Date(currentYear + 1, 0, 1)
+        const currentYearMembers = await Member.count({
+          where: {
+            association_name: association.name,
+            created_at: {
+              [Op.gte]: new Date(currentYear, 0, 1),
+              [Op.lt]: new Date(currentYear + 1, 0, 1)
+            }
           }
         });
 
         // Get member count for last year
-        const lastYearMembers = await Member.countDocuments({
-          associationName: association.name,
-          createdAt: {
-            $gte: new Date(lastYear, 0, 1),
-            $lt: new Date(lastYear + 1, 0, 1)
+        const lastYearMembers = await Member.count({
+          where: {
+            association_name: association.name,
+            created_at: {
+              [Op.gte]: new Date(lastYear, 0, 1),
+              [Op.lt]: new Date(lastYear + 1, 0, 1)
+            }
           }
         });
 
@@ -498,12 +504,12 @@ router.get('/top-associations', async (req, res) => {
         }
 
         const result = {
-          id: association._id,
+          id: association.id,
           name: association.name,
-          city: association.address?.city || 'Unknown',
-          state: association.address?.state || 'Unknown',
-          district: association.address?.district || 'Unknown',
-          status: association.status,
+          city: association.city || 'Unknown',
+          state: association.state || 'Unknown',
+          district: association.district || 'Unknown',
+          status: association.isActive ? 'Active' : 'Inactive',
           memberCount: currentYearMembers,
           growthPercentage: Math.round(growthPercentage * 10) / 10 // Round to 1 decimal place
         };

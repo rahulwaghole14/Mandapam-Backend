@@ -21,7 +21,7 @@ router.get('/', [
   query('state').optional().isString().trim(),
   query('businessType').optional().isIn(['sound', 'decorator', 'catering', 'generator', 'madap', 'light']),
   query('associationName').optional().isString().trim(),
-  query('sortBy').optional().isIn(['name', 'businessName', 'city', 'businessType', 'createdAt']),
+  query('sortBy').optional().isIn(['name', 'businessName', 'city', 'businessType', 'created_at']),
   query('sortOrder').optional().isIn(['asc', 'desc'])
 ], async (req, res) => {
   try {
@@ -42,7 +42,7 @@ router.get('/', [
       state,
       businessType,
       associationName,
-      sortBy = 'createdAt',
+      sortBy = 'created_at',
       sortOrder = 'desc'
     } = req.query;
 
@@ -77,8 +77,8 @@ router.get('/', [
 
     // Build sort object
     const order = [];
-    if (sortBy === 'createdAt') {
-      order.push(['createdAt', sortOrder.toUpperCase()]);
+    if (sortBy === 'created_at') {
+      order.push(['created_at', sortOrder.toUpperCase()]);
     } else {
       order.push([sortBy, sortOrder.toUpperCase()]);
     }
@@ -422,8 +422,8 @@ router.get('/stats/overview', async (req, res) => {
 
     // Get recent additions
     const recentMembers = await Member.findAll({
-      attributes: ['name', 'businessName', 'businessType', 'city', 'createdAt'],
-      order: [['createdAt', 'DESC']],
+      attributes: ['name', 'businessName', 'businessType', 'city', 'created_at'],
+      order: [['created_at', 'DESC']],
       limit: 5
     });
 
