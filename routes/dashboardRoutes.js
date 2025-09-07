@@ -459,7 +459,7 @@ router.get('/top-associations', async (req, res) => {
       const associations = await Association.findAll({
         where: filter,
         attributes: ['id', 'name', 'city', 'state', 'district', 'isActive', 'totalMembers', 'created_at'],
-        order: [['memberCount', 'DESC']],
+        order: [['totalMembers', 'DESC']],
         limit: parseInt(limit)
       });
 
