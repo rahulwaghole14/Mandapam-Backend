@@ -10,7 +10,7 @@ const router = express.Router();
 const generateToken = (user) => {
   // Include essential user data in the token
   const tokenData = {
-    id: user._id,
+    id: user.id,
     email: user.email,
     name: user.name,
     role: user.role,
@@ -45,7 +45,7 @@ router.post('/login', [
     const { email, password } = req.body;
 
     // Check if user exists
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ where: { email } });
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -77,8 +77,7 @@ router.post('/login', [
     const token = generateToken(user);
 
     // Remove password from response
-    const userResponse = user.toObject();
-    delete userResponse.password;
+    const userResponse = user.toJSON();
 
     res.status(200).json({
       success: true,
@@ -162,8 +161,7 @@ router.post('/init-admin', [
     const token = generateToken(user);
 
     // Remove password from response
-    const userResponse = user.toObject();
-    delete userResponse.password;
+    const userResponse = user.toJSON();
 
     res.status(201).json({
       success: true,
@@ -186,7 +184,7 @@ router.post('/init-admin', [
 // @access  Private
 router.get('/profile', protect, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = await User.findByPk(req.user.id);
     
     if (!user) {
       return res.status(404).json({
@@ -231,7 +229,7 @@ router.put('/profile', protect, [
 
     // Check if email is already taken by another user
     if (email !== req.user.email) {
-      const emailExists = await User.findOne({ email, _id: { $ne: req.user._id } });
+      const emailExists = await User.findOne({ where: { email, id: { [require('sequelize').Op.ne]: req.user.id } } });
       if (emailExists) {
         return res.status(400).json({
           success: false,
@@ -241,16 +239,14 @@ router.put('/profile', protect, [
     }
 
     // Update user
-    const user = await User.findByIdAndUpdate(
-      req.user._id,
-      {
+    const user = await User.findByPk(req.user.id);
+    if (user) {
+      await user.update({
         name,
         phone,
-        email,
-        updatedAt: Date.now()
-      },
-      { new: true, runValidators: true }
-    );
+        email
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -286,7 +282,7 @@ router.put('/password', protect, [
     const { currentPassword, newPassword } = req.body;
 
     // Get user with password
-    const user = await User.findById(req.user._id).select('+password');
+    const user = await User.findByPk(req.user.id);
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -326,7 +322,7 @@ router.put('/password', protect, [
 // @access  Private/Admin
 router.get('/users', protect, authorize('admin'), async (req, res) => {
   try {
-    const users = await User.find({}).select('-password');
+    const users = await User.findAll();
     
     res.status(200).json({
       success: true,
@@ -388,8 +384,7 @@ router.post('/users', protect, authorize('admin'), [
     });
 
     // Remove password from response
-    const userResponse = user.toObject();
-    delete userResponse.password;
+    const userResponse = user.toJSON();
 
     res.status(201).json({
       success: true,
@@ -410,11 +405,10 @@ router.post('/users', protect, authorize('admin'), [
 // @access  Private/Admin
 router.put('/users/:id', protect, authorize('admin'), async (req, res) => {
   try {
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    ).select('-password');
+    const user = await User.findByPk(req.params.id);
+    if (user) {
+      await user.update(req.body);
+    }
 
     if (!user) {
       return res.status(404).json({
@@ -442,7 +436,7 @@ router.put('/users/:id', protect, authorize('admin'), async (req, res) => {
 // @access  Private/Admin
 router.delete('/users/:id', protect, authorize('admin'), async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
+    const user = await User.findByPk(req.params.id);
 
     if (!user) {
       return res.status(404).json({
@@ -452,14 +446,14 @@ router.delete('/users/:id', protect, authorize('admin'), async (req, res) => {
     }
 
     // Prevent admin from deleting themselves
-    if (user._id.toString() === req.user._id.toString()) {
+    if (user.id.toString() === req.user.id.toString()) {
       return res.status(400).json({
         success: false,
         message: 'Cannot delete your own account'
       });
     }
 
-    await user.deleteOne();
+    await user.destroy();
 
     res.status(200).json({
       success: true,

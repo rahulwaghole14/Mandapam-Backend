@@ -1,6 +1,8 @@
 const express = require('express');
 const { body, validationResult, query } = require('express-validator');
+const { Op } = require('sequelize');
 const Event = require('../models/Event');
+const User = require('../models/User');
 const { protect, authorize, authorizeDistrict } = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -51,66 +53,77 @@ router.get('/', [
     } = req.query;
 
     // Build filter object
-    const filter = {};
+    const where = {};
 
     // District-based filtering for sub-admins
     if (req.user.role === 'sub-admin') {
-      filter['location.district'] = req.user.district;
+      where.district = req.user.district;
     }
 
     // Apply search filters
     if (search) {
-      filter.$text = { $search: search };
+      where[Op.or] = [
+        { title: { [Op.iLike]: `%${search}%` } },
+        { description: { [Op.iLike]: `%${search}%` } },
+        { city: { [Op.iLike]: `%${search}%` } }
+      ];
     }
 
     if (type) {
-      filter.type = type;
+      where.type = type;
     }
 
     if (status) {
-      filter.status = status;
+      where.status = status;
     }
 
     if (priority) {
-      filter.priority = priority;
+      where.priority = priority;
     }
 
     if (city) {
-      filter['location.city'] = city;
+      where.city = city;
     }
 
     if (district) {
-      filter['location.district'] = district;
+      where.district = district;
     }
 
     // Date range filtering
     if (dateFrom || dateTo) {
-      filter.date = {};
+      where.startDate = {};
       if (dateFrom) {
-        filter.date.$gte = new Date(dateFrom);
+        where.startDate[Op.gte] = new Date(dateFrom);
       }
       if (dateTo) {
-        filter.date.$lte = new Date(dateTo);
+        where.startDate[Op.lte] = new Date(dateTo);
       }
     }
 
     // Build sort object
-    const sort = {};
-    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+    const order = [];
+    if (sortBy === 'date') {
+      order.push(['startDate', sortOrder.toUpperCase()]);
+    } else {
+      order.push([sortBy, sortOrder.toUpperCase()]);
+    }
 
     // Calculate pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const offset = (parseInt(page) - 1) * parseInt(limit);
 
     // Execute query
-    const events = await Event.find(filter)
-      .populate('createdBy', 'name email')
-      .populate('updatedBy', 'name email')
-      .sort(sort)
-      .skip(skip)
-      .limit(parseInt(limit));
+    const { count, rows: events } = await Event.findAndCountAll({
+      where,
+      include: [
+        { model: User, as: 'createdByUser', attributes: ['name', 'email'] },
+        { model: User, as: 'updatedByUser', attributes: ['name', 'email'] }
+      ],
+      order,
+      offset,
+      limit: parseInt(limit)
+    });
 
-    // Get total count for pagination
-    const total = await Event.countDocuments(filter);
+    const total = count;
 
     // Calculate pagination info
     const totalPages = Math.ceil(total / parseInt(limit));
@@ -142,9 +155,12 @@ router.get('/', [
 // @access  Private
 router.get('/:id', async (req, res) => {
   try {
-    const event = await Event.findById(req.params.id)
-      .populate('createdBy', 'name email')
-      .populate('updatedBy', 'name email');
+    const event = await Event.findByPk(req.params.id, {
+      include: [
+        { model: User, as: 'createdByUser', attributes: ['name', 'email'] },
+        { model: User, as: 'updatedByUser', attributes: ['name', 'email'] }
+      ]
+    });
 
     if (!event) {
       return res.status(404).json({
@@ -154,7 +170,7 @@ router.get('/:id', async (req, res) => {
     }
 
     // Check district access for sub-admins
-    if (req.user.role === 'sub-admin' && event.location.district !== req.user.district) {
+    if (req.user.role === 'sub-admin' && event.district !== req.user.district) {
       return res.status(403).json({
         success: false,
         message: 'Access denied to event in different district'
@@ -225,18 +241,22 @@ router.post('/', [
     }
 
     // Add createdBy and updatedBy
-    req.body.createdBy = req.user._id;
-    req.body.updatedBy = req.user._id;
+    req.body.createdBy = req.user.id;
+    req.body.updatedBy = req.user.id;
 
     // Create event
     const event = await Event.create(req.body);
 
-    // Populate createdBy field
-    await event.populate('createdBy', 'name email');
+    // Get event with populated fields
+    const eventWithDetails = await Event.findByPk(event.id, {
+      include: [
+        { model: User, as: 'createdByUser', attributes: ['name', 'email'] }
+      ]
+    });
 
     res.status(201).json({
       success: true,
-      event
+      event: eventWithDetails
     });
 
   } catch (error) {
@@ -284,7 +304,7 @@ router.put('/:id', [
     }
 
     // Find event first to check access
-    const existingEvent = await Event.findById(req.params.id);
+    const existingEvent = await Event.findByPk(req.params.id);
     if (!existingEvent) {
       return res.status(404).json({
         success: false,
@@ -293,7 +313,7 @@ router.put('/:id', [
     }
 
     // Check district access for sub-admins
-    if (req.user.role === 'sub-admin' && existingEvent.location.district !== req.user.district) {
+    if (req.user.role === 'sub-admin' && existingEvent.district !== req.user.district) {
       return res.status(403).json({
         success: false,
         message: 'Access denied to event in different district'
@@ -311,15 +331,18 @@ router.put('/:id', [
     }
 
     // Add updatedBy
-    req.body.updatedBy = req.user._id;
+    req.body.updatedBy = req.user.id;
 
     // Update event
-    const event = await Event.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    ).populate('createdBy', 'name email')
-     .populate('updatedBy', 'name email');
+    await existingEvent.update(req.body);
+
+    // Get updated event with populated fields
+    const event = await Event.findByPk(req.params.id, {
+      include: [
+        { model: User, as: 'createdByUser', attributes: ['name', 'email'] },
+        { model: User, as: 'updatedByUser', attributes: ['name', 'email'] }
+      ]
+    });
 
     res.status(200).json({
       success: true,
@@ -340,7 +363,7 @@ router.put('/:id', [
 // @access  Private
 router.delete('/:id', async (req, res) => {
   try {
-    const event = await Event.findById(req.params.id);
+    const event = await Event.findByPk(req.params.id);
 
     if (!event) {
       return res.status(404).json({
@@ -350,14 +373,14 @@ router.delete('/:id', async (req, res) => {
     }
 
     // Check district access for sub-admins
-    if (req.user.role === 'sub-admin' && event.location.district !== req.user.district) {
+    if (req.user.role === 'sub-admin' && event.district !== req.user.district) {
       return res.status(403).json({
         success: false,
         message: 'Access denied to event in different district'
       });
     }
 
-    await event.deleteOne();
+    await event.destroy();
 
     res.status(200).json({
       success: true,
@@ -381,19 +404,23 @@ router.get('/upcoming', async (req, res) => {
     const { limit = 5 } = req.query;
 
     // Build filter for district-based access
-    const filter = {
-      date: { $gte: new Date() },
-      status: { $in: ['Upcoming', 'Ongoing'] }
+    const where = {
+      startDate: { [Op.gte]: new Date() },
+      status: { [Op.in]: ['Upcoming', 'Ongoing'] }
     };
 
     if (req.user.role === 'sub-admin') {
-      filter['location.district'] = req.user.district;
+      where.district = req.user.district;
     }
 
-    const upcomingEvents = await Event.find(filter)
-      .populate('createdBy', 'name email')
-      .sort({ date: 1 })
-      .limit(parseInt(limit));
+    const upcomingEvents = await Event.findAll({
+      where,
+      include: [
+        { model: User, as: 'createdByUser', attributes: ['name', 'email'] }
+      ],
+      order: [['startDate', 'ASC']],
+      limit: parseInt(limit)
+    });
 
     res.status(200).json({
       success: true,
@@ -416,53 +443,66 @@ router.get('/upcoming', async (req, res) => {
 router.get('/stats/overview', async (req, res) => {
   try {
     // Build filter for district-based access
-    const filter = {};
+    const where = {};
     if (req.user.role === 'sub-admin') {
-      filter['location.district'] = req.user.district;
+      where.district = req.user.district;
     }
 
     // Get counts
-    const totalEvents = await Event.countDocuments(filter);
-    const upcomingEvents = await Event.countDocuments({
-      ...filter,
-      date: { $gte: new Date() },
-      status: { $in: ['Upcoming', 'Ongoing'] }
+    const totalEvents = await Event.count({ where });
+    const upcomingEvents = await Event.count({
+      where: {
+        ...where,
+        startDate: { [Op.gte]: new Date() },
+        status: { [Op.in]: ['Upcoming', 'Ongoing'] }
+      }
     });
-    const completedEvents = await Event.countDocuments({
-      ...filter,
-      status: 'Completed'
+    const completedEvents = await Event.count({
+      where: { ...where, status: 'Completed' }
     });
-    const cancelledEvents = await Event.countDocuments({
-      ...filter,
-      status: { $in: ['Cancelled', 'Postponed'] }
+    const cancelledEvents = await Event.count({
+      where: { ...where, status: { [Op.in]: ['Cancelled', 'Postponed'] } }
     });
 
     // Get type distribution
-    const typeStats = await Event.aggregate([
-      { $match: filter },
-      { $group: { _id: '$type', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]);
+    const typeStats = await Event.findAll({
+      where,
+      attributes: [
+        'type',
+        [Event.sequelize.fn('COUNT', Event.sequelize.col('id')), 'count']
+      ],
+      group: ['type'],
+      order: [[Event.sequelize.fn('COUNT', Event.sequelize.col('id')), 'DESC']],
+      raw: true
+    });
 
     // Get priority distribution
-    const priorityStats = await Event.aggregate([
-      { $match: filter },
-      { $group: { _id: '$priority', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]);
+    const priorityStats = await Event.findAll({
+      where,
+      attributes: [
+        'priority',
+        [Event.sequelize.fn('COUNT', Event.sequelize.col('id')), 'count']
+      ],
+      group: ['priority'],
+      order: [[Event.sequelize.fn('COUNT', Event.sequelize.col('id')), 'DESC']],
+      raw: true
+    });
 
     // Get monthly event count for current year
     const currentYear = new Date().getFullYear();
-    const monthlyStats = await Event.aggregate([
-      { $match: { ...filter, date: { $gte: new Date(currentYear, 0, 1) } } },
-      {
-        $group: {
-          _id: { $month: '$date' },
-          count: { $sum: 1 }
-        }
+    const monthlyStats = await Event.findAll({
+      where: {
+        ...where,
+        startDate: { [Op.gte]: new Date(currentYear, 0, 1) }
       },
-      { $sort: { _id: 1 } }
-    ]);
+      attributes: [
+        [Event.sequelize.fn('EXTRACT', Event.sequelize.literal('MONTH FROM start_date')), 'month'],
+        [Event.sequelize.fn('COUNT', Event.sequelize.col('id')), 'count']
+      ],
+      group: [Event.sequelize.fn('EXTRACT', Event.sequelize.literal('MONTH FROM start_date'))],
+      order: [[Event.sequelize.fn('EXTRACT', Event.sequelize.literal('MONTH FROM start_date')), 'ASC']],
+      raw: true
+    });
 
     res.status(200).json({
       success: true,
@@ -504,7 +544,7 @@ router.put('/:id/status', [
 
     const { status } = req.body;
 
-    const event = await Event.findById(req.params.id);
+    const event = await Event.findByPk(req.params.id);
     if (!event) {
       return res.status(404).json({
         success: false,
@@ -513,7 +553,7 @@ router.put('/:id/status', [
     }
 
     // Check district access for sub-admins
-    if (req.user.role === 'sub-admin' && event.location.district !== req.user.district) {
+    if (req.user.role === 'sub-admin' && event.district !== req.user.district) {
       return res.status(403).json({
         success: false,
         message: 'Access denied to event in different district'
@@ -521,9 +561,10 @@ router.put('/:id/status', [
     }
 
     // Update status
-    event.status = status;
-    event.updatedBy = req.user._id;
-    await event.save();
+    await event.update({
+      status: status,
+      updatedBy: req.user.id
+    });
 
     res.status(200).json({
       success: true,
@@ -541,6 +582,9 @@ router.put('/:id/status', [
 });
 
 module.exports = router;
+
+
+
 
 
 

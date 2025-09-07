@@ -50,6 +50,91 @@ const defineAssociations = () => {
     foreignKey: 'associationId',
     as: 'association'
   });
+
+  // User associations for createdBy and updatedBy
+  User.hasMany(Vendor, {
+    foreignKey: 'createdBy',
+    as: 'createdVendors'
+  });
+  Vendor.belongsTo(User, {
+    foreignKey: 'createdBy',
+    as: 'createdByUser'
+  });
+
+  User.hasMany(Vendor, {
+    foreignKey: 'updatedBy',
+    as: 'updatedVendors'
+  });
+  Vendor.belongsTo(User, {
+    foreignKey: 'updatedBy',
+    as: 'updatedByUser'
+  });
+
+  User.hasMany(Vendor, {
+    foreignKey: 'verifiedBy',
+    as: 'verifiedVendors'
+  });
+  Vendor.belongsTo(User, {
+    foreignKey: 'verifiedBy',
+    as: 'verifiedByUser'
+  });
+
+  // User associations for Member
+  User.hasMany(Member, {
+    foreignKey: 'createdBy',
+    as: 'createdMembers'
+  });
+  Member.belongsTo(User, {
+    foreignKey: 'createdBy',
+    as: 'createdByUser'
+  });
+
+  User.hasMany(Member, {
+    foreignKey: 'updatedBy',
+    as: 'updatedMembers'
+  });
+  Member.belongsTo(User, {
+    foreignKey: 'updatedBy',
+    as: 'updatedByUser'
+  });
+
+  // User associations for Event
+  User.hasMany(Event, {
+    foreignKey: 'createdBy',
+    as: 'createdEvents'
+  });
+  Event.belongsTo(User, {
+    foreignKey: 'createdBy',
+    as: 'createdByUser'
+  });
+
+  User.hasMany(Event, {
+    foreignKey: 'updatedBy',
+    as: 'updatedEvents'
+  });
+  Event.belongsTo(User, {
+    foreignKey: 'updatedBy',
+    as: 'updatedByUser'
+  });
+
+  // User associations for BOD
+  User.hasMany(BOD, {
+    foreignKey: 'createdBy',
+    as: 'createdBODs'
+  });
+  BOD.belongsTo(User, {
+    foreignKey: 'createdBy',
+    as: 'createdByUser'
+  });
+
+  User.hasMany(BOD, {
+    foreignKey: 'updatedBy',
+    as: 'updatedBODs'
+  });
+  BOD.belongsTo(User, {
+    foreignKey: 'updatedBy',
+    as: 'updatedByUser'
+  });
 };
 
 // Initialize associations

@@ -1,6 +1,8 @@
 const express = require('express');
 const { body, validationResult, query } = require('express-validator');
+const { Op } = require('sequelize');
 const Vendor = require('../models/Vendor');
+const User = require('../models/User');
 const { protect, authorize, authorizeDistrict } = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -45,51 +47,62 @@ router.get('/', [
     } = req.query;
 
     // Build filter object
-    const filter = {};
+    const where = {};
 
     // District-based filtering for sub-admins
     if (req.user.role === 'sub-admin') {
-      filter['address.district'] = req.user.district;
+      where.district = req.user.district;
     }
 
     // Apply search filters
     if (search) {
-      filter.$text = { $search: search };
+      where[Op.or] = [
+        { name: { [Op.iLike]: `%${search}%` } },
+        { businessName: { [Op.iLike]: `%${search}%` } },
+        { city: { [Op.iLike]: `%${search}%` } }
+      ];
     }
 
     if (category) {
-      filter.category = category;
+      where.businessType = category;
     }
 
     if (status) {
-      filter.status = status;
+      where.status = status;
     }
 
     if (city) {
-      filter['address.city'] = city;
+      where.city = city;
     }
 
     if (district) {
-      filter['address.district'] = district;
+      where.district = district;
     }
 
     // Build sort object
-    const sort = {};
-    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+    const order = [];
+    if (sortBy === 'dateOfJoining') {
+      order.push(['createdAt', sortOrder.toUpperCase()]);
+    } else {
+      order.push([sortBy, sortOrder.toUpperCase()]);
+    }
 
     // Calculate pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const offset = (parseInt(page) - 1) * parseInt(limit);
 
     // Execute query
-    const vendors = await Vendor.find(filter)
-      .populate('createdBy', 'name email')
-      .populate('updatedBy', 'name email')
-      .sort(sort)
-      .skip(skip)
-      .limit(parseInt(limit));
+    const { count, rows: vendors } = await Vendor.findAndCountAll({
+      where,
+      include: [
+        { model: User, as: 'createdByUser', attributes: ['name', 'email'] },
+        { model: User, as: 'updatedByUser', attributes: ['name', 'email'] }
+      ],
+      order,
+      offset,
+      limit: parseInt(limit)
+    });
 
-    // Get total count for pagination
-    const total = await Vendor.countDocuments(filter);
+    const total = count;
 
     // Calculate pagination info
     const totalPages = Math.ceil(total / parseInt(limit));
@@ -121,10 +134,13 @@ router.get('/', [
 // @access  Private
 router.get('/:id', async (req, res) => {
   try {
-    const vendor = await Vendor.findById(req.params.id)
-      .populate('createdBy', 'name email')
-      .populate('updatedBy', 'name email')
-      .populate('verifiedBy', 'name email');
+    const vendor = await Vendor.findByPk(req.params.id, {
+      include: [
+        { model: User, as: 'createdByUser', attributes: ['name', 'email'] },
+        { model: User, as: 'updatedByUser', attributes: ['name', 'email'] },
+        { model: User, as: 'verifiedByUser', attributes: ['name', 'email'] }
+      ]
+    });
 
     if (!vendor) {
       return res.status(404).json({
@@ -134,7 +150,7 @@ router.get('/:id', async (req, res) => {
     }
 
     // Check district access for sub-admins
-    if (req.user.role === 'sub-admin' && vendor.address.district !== req.user.district) {
+    if (req.user.role === 'sub-admin' && vendor.district !== req.user.district) {
       return res.status(403).json({
         success: false,
         message: 'Access denied to vendor in different district'
@@ -188,18 +204,22 @@ router.post('/', [
     }
 
     // Add createdBy and updatedBy
-    req.body.createdBy = req.user._id;
-    req.body.updatedBy = req.user._id;
+    req.body.createdBy = req.user.id;
+    req.body.updatedBy = req.user.id;
 
     // Create vendor
     const vendor = await Vendor.create(req.body);
 
-    // Populate createdBy field
-    await vendor.populate('createdBy', 'name email');
+    // Get vendor with populated fields
+    const vendorWithDetails = await Vendor.findByPk(vendor.id, {
+      include: [
+        { model: User, as: 'createdBy', attributes: ['name', 'email'] }
+      ]
+    });
 
     res.status(201).json({
       success: true,
-      vendor
+      vendor: vendorWithDetails
     });
 
   } catch (error) {
@@ -252,7 +272,7 @@ router.put('/:id', [
     }
 
     // Find vendor first to check access
-    const existingVendor = await Vendor.findById(req.params.id);
+    const existingVendor = await Vendor.findByPk(req.params.id);
     if (!existingVendor) {
       return res.status(404).json({
         success: false,
@@ -261,7 +281,7 @@ router.put('/:id', [
     }
 
     // Check district access for sub-admins
-    if (req.user.role === 'sub-admin' && existingVendor.address.district !== req.user.district) {
+    if (req.user.role === 'sub-admin' && existingVendor.district !== req.user.district) {
       return res.status(403).json({
         success: false,
         message: 'Access denied to vendor in different district'
@@ -269,15 +289,18 @@ router.put('/:id', [
     }
 
     // Add updatedBy
-    req.body.updatedBy = req.user._id;
+    req.body.updatedBy = req.user.id;
 
     // Update vendor
-    const vendor = await Vendor.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    ).populate('createdBy', 'name email')
-     .populate('updatedBy', 'name email');
+    await existingVendor.update(req.body);
+
+    // Get updated vendor with populated fields
+    const vendor = await Vendor.findByPk(req.params.id, {
+      include: [
+        { model: User, as: 'createdBy', attributes: ['name', 'email'] },
+        { model: User, as: 'updatedBy', attributes: ['name', 'email'] }
+      ]
+    });
 
     res.status(200).json({
       success: true,
@@ -307,7 +330,7 @@ router.put('/:id', [
 // @access  Private (Admin only for deletion)
 router.delete('/:id', authorize('admin'), async (req, res) => {
   try {
-    const vendor = await Vendor.findById(req.params.id);
+    const vendor = await Vendor.findByPk(req.params.id);
 
     if (!vendor) {
       return res.status(404).json({
@@ -316,7 +339,7 @@ router.delete('/:id', authorize('admin'), async (req, res) => {
       });
     }
 
-    await vendor.deleteOne();
+    await vendor.destroy();
 
     res.status(200).json({
       success: true,
@@ -338,36 +361,50 @@ router.delete('/:id', authorize('admin'), async (req, res) => {
 router.get('/stats/overview', async (req, res) => {
   try {
     // Build filter for district-based access
-    const filter = {};
+    const where = {};
     if (req.user.role === 'sub-admin') {
-      filter['address.district'] = req.user.district;
+      where.district = req.user.district;
     }
 
     // Get counts
-    const totalVendors = await Vendor.countDocuments(filter);
-    const activeVendors = await Vendor.countDocuments({ ...filter, status: 'Active' });
-    const pendingVendors = await Vendor.countDocuments({ ...filter, status: 'Pending' });
-    const expiringVendors = await Vendor.countDocuments({
-      ...filter,
-      membershipExpiry: {
-        $gte: new Date(),
-        $lte: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+    const totalVendors = await Vendor.count({ where });
+    const activeVendors = await Vendor.count({ where: { ...where, status: 'Active' } });
+    const pendingVendors = await Vendor.count({ where: { ...where, status: 'Pending' } });
+    
+    const thirtyDaysFromNow = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const expiringVendors = await Vendor.count({
+      where: {
+        ...where,
+        membershipExpiry: {
+          [Op.gte]: new Date(),
+          [Op.lte]: thirtyDaysFromNow
+        }
       }
     });
 
     // Get category distribution
-    const categoryStats = await Vendor.aggregate([
-      { $match: filter },
-      { $group: { _id: '$category', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]);
+    const categoryStats = await Vendor.findAll({
+      where,
+      attributes: [
+        'businessType',
+        [Vendor.sequelize.fn('COUNT', Vendor.sequelize.col('id')), 'count']
+      ],
+      group: ['businessType'],
+      order: [[Vendor.sequelize.fn('COUNT', Vendor.sequelize.col('id')), 'DESC']],
+      raw: true
+    });
 
     // Get district distribution
-    const districtStats = await Vendor.aggregate([
-      { $match: filter },
-      { $group: { _id: '$address.district', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]);
+    const districtStats = await Vendor.findAll({
+      where,
+      attributes: [
+        'district',
+        [Vendor.sequelize.fn('COUNT', Vendor.sequelize.col('id')), 'count']
+      ],
+      group: ['district'],
+      order: [[Vendor.sequelize.fn('COUNT', Vendor.sequelize.col('id')), 'DESC']],
+      raw: true
+    });
 
     res.status(200).json({
       success: true,
@@ -395,7 +432,7 @@ router.get('/stats/overview', async (req, res) => {
 // @access  Private
 router.put('/:id/verify', async (req, res) => {
   try {
-    const vendor = await Vendor.findById(req.params.id);
+    const vendor = await Vendor.findByPk(req.params.id);
 
     if (!vendor) {
       return res.status(404).json({
@@ -405,7 +442,7 @@ router.put('/:id/verify', async (req, res) => {
     }
 
     // Check district access for sub-admins
-    if (req.user.role === 'sub-admin' && vendor.address.district !== req.user.district) {
+    if (req.user.role === 'sub-admin' && vendor.district !== req.user.district) {
       return res.status(403).json({
         success: false,
         message: 'Access denied to vendor in different district'
@@ -413,11 +450,11 @@ router.put('/:id/verify', async (req, res) => {
     }
 
     // Update verification status
-    vendor.isVerified = !vendor.isVerified;
-    vendor.verifiedBy = req.user._id;
-    vendor.verifiedAt = vendor.isVerified ? new Date() : null;
-
-    await vendor.save();
+    await vendor.update({
+      isVerified: !vendor.isVerified,
+      verifiedBy: req.user.id,
+      verifiedAt: !vendor.isVerified ? new Date() : null
+    });
 
     res.status(200).json({
       success: true,

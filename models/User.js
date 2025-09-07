@@ -34,7 +34,7 @@ const User = sequelize.define('User', {
     }
   },
   role: {
-    type: DataTypes.ENUM('admin', 'user'),
+    type: DataTypes.ENUM('admin', 'sub-admin', 'user'),
     allowNull: false,
     defaultValue: 'user'
   },
@@ -101,6 +101,14 @@ User.prototype.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
+// Alias for matchPassword (used in auth routes)
+User.prototype.matchPassword = User.prototype.comparePassword;
+
+User.prototype.updateLastLogin = async function() {
+  this.lastLogin = new Date();
+  return await this.save();
+};
+
 User.prototype.toJSON = function() {
   const values = Object.assign({}, this.get());
   delete values.password;
@@ -108,3 +116,5 @@ User.prototype.toJSON = function() {
 };
 
 module.exports = User;
+
+

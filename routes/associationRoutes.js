@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
+const { Op } = require('sequelize');
 const { protect, authorize } = require('../middleware/authMiddleware');
 const Association = require('../models/Association');
 
@@ -141,37 +142,42 @@ router.get('/', protect, async (req, res) => {
       city = '',
       state = '',
       status = '',
-      sortBy = 'createdAt',
+      sortBy = 'created_at',
       sortOrder = 'desc'
     } = req.query;
 
     // Build filter object
-    const filter = {};
+    const where = {};
     
     if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: 'i' } }
+      where[Op.or] = [
+        { name: { [Op.iLike]: `%${search}%` } }
       ];
     }
     
-    if (city) filter['address.city'] = city;
-    if (state) filter['address.state'] = state;
-    if (status) filter.status = status;
+    if (city) where['address.city'] = city;
+    if (state) where['address.state'] = state;
+    if (status) where.status = status;
 
     // Build sort object
-    const sort = {};
-    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+    const order = [];
+    if (sortBy === 'created_at') {
+      order.push(['created_at', sortOrder.toUpperCase()]);
+    } else {
+      order.push([sortBy, sortOrder.toUpperCase()]);
+    }
 
     // Execute query with pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const offset = (parseInt(page) - 1) * parseInt(limit);
     
-    const associations = await Association.find(filter)
-      .sort(sort)
-      .skip(skip)
-      .limit(parseInt(limit))
-      .select('-__v');
+    const { count, rows: associations } = await Association.findAndCountAll({
+      where,
+      order,
+      offset,
+      limit: parseInt(limit)
+    });
 
-    const total = await Association.countDocuments(filter);
+    const total = count;
     const totalPages = Math.ceil(total / parseInt(limit));
 
     res.json({
@@ -199,7 +205,7 @@ router.get('/', protect, async (req, res) => {
 // @access  Private
 router.get('/:id', protect, async (req, res) => {
   try {
-    const association = await Association.findById(req.params.id).select('-__v');
+    const association = await Association.findByPk(req.params.id);
     
     if (!association) {
       return res.status(404).json({
@@ -236,7 +242,7 @@ router.put('/:id', protect, authorize(['admin', 'sub-admin']), validateAssociati
       });
     }
 
-    const association = await Association.findById(req.params.id);
+    const association = await Association.findByPk(req.params.id);
     
     if (!association) {
       return res.status(404).json({
@@ -261,11 +267,8 @@ router.put('/:id', protect, authorize(['admin', 'sub-admin']), validateAssociati
       logo: req.body.logo || undefined
     };
 
-    const updatedAssociation = await Association.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true, runValidators: true }
-    ).select('-__v');
+    await association.update(updateData);
+    const updatedAssociation = await Association.findByPk(req.params.id);
 
     res.json({
       success: true,
@@ -287,7 +290,7 @@ router.put('/:id', protect, authorize(['admin', 'sub-admin']), validateAssociati
 // @access  Private (Admin, Sub-Admin)
 router.delete('/:id', protect, authorize(['admin', 'sub-admin']), async (req, res) => {
   try {
-    const association = await Association.findById(req.params.id);
+    const association = await Association.findByPk(req.params.id);
     
     if (!association) {
       return res.status(404).json({
@@ -296,7 +299,7 @@ router.delete('/:id', protect, authorize(['admin', 'sub-admin']), async (req, re
       });
     }
 
-    await Association.findByIdAndDelete(req.params.id);
+    await association.destroy();
 
     res.json({
       success: true,
@@ -317,7 +320,7 @@ router.delete('/:id', protect, authorize(['admin', 'sub-admin']), async (req, re
 // @access  Private (Admin, Sub-Admin)
 router.patch('/:id/toggle-status', protect, authorize(['admin', 'sub-admin']), async (req, res) => {
   try {
-    const association = await Association.findById(req.params.id);
+    const association = await Association.findByPk(req.params.id);
     
     if (!association) {
       return res.status(404).json({
@@ -327,8 +330,7 @@ router.patch('/:id/toggle-status', protect, authorize(['admin', 'sub-admin']), a
     }
 
     const newStatus = association.status === 'Active' ? 'Inactive' : 'Active';
-    association.status = newStatus;
-    await association.save();
+    await association.update({ status: newStatus });
 
     res.json({
       success: true,
@@ -350,32 +352,32 @@ router.patch('/:id/toggle-status', protect, authorize(['admin', 'sub-admin']), a
 // @access  Private
 router.get('/stats/overview', protect, async (req, res) => {
   try {
-    const totalAssociations = await Association.countDocuments();
-    const activeAssociations = await Association.countDocuments({ status: 'Active' });
-    const pendingAssociations = await Association.countDocuments({ status: 'Pending' });
-    const inactiveAssociations = await Association.countDocuments({ status: 'Inactive' });
+    const totalAssociations = await Association.count();
+    const activeAssociations = await Association.count({ where: { status: 'Active' } });
+    const pendingAssociations = await Association.count({ where: { status: 'Pending' } });
+    const inactiveAssociations = await Association.count({ where: { status: 'Inactive' } });
 
     // Get associations by state
-    const associationsByState = await Association.aggregate([
-      {
-        $group: {
-          _id: '$address.state',
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { count: -1 } }
-    ]);
+    const associationsByState = await Association.findAll({
+      attributes: [
+        ['address.state', 'state'],
+        [Association.sequelize.fn('COUNT', Association.sequelize.col('id')), 'count']
+      ],
+      group: [Association.sequelize.col('address.state')],
+      order: [[Association.sequelize.fn('COUNT', Association.sequelize.col('id')), 'DESC']],
+      raw: true
+    });
 
     // Get associations by city
-    const associationsByCity = await Association.aggregate([
-      {
-        $group: {
-          _id: '$address.city',
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { count: -1 } }
-    ]);
+    const associationsByCity = await Association.findAll({
+      attributes: [
+        ['address.city', 'city'],
+        [Association.sequelize.fn('COUNT', Association.sequelize.col('id')), 'count']
+      ],
+      group: [Association.sequelize.col('address.city')],
+      order: [[Association.sequelize.fn('COUNT', Association.sequelize.col('id')), 'DESC']],
+      raw: true
+    });
 
     res.json({
       success: true,

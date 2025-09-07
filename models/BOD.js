@@ -123,3 +123,5 @@ const BOD = sequelize.define('BOD', {
 });
 
 module.exports = BOD;
+
+

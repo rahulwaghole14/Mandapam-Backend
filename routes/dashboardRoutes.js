@@ -1,10 +1,12 @@
 const express = require('express');
 const { query } = require('express-validator');
+const { Op } = require('sequelize');
 const Vendor = require('../models/Vendor');
 const Member = require('../models/Member');
 const Event = require('../models/Event');
 const BOD = require('../models/BOD');
 const Association = require('../models/Association');
+const User = require('../models/User');
 const { protect, authorize } = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -18,14 +20,14 @@ router.use(protect);
 router.get('/stats', async (req, res) => {
   try {
     // Build filter for district-based access
-    const filter = {};
+    const where = {};
     if (req.user.role === 'sub-admin') {
-      filter['address.district'] = req.user.district;
+      where.district = req.user.district;
     }
 
     console.log('User role:', req.user.role);
     console.log('User district:', req.user.district);
-    console.log('Filter being applied:', filter);
+    console.log('Filter being applied:', where);
 
     // Get counts for all entities
     const [
@@ -41,34 +43,43 @@ router.get('/stats', async (req, res) => {
       totalAssociations,
       activeAssociations
     ] = await Promise.all([
-      Vendor.countDocuments(filter),
-      Vendor.countDocuments({ ...filter, status: 'Active' }),
-      Vendor.countDocuments({ ...filter, status: 'Pending' }),
-      Member.countDocuments(filter),
-      Member.countDocuments({ ...filter, isActive: true }),
-      Event.countDocuments(filter),
-      Event.countDocuments({
-        ...filter,
-        startDate: { $gte: new Date() }
+      Vendor.count({ where }),
+      Vendor.count({ where: { ...where, status: 'Active' } }),
+      Vendor.count({ where: { ...where, status: 'Pending' } }),
+      Member.count({ where }),
+      Member.count({ where: { ...where, isActive: true } }),
+      Event.count({ where }),
+      Event.count({
+        where: {
+          ...where,
+          startDate: { [Op.gte]: new Date() }
+        }
       }),
-      BOD.countDocuments(filter),
-      BOD.countDocuments({ ...filter, isActive: true }),
-      Association.countDocuments(filter),
-      Association.countDocuments({ ...filter, status: 'Active' })
+      BOD.count({ where }),
+      BOD.count({ where: { ...where, isActive: true } }),
+      Association.count({ where }),
+      Association.count({ where: { ...where, status: 'Active' } })
     ]);
 
     // Calculate growth rate (comparing current month with previous month)
     const currentMonth = new Date();
     const previousMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
     
-    const currentMonthVendors = await Vendor.countDocuments({
-      ...filter,
-      createdAt: { $gte: new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1) }
+    const currentMonthVendors = await Vendor.count({
+      where: {
+        ...where,
+        createdAt: { [Op.gte]: new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1) }
+      }
     });
     
-    const previousMonthVendors = await Vendor.countDocuments({
-      ...filter,
-      createdAt: { $gte: previousMonth, $lt: new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1) }
+    const previousMonthVendors = await Vendor.count({
+      where: {
+        ...where,
+        createdAt: { 
+          [Op.gte]: previousMonth, 
+          [Op.lt]: new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1) 
+        }
+      }
     });
 
     const growthRate = previousMonthVendors > 0 
@@ -76,11 +87,16 @@ router.get('/stats', async (req, res) => {
       : currentMonthVendors > 0 ? 100 : 0;
 
     // Get district coverage
-    const districtCoverage = await Vendor.aggregate([
-      { $match: filter },
-      { $group: { _id: '$address.district', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]);
+    const districtCoverage = await Vendor.findAll({
+      where,
+      attributes: [
+        'district',
+        [Vendor.sequelize.fn('COUNT', Vendor.sequelize.col('id')), 'count']
+      ],
+      group: ['district'],
+      order: [[Vendor.sequelize.fn('COUNT', Vendor.sequelize.col('id')), 'DESC']],
+      raw: true
+    });
 
     res.status(200).json({
       success: true,
@@ -130,26 +146,30 @@ router.get('/recent-members', [
     const limit = parseInt(req.query.limit) || 10;
     
     // Build filter for district-based access
-    const filter = {};
+    const where = {};
     if (req.user.role === 'sub-admin') {
-      filter['address.district'] = req.user.district;
+      where.district = req.user.district;
     }
 
     // Get recent members
-    const recentMembers = await Member.find(filter)
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .select('name businessName phone city state createdAt profileImage associationName')
-      .populate('createdBy', 'name');
+    const recentMembers = await Member.findAll({
+      where,
+      attributes: ['name', 'businessName', 'phone', 'city', 'state', 'created_at', 'profileImage', 'association_name'],
+      include: [
+        { model: User, as: 'createdByUser', attributes: ['name'] }
+      ],
+        order: [['created_at', 'DESC']],
+      limit: limit
+    });
 
     // Format members data
     const members = recentMembers.map(member => ({
-      memberId: member._id,
+      memberId: member.id,
       name: member.name,
       businessName: member.businessName,
       phone: member.phone,
-      associationName: member.associationName,
-      dateAdded: member.createdAt,
+      associationName: member.association_name,
+      dateAdded: member.created_at,
       profileImage: member.profileImage,
       city: member.city,
       state: member.state,
@@ -176,31 +196,46 @@ router.get('/recent-members', [
 router.get('/district-coverage', async (req, res) => {
   try {
     // Build filter for district-based access
-    const filter = {};
+    const where = {};
     if (req.user.role === 'sub-admin') {
-      filter['address.district'] = req.user.district;
+      where.district = req.user.district;
     }
 
     // Get district coverage for vendors
-    const vendorDistrictCoverage = await Vendor.aggregate([
-      { $match: filter },
-      { $group: { _id: '$address.district', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]);
+    const vendorDistrictCoverage = await Vendor.findAll({
+      where,
+      attributes: [
+        'district',
+        [Vendor.sequelize.fn('COUNT', Vendor.sequelize.col('id')), 'count']
+      ],
+      group: ['district'],
+      order: [[Vendor.sequelize.fn('COUNT', Vendor.sequelize.col('id')), 'DESC']],
+      raw: true
+    });
 
     // Get district coverage for members
-    const memberDistrictCoverage = await Member.aggregate([
-      { $match: filter },
-      { $group: { _id: '$city', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]);
+    const memberDistrictCoverage = await Member.findAll({
+      where,
+      attributes: [
+        'city',
+        [Member.sequelize.fn('COUNT', Member.sequelize.col('id')), 'count']
+      ],
+      group: ['city'],
+      order: [[Member.sequelize.fn('COUNT', Member.sequelize.col('id')), 'DESC']],
+      raw: true
+    });
 
     // Get district coverage for associations
-    const associationDistrictCoverage = await Association.aggregate([
-      { $match: filter },
-      { $group: { _id: '$address.district', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]);
+    const associationDistrictCoverage = await Association.findAll({
+      where,
+      attributes: [
+        ['district', 'district'],
+        [Association.sequelize.fn('COUNT', Association.sequelize.col('id')), 'count']
+      ],
+      group: [Association.sequelize.col('district')],
+      order: [[Association.sequelize.fn('COUNT', Association.sequelize.col('id')), 'DESC']],
+      raw: true
+    });
 
     res.status(200).json({
       success: true,
@@ -230,60 +265,60 @@ router.get('/growth-trends', [
     const period = req.query.period || 'monthly';
     
     // Build filter for district-based access
-    const filter = {};
+    const where = {};
     if (req.user.role === 'sub-admin') {
-      filter['address.district'] = req.user.district;
+      where.district = req.user.district;
     }
 
     let dateFormat, dateRange;
     const now = new Date();
 
     if (period === 'weekly') {
-      dateFormat = '%Y-%U'; // Year-Week
+      dateFormat = 'YYYY-"W"WW'; // Year-Week
       dateRange = 12; // Last 12 weeks
     } else if (period === 'monthly') {
-      dateFormat = '%Y-%m'; // Year-Month
+      dateFormat = 'YYYY-MM'; // Year-Month
       dateRange = 12; // Last 12 months
     } else {
-      dateFormat = '%Y'; // Year
+      dateFormat = 'YYYY'; // Year
       dateRange = 5; // Last 5 years
     }
 
     // Get vendor growth trends
-    const vendorTrends = await Vendor.aggregate([
-      { $match: filter },
-      {
-        $group: {
-          _id: { $dateToString: { format: dateFormat, date: '$createdAt' } },
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { _id: 1 } }
-    ]);
+    const vendorTrends = await Vendor.findAll({
+      where,
+      attributes: [
+        [Vendor.sequelize.fn('TO_CHAR', Vendor.sequelize.col('created_at'), dateFormat), 'period'],
+        [Vendor.sequelize.fn('COUNT', Vendor.sequelize.col('id')), 'count']
+      ],
+      group: [Vendor.sequelize.fn('TO_CHAR', Vendor.sequelize.col('created_at'), dateFormat)],
+      order: [[Vendor.sequelize.fn('TO_CHAR', Vendor.sequelize.col('created_at'), dateFormat), 'ASC']],
+      raw: true
+    });
 
     // Get member growth trends
-    const memberTrends = await Member.aggregate([
-      { $match: filter },
-      {
-        $group: {
-          _id: { $dateToString: { format: dateFormat, date: '$createdAt' } },
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { _id: 1 } }
-    ]);
+    const memberTrends = await Member.findAll({
+      where,
+      attributes: [
+        [Member.sequelize.fn('TO_CHAR', Member.sequelize.col('created_at'), dateFormat), 'period'],
+        [Member.sequelize.fn('COUNT', Member.sequelize.col('id')), 'count']
+      ],
+      group: [Member.sequelize.fn('TO_CHAR', Member.sequelize.col('created_at'), dateFormat)],
+      order: [[Member.sequelize.fn('TO_CHAR', Member.sequelize.col('created_at'), dateFormat), 'ASC']],
+      raw: true
+    });
 
     // Get event growth trends
-    const eventTrends = await Event.aggregate([
-      { $match: filter },
-      {
-        $group: {
-          _id: { $dateToString: { format: dateFormat, date: '$createdAt' } },
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { _id: 1 } }
-    ]);
+    const eventTrends = await Event.findAll({
+      where,
+      attributes: [
+        [Event.sequelize.fn('TO_CHAR', Event.sequelize.col('created_at'), dateFormat), 'period'],
+        [Event.sequelize.fn('COUNT', Event.sequelize.col('id')), 'count']
+      ],
+      group: [Event.sequelize.fn('TO_CHAR', Event.sequelize.col('created_at'), dateFormat)],
+      order: [[Event.sequelize.fn('TO_CHAR', Event.sequelize.col('created_at'), dateFormat), 'ASC']],
+      raw: true
+    });
 
     res.status(200).json({
       success: true,

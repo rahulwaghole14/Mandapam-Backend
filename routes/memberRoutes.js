@@ -1,6 +1,8 @@
 const express = require('express');
 const { body, validationResult, query } = require('express-validator');
+const { Op } = require('sequelize');
 const Member = require('../models/Member');
+const User = require('../models/User');
 const { protect, authorize } = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -45,46 +47,58 @@ router.get('/', [
     } = req.query;
 
     // Build filter object
-    const filter = {};
+    const where = {};
 
     // Apply search filters
     if (search) {
-      filter.$text = { $search: search };
+      where[Op.or] = [
+        { name: { [Op.iLike]: `%${search}%` } },
+        { businessName: { [Op.iLike]: `%${search}%` } },
+        { city: { [Op.iLike]: `%${search}%` } },
+        { associationName: { [Op.iLike]: `%${search}%` } }
+      ];
     }
 
     if (city) {
-      filter.city = city;
+      where.city = city;
     }
 
     if (state) {
-      filter.state = state;
+      where.state = state;
     }
 
     if (businessType) {
-      filter.businessType = businessType;
+      where.businessType = businessType;
     }
 
     if (associationName) {
-      filter.associationName = associationName;
+      where.associationName = associationName;
     }
 
     // Build sort object
-    const sort = {};
-    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+    const order = [];
+    if (sortBy === 'createdAt') {
+      order.push(['createdAt', sortOrder.toUpperCase()]);
+    } else {
+      order.push([sortBy, sortOrder.toUpperCase()]);
+    }
 
     // Calculate pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const offset = (parseInt(page) - 1) * parseInt(limit);
 
     // Execute query
-    const members = await Member.find(filter)
-      .populate('createdBy', 'name email')
-      .populate('updatedBy', 'name email')
-      .sort(sort)
-      .skip(skip)
-      .limit(parseInt(limit));
+    const { count, rows: members } = await Member.findAndCountAll({
+      where,
+      include: [
+        { model: User, as: 'createdByUser', attributes: ['name', 'email'] },
+        { model: User, as: 'updatedByUser', attributes: ['name', 'email'] }
+      ],
+      order,
+      offset,
+      limit: parseInt(limit)
+    });
 
-    // Get total count for pagination
-    const total = await Member.countDocuments(filter);
+    const total = count;
 
     // Calculate pagination info
     const totalPages = Math.ceil(total / parseInt(limit));
@@ -116,9 +130,12 @@ router.get('/', [
 // @access  Private
 router.get('/:id', async (req, res) => {
   try {
-    const member = await Member.findById(req.params.id)
-      .populate('createdBy', 'name email')
-      .populate('updatedBy', 'name email');
+    const member = await Member.findByPk(req.params.id, {
+      include: [
+        { model: User, as: 'createdByUser', attributes: ['name', 'email'] },
+        { model: User, as: 'updatedByUser', attributes: ['name', 'email'] }
+      ]
+    });
 
     if (!member) {
       return res.status(404).json({
@@ -171,18 +188,22 @@ router.post('/', [
     }
 
     // Add createdBy and updatedBy
-    req.body.createdBy = req.user._id;
-    req.body.updatedBy = req.user._id;
+    req.body.createdBy = req.user.id;
+    req.body.updatedBy = req.user.id;
 
     // Create member
     const member = await Member.create(req.body);
 
-    // Populate createdBy field
-    await member.populate('createdBy', 'name email');
+    // Get member with populated fields
+    const memberWithDetails = await Member.findByPk(member.id, {
+      include: [
+        { model: User, as: 'createdByUser', attributes: ['name', 'email'] }
+      ]
+    });
 
     res.status(201).json({
       success: true,
-      member
+      member: memberWithDetails
     });
 
   } catch (error) {
@@ -251,7 +272,7 @@ router.put('/:id', [
     }
 
     // Find member first
-    const existingMember = await Member.findById(req.params.id);
+    const existingMember = await Member.findByPk(req.params.id);
     if (!existingMember) {
       return res.status(404).json({
         success: false,
@@ -260,15 +281,18 @@ router.put('/:id', [
     }
 
     // Add updatedBy
-    req.body.updatedBy = req.user._id;
+    req.body.updatedBy = req.user.id;
 
     // Update member
-    const member = await Member.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    ).populate('createdBy', 'name email')
-     .populate('updatedBy', 'name email');
+    await existingMember.update(req.body);
+
+    // Get updated member with populated fields
+    const member = await Member.findByPk(req.params.id, {
+      include: [
+        { model: User, as: 'createdByUser', attributes: ['name', 'email'] },
+        { model: User, as: 'updatedByUser', attributes: ['name', 'email'] }
+      ]
+    });
 
     res.status(200).json({
       success: true,
@@ -315,7 +339,7 @@ router.put('/:id', [
 // @access  Private (Admin only)
 router.delete('/:id', authorize('admin'), async (req, res) => {
   try {
-    const member = await Member.findById(req.params.id);
+    const member = await Member.findByPk(req.params.id);
 
     if (!member) {
       return res.status(404).json({
@@ -324,7 +348,7 @@ router.delete('/:id', authorize('admin'), async (req, res) => {
       });
     }
 
-    await member.deleteOne();
+    await member.destroy();
 
     res.status(200).json({
       success: true,
@@ -346,41 +370,62 @@ router.delete('/:id', authorize('admin'), async (req, res) => {
 router.get('/stats/overview', async (req, res) => {
   try {
     // Get counts
-    const totalMembers = await Member.countDocuments();
-    const activeMembers = await Member.countDocuments({ isActive: true });
-    const inactiveMembers = await Member.countDocuments({ isActive: false });
+    const totalMembers = await Member.count();
+    const activeMembers = await Member.count({ where: { isActive: true } });
+    const inactiveMembers = await Member.count({ where: { isActive: false } });
 
     // Get business type distribution
-    const businessTypeStats = await Member.aggregate([
-      { $group: { _id: '$businessType', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]);
+    const businessTypeStats = await Member.findAll({
+      attributes: [
+        'businessType',
+        [Member.sequelize.fn('COUNT', Member.sequelize.col('id')), 'count']
+      ],
+      group: ['businessType'],
+      order: [[Member.sequelize.fn('COUNT', Member.sequelize.col('id')), 'DESC']],
+      raw: true
+    });
 
     // Get city distribution
-    const cityStats = await Member.aggregate([
-      { $group: { _id: '$city', count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 10 }
-    ]);
+    const cityStats = await Member.findAll({
+      attributes: [
+        'city',
+        [Member.sequelize.fn('COUNT', Member.sequelize.col('id')), 'count']
+      ],
+      group: ['city'],
+      order: [[Member.sequelize.fn('COUNT', Member.sequelize.col('id')), 'DESC']],
+      limit: 10,
+      raw: true
+    });
 
     // Get state distribution
-    const stateStats = await Member.aggregate([
-      { $group: { _id: '$state', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]);
+    const stateStats = await Member.findAll({
+      attributes: [
+        'state',
+        [Member.sequelize.fn('COUNT', Member.sequelize.col('id')), 'count']
+      ],
+      group: ['state'],
+      order: [[Member.sequelize.fn('COUNT', Member.sequelize.col('id')), 'DESC']],
+      raw: true
+    });
 
     // Get association distribution
-    const associationStats = await Member.aggregate([
-      { $group: { _id: '$associationName', count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 10 }
-    ]);
+    const associationStats = await Member.findAll({
+      attributes: [
+        'associationName',
+        [Member.sequelize.fn('COUNT', Member.sequelize.col('id')), 'count']
+      ],
+      group: ['associationName'],
+      order: [[Member.sequelize.fn('COUNT', Member.sequelize.col('id')), 'DESC']],
+      limit: 10,
+      raw: true
+    });
 
     // Get recent additions
-    const recentMembers = await Member.find()
-      .sort({ createdAt: -1 })
-      .limit(5)
-      .select('name businessName businessType city createdAt');
+    const recentMembers = await Member.findAll({
+      attributes: ['name', 'businessName', 'businessType', 'city', 'createdAt'],
+      order: [['createdAt', 'DESC']],
+      limit: 5
+    });
 
     res.status(200).json({
       success: true,

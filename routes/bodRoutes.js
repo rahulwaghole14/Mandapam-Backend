@@ -1,6 +1,8 @@
 const express = require('express');
 const { body, validationResult, query } = require('express-validator');
+const { Op } = require('sequelize');
 const BOD = require('../models/BOD');
+const User = require('../models/User');
 const { protect, authorize } = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -17,7 +19,7 @@ router.get('/', [
   query('search').optional().isString().trim(),
   query('designation').optional().isString().trim(),
   query('isActive').optional().isBoolean(),
-  query('sortBy').optional().isIn(['name', 'designation', 'dateOfJoining', 'createdAt']),
+  query('sortBy').optional().isIn(['name', 'designation', 'dateOfJoining', 'created_at']),
   query('sortOrder').optional().isIn(['asc', 'desc'])
 ], async (req, res) => {
   try {
@@ -36,43 +38,54 @@ router.get('/', [
       search,
       designation,
       isActive,
-      sortBy = 'createdAt',
+      sortBy = 'created_at',
       sortOrder = 'desc'
     } = req.query;
 
     // Build filter object
-    const filter = {};
+    const where = {};
 
     // Apply search filters
     if (search) {
-      filter.$text = { $search: search };
+      where[Op.or] = [
+        { name: { [Op.iLike]: `%${search}%` } },
+        { designation: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } }
+      ];
     }
 
     if (designation) {
-      filter.designation = designation;
+      where.designation = designation;
     }
 
     if (isActive !== undefined) {
-      filter.isActive = isActive === 'true';
+      where.isActive = isActive === 'true';
     }
 
     // Build sort object
-    const sort = {};
-    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+    const order = [];
+    if (sortBy === 'created_at') {
+      order.push(['created_at', sortOrder.toUpperCase()]);
+    } else {
+      order.push([sortBy, sortOrder.toUpperCase()]);
+    }
 
     // Calculate pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const offset = (parseInt(page) - 1) * parseInt(limit);
 
     // Execute query
-    const bods = await BOD.find(filter)
-      .populate('createdBy', 'name email')
-      .populate('updatedBy', 'name email')
-      .sort(sort)
-      .skip(skip)
-      .limit(parseInt(limit));
+    const { count, rows: bods } = await BOD.findAndCountAll({
+      where,
+      include: [
+        { model: User, as: 'createdByUser', attributes: ['name', 'email'] },
+        { model: User, as: 'updatedByUser', attributes: ['name', 'email'] }
+      ],
+      order,
+      offset,
+      limit: parseInt(limit)
+    });
 
-    // Get total count for pagination
-    const total = await BOD.countDocuments(filter);
+    const total = count;
 
     // Calculate pagination info
     const totalPages = Math.ceil(total / parseInt(limit));
@@ -104,9 +117,12 @@ router.get('/', [
 // @access  Private
 router.get('/:id', async (req, res) => {
   try {
-    const bod = await BOD.findById(req.params.id)
-      .populate('createdBy', 'name email')
-      .populate('updatedBy', 'name email');
+    const bod = await BOD.findByPk(req.params.id, {
+      include: [
+        { model: User, as: 'createdByUser', attributes: ['name', 'email'] },
+        { model: User, as: 'updatedByUser', attributes: ['name', 'email'] }
+      ]
+    });
 
     if (!bod) {
       return res.status(404).json({
@@ -174,18 +190,22 @@ router.post('/', [
     }
 
     // Add createdBy and updatedBy
-    req.body.createdBy = req.user._id;
-    req.body.updatedBy = req.user._id;
+    req.body.createdBy = req.user.id;
+    req.body.updatedBy = req.user.id;
 
     // Create BOD member
     const bod = await BOD.create(req.body);
 
-    // Populate createdBy field
-    await bod.populate('createdBy', 'name email');
+    // Get BOD member with populated fields
+    const bodWithDetails = await BOD.findByPk(bod.id, {
+      include: [
+        { model: User, as: 'createdByUser', attributes: ['name', 'email'] }
+      ]
+    });
 
     res.status(201).json({
       success: true,
-      bod
+      bod: bodWithDetails
     });
 
   } catch (error) {
@@ -253,7 +273,7 @@ router.put('/:id', [
     }
 
     // Find BOD member first
-    const existingBOD = await BOD.findById(req.params.id);
+    const existingBOD = await BOD.findByPk(req.params.id);
     if (!existingBOD) {
       return res.status(404).json({
         success: false,
@@ -262,15 +282,18 @@ router.put('/:id', [
     }
 
     // Add updatedBy
-    req.body.updatedBy = req.user._id;
+    req.body.updatedBy = req.user.id;
 
     // Update BOD member
-    const bod = await BOD.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    ).populate('createdBy', 'name email')
-     .populate('updatedBy', 'name email');
+    await existingBOD.update(req.body);
+
+    // Get updated BOD member with populated fields
+    const bod = await BOD.findByPk(req.params.id, {
+      include: [
+        { model: User, as: 'createdByUser', attributes: ['name', 'email'] },
+        { model: User, as: 'updatedByUser', attributes: ['name', 'email'] }
+      ]
+    });
 
     res.status(200).json({
       success: true,
@@ -300,7 +323,7 @@ router.put('/:id', [
 // @access  Private (Admin only)
 router.delete('/:id', authorize('admin'), async (req, res) => {
   try {
-    const bod = await BOD.findById(req.params.id);
+    const bod = await BOD.findByPk(req.params.id);
 
     if (!bod) {
       return res.status(404).json({
@@ -309,7 +332,7 @@ router.delete('/:id', authorize('admin'), async (req, res) => {
       });
     }
 
-    await bod.deleteOne();
+    await bod.destroy();
 
     res.status(200).json({
       success: true,
@@ -331,21 +354,27 @@ router.delete('/:id', authorize('admin'), async (req, res) => {
 router.get('/stats/overview', async (req, res) => {
   try {
     // Get counts
-    const totalBODs = await BOD.countDocuments();
-    const activeBODs = await BOD.countDocuments({ isActive: true });
-    const inactiveBODs = await BOD.countDocuments({ isActive: false });
+    const totalBODs = await BOD.count();
+    const activeBODs = await BOD.count({ where: { isActive: true } });
+    const inactiveBODs = await BOD.count({ where: { isActive: false } });
 
     // Get designation distribution
-    const designationStats = await BOD.aggregate([
-      { $group: { _id: '$designation', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]);
+    const designationStats = await BOD.findAll({
+      attributes: [
+        'designation',
+        [BOD.sequelize.fn('COUNT', BOD.sequelize.col('id')), 'count']
+      ],
+      group: ['designation'],
+      order: [[BOD.sequelize.fn('COUNT', BOD.sequelize.col('id')), 'DESC']],
+      raw: true
+    });
 
     // Get recent additions
-    const recentBODs = await BOD.find()
-      .sort({ createdAt: -1 })
-      .limit(5)
-      .select('name designation createdAt');
+    const recentBODs = await BOD.findAll({
+      attributes: ['name', 'designation', 'created_at'],
+      order: [['created_at', 'DESC']],
+      limit: 5
+    });
 
     res.status(200).json({
       success: true,
@@ -372,7 +401,7 @@ router.get('/stats/overview', async (req, res) => {
 // @access  Private (Admin only)
 router.put('/:id/toggle-status', authorize('admin'), async (req, res) => {
   try {
-    const bod = await BOD.findById(req.params.id);
+    const bod = await BOD.findByPk(req.params.id);
 
     if (!bod) {
       return res.status(404).json({
@@ -382,22 +411,25 @@ router.put('/:id/toggle-status', authorize('admin'), async (req, res) => {
     }
 
     // Toggle status
-    bod.isActive = !bod.isActive;
-    bod.updatedBy = req.user._id;
+    const newIsActive = !bod.isActive;
+    const updateData = {
+      isActive: newIsActive,
+      updatedBy: req.user.id
+    };
 
     // Set resignation date if deactivating
-    if (!bod.isActive && !bod.dateOfResignation) {
-      bod.dateOfResignation = new Date();
-    } else if (bod.isActive) {
-      bod.dateOfResignation = null;
+    if (!newIsActive && !bod.dateOfResignation) {
+      updateData.dateOfResignation = new Date();
+    } else if (newIsActive) {
+      updateData.dateOfResignation = null;
     }
 
-    await bod.save();
+    await bod.update(updateData);
 
     res.status(200).json({
       success: true,
       bod,
-      message: `BOD member ${bod.isActive ? 'activated' : 'deactivated'} successfully`
+      message: `BOD member ${newIsActive ? 'activated' : 'deactivated'} successfully`
     });
 
   } catch (error) {

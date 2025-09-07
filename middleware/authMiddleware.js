@@ -15,7 +15,7 @@ const protect = async (req, res, next) => {
       console.log('Auth Middleware - Token decoded:', decoded);
 
       // Get user from token
-      req.user = await User.findById(decoded.id).select('-password');
+      req.user = await User.findByPk(decoded.id);
       console.log('Auth Middleware - User found:', req.user);
 
       if (!req.user) {
