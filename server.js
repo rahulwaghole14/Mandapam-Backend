@@ -52,7 +52,7 @@ const allowedOrigins = [
   'http://127.0.0.1:8082',
   'http://127.0.0.1:5173',
   // Add your Render frontend URL here when deployed
-  // 'https://your-frontend-app.onrender.com'
+  'https://mandap-web-frontend.onrender.com'
 ];
 
 app.use(cors({
