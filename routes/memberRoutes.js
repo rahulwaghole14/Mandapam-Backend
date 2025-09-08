@@ -19,7 +19,7 @@ router.get('/', [
   query('search').optional().isString().trim(),
   query('city').optional().isString().trim(),
   query('state').optional().isString().trim(),
-  query('businessType').optional().isIn(['catering', 'sound', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
+  query('businessType').optional().isIn(['catering', 'sound', 'mandap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
   query('associationName').optional().isString().trim(),
   query('sortBy').optional().isIn(['name', 'businessName', 'city', 'businessType', 'created_at']),
   query('sortOrder').optional().isIn(['asc', 'desc'])
@@ -166,12 +166,22 @@ router.post('/', [
   body('businessName', 'Business name is required').notEmpty().trim(),
   body('phone', 'Phone number is required').matches(/^[0-9]{10}$/),
   body('state', 'State is required').notEmpty().trim(),
-  body('businessType', 'Business type is required').isIn(['catering', 'sound', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
+  body('businessType', 'Business type is required').isIn(['catering', 'sound', 'mandap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
   body('city', 'City is required').notEmpty().trim(),
   body('pincode', 'Pincode is required').matches(/^[0-9]{6}$/),
   body('associationName', 'Association name is required').notEmpty().trim(),
   body('birthDate').optional().isISO8601().withMessage('Birth date must be a valid date'),
-  body('email').optional().isEmail().withMessage('Please provide a valid email')
+  body('email').optional().isEmail().withMessage('Please provide a valid email'),
+  body('address').optional().trim().isLength({ max: 500 }).withMessage('Address cannot exceed 500 characters'),
+  body('gstNumber').optional().matches(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/).withMessage('Please provide a valid GST number'),
+  body('description').optional().trim().isLength({ max: 1000 }).withMessage('Description cannot exceed 1000 characters'),
+  body('experience').optional().custom((value) => {
+    if (value === '' || value === null || value === undefined) return true;
+    const num = parseInt(value);
+    return !isNaN(num) && num >= 0 && num <= 100;
+  }).withMessage('Experience must be between 0 and 100 years'),
+  body('profileImage').optional().trim().isLength({ max: 255 }).withMessage('Profile image URL cannot exceed 255 characters'),
+  body('businessImages').optional().isArray().withMessage('Business images must be an array')
 ], authorize('admin'), async (req, res) => {
   try {
     console.log('Member POST request received:', req.body);
@@ -181,8 +191,28 @@ router.post('/', [
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       console.log('Validation errors:', errors.array());
+      console.log('Request body received:', req.body);
+      console.log('Request body types:', {
+        name: typeof req.body.name,
+        businessName: typeof req.body.businessName,
+        phone: typeof req.body.phone,
+        state: typeof req.body.state,
+        businessType: typeof req.body.businessType,
+        city: typeof req.body.city,
+        pincode: typeof req.body.pincode,
+        associationName: typeof req.body.associationName,
+        birthDate: typeof req.body.birthDate,
+        email: typeof req.body.email,
+        address: typeof req.body.address,
+        gstNumber: typeof req.body.gstNumber,
+        description: typeof req.body.description,
+        experience: typeof req.body.experience,
+        profileImage: typeof req.body.profileImage,
+        businessImages: typeof req.body.businessImages
+      });
       return res.status(400).json({
         success: false,
+        message: 'Validation failed',
         errors: errors.array()
       });
     }
@@ -254,12 +284,22 @@ router.put('/:id', [
   body('businessName').optional().notEmpty().trim().withMessage('Business name cannot be empty'),
   body('phone').optional().matches(/^[0-9]{10}$/).withMessage('Invalid phone number'),
   body('state').optional().notEmpty().trim().withMessage('State cannot be empty'),
-  body('businessType').optional().isIn(['catering', 'sound', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']).withMessage('Invalid business type'),
+  body('businessType').optional().isIn(['catering', 'sound', 'mandap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']).withMessage('Invalid business type'),
   body('city').optional().notEmpty().trim().withMessage('City cannot be empty'),
   body('pincode').optional().matches(/^[0-9]{6}$/).withMessage('Invalid pincode'),
   body('associationName').optional().notEmpty().trim().withMessage('Association name cannot be empty'),
   body('birthDate').optional().isISO8601().withMessage('Birth date must be a valid date'),
-  body('email').optional().isEmail().withMessage('Please provide a valid email')
+  body('email').optional().isEmail().withMessage('Please provide a valid email'),
+  body('address').optional().trim().isLength({ max: 500 }).withMessage('Address cannot exceed 500 characters'),
+  body('gstNumber').optional().matches(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/).withMessage('Please provide a valid GST number'),
+  body('description').optional().trim().isLength({ max: 1000 }).withMessage('Description cannot exceed 1000 characters'),
+  body('experience').optional().custom((value) => {
+    if (value === '' || value === null || value === undefined) return true;
+    const num = parseInt(value);
+    return !isNaN(num) && num >= 0 && num <= 100;
+  }).withMessage('Experience must be between 0 and 100 years'),
+  body('profileImage').optional().trim().isLength({ max: 255 }).withMessage('Profile image URL cannot exceed 255 characters'),
+  body('businessImages').optional().isArray().withMessage('Business images must be an array')
 ], authorize('admin'), async (req, res) => {
   try {
     // Check for validation errors
