@@ -18,7 +18,7 @@ const BOD = sequelize.define('BOD', {
   designation: {
     type: DataTypes.STRING(100),
     allowNull: false,
-    field: 'designation',
+    field: 'position',
     validate: {
       notEmpty: true,
       len: [2, 100]
