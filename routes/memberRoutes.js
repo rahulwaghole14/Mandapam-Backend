@@ -172,19 +172,31 @@ router.post('/', [
   body('associationName', 'Association name is required').notEmpty().trim(),
   body('birthDate').optional().isISO8601().withMessage('Birth date must be a valid date'),
   body('email').optional().isEmail().withMessage('Please provide a valid email'),
-  body('address').optional().trim().isLength({ max: 500 }).withMessage('Address cannot exceed 500 characters'),
+  body('address').optional().custom((value) => {
+    if (!value || value === '' || value === null || value === undefined) return true; // Allow empty values
+    return value.length <= 500;
+  }).withMessage('Address cannot exceed 500 characters'),
   body('gstNumber').optional().custom((value) => {
-    if (!value || value === '' || value === null) return true; // Allow empty values
+    if (!value || value === '' || value === null || value === undefined) return true; // Allow empty values
     return /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(value);
   }).withMessage('Please provide a valid GST number'),
-  body('description').optional().trim().isLength({ max: 1000 }).withMessage('Description cannot exceed 1000 characters'),
+  body('description').optional().custom((value) => {
+    if (!value || value === '' || value === null || value === undefined) return true; // Allow empty values
+    return value.length <= 1000;
+  }).withMessage('Description cannot exceed 1000 characters'),
   body('experience').optional().custom((value) => {
-    if (value === '' || value === null || value === undefined) return true;
+    if (value === '' || value === null || value === undefined) return true; // Allow empty values
     const num = parseInt(value);
     return !isNaN(num) && num >= 0 && num <= 100;
   }).withMessage('Experience must be between 0 and 100 years'),
-  body('profileImage').optional().trim().isLength({ max: 255 }).withMessage('Profile image URL cannot exceed 255 characters'),
-  body('businessImages').optional().isArray().withMessage('Business images must be an array')
+  body('profileImage').optional().custom((value) => {
+    if (!value || value === '' || value === null || value === undefined) return true; // Allow empty values
+    return value.length <= 255;
+  }).withMessage('Profile image URL cannot exceed 255 characters'),
+  body('businessImages').optional().custom((value) => {
+    if (!value || value === null || value === undefined) return true; // Allow empty values
+    return Array.isArray(value);
+  }).withMessage('Business images must be an array')
 ], authorize('admin'), async (req, res) => {
   try {
     console.log('Member POST request received:', req.body);
@@ -308,19 +320,31 @@ router.put('/:id', [
   body('associationName').optional().notEmpty().trim().withMessage('Association name cannot be empty'),
   body('birthDate').optional().isISO8601().withMessage('Birth date must be a valid date'),
   body('email').optional().isEmail().withMessage('Please provide a valid email'),
-  body('address').optional().trim().isLength({ max: 500 }).withMessage('Address cannot exceed 500 characters'),
+  body('address').optional().custom((value) => {
+    if (!value || value === '' || value === null || value === undefined) return true; // Allow empty values
+    return value.length <= 500;
+  }).withMessage('Address cannot exceed 500 characters'),
   body('gstNumber').optional().custom((value) => {
-    if (!value || value === '' || value === null) return true; // Allow empty values
+    if (!value || value === '' || value === null || value === undefined) return true; // Allow empty values
     return /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(value);
   }).withMessage('Please provide a valid GST number'),
-  body('description').optional().trim().isLength({ max: 1000 }).withMessage('Description cannot exceed 1000 characters'),
+  body('description').optional().custom((value) => {
+    if (!value || value === '' || value === null || value === undefined) return true; // Allow empty values
+    return value.length <= 1000;
+  }).withMessage('Description cannot exceed 1000 characters'),
   body('experience').optional().custom((value) => {
-    if (value === '' || value === null || value === undefined) return true;
+    if (value === '' || value === null || value === undefined) return true; // Allow empty values
     const num = parseInt(value);
     return !isNaN(num) && num >= 0 && num <= 100;
   }).withMessage('Experience must be between 0 and 100 years'),
-  body('profileImage').optional().trim().isLength({ max: 255 }).withMessage('Profile image URL cannot exceed 255 characters'),
-  body('businessImages').optional().isArray().withMessage('Business images must be an array')
+  body('profileImage').optional().custom((value) => {
+    if (!value || value === '' || value === null || value === undefined) return true; // Allow empty values
+    return value.length <= 255;
+  }).withMessage('Profile image URL cannot exceed 255 characters'),
+  body('businessImages').optional().custom((value) => {
+    if (!value || value === null || value === undefined) return true; // Allow empty values
+    return Array.isArray(value);
+  }).withMessage('Business images must be an array')
 ], authorize('admin'), async (req, res) => {
   try {
     // Check for validation errors
