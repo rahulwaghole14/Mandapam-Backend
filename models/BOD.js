@@ -99,7 +99,7 @@ const BOD = sequelize.define('BOD', {
   },
   associationId: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    allowNull: true, // Made optional for National BODs
     field: 'association_id',
     references: {
       model: 'associations',

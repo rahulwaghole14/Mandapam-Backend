@@ -198,8 +198,18 @@ router.post('/', [
 
     // Note: BOD model doesn't have createdBy/updatedBy fields
 
+    // Prepare BOD data
+    const bodData = {
+      ...req.body,
+      // For National BODs, associationId should be null
+      // For Association BODs, associationId should be provided
+      associationId: req.body.associationId || null
+    };
+
+    console.log('Creating BOD with data:', bodData);
+
     // Create BOD member
-    const bod = await BOD.create(req.body);
+    const bod = await BOD.create(bodData);
 
     // Get BOD member with populated fields
     const bodWithDetails = await BOD.findByPk(bod.id, {

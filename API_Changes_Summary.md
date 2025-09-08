@@ -4,6 +4,46 @@
 This document summarizes all API changes made to the Mandap backend system, including new features, field additions, and endpoint modifications for both mobile and web applications.
 
 ## 📅 **Change Date**: January 2025
+## 🔄 **Last Updated**: September 8, 2025
+
+---
+
+## 🏢 **BOD Member Creation API - FIXED (September 8, 2025)**
+
+### **Issues Resolved:**
+- ✅ **400 Validation Errors**: Fixed designation validation to include "Member" option
+- ✅ **Contact Number Validation**: Updated to accept various formats (spaces, dashes, parentheses)
+- ✅ **Address Structure**: Changed from nested to flat field structure
+- ✅ **Database Field Mapping**: Fixed designation → position column mapping
+- ✅ **500 Server Errors**: Removed references to non-existent createdBy/updatedBy fields
+
+### **Updated Validation Rules:**
+- **Designation**: Now includes "Member" in addition to existing options
+- **Contact Number**: Accepts formats like `9876543210`, `+91-9876543210`, `(987) 654-3210`
+- **Address Fields**: Flat structure (`address`, `city`, `state`, `pincode`) instead of nested
+
+### **Correct Request Format:**
+```json
+{
+  "name": "BOD Member Name",
+  "designation": "President", // or "Member", "Vice President", etc.
+  "contactNumber": "9876543210", // Flexible format
+  "email": "member@example.com",
+  "bio": "Member bio",
+  "address": "Full address", // Flat field
+  "city": "Mumbai", // Flat field
+  "state": "Maharashtra", // Flat field
+  "pincode": "400001", // Flat field
+  "isActive": true,
+  "associationId": 7
+}
+```
+
+### **Files Updated:**
+- `routes/bodRoutes.js` - Fixed validation rules and removed non-existent field references
+- `models/BOD.js` - Fixed field mapping to database columns
+- `mandap-postman-collection.json` - Added complete BOD CRUD operations
+- `BOD_API_Documentation.md` - Created comprehensive documentation
 
 ---
 
