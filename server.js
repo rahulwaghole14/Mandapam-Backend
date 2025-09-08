@@ -62,6 +62,7 @@ app.use(cors({
     
     // Log all incoming origins for debugging
     console.log('CORS request from origin:', origin);
+    console.log('Allowed origins:', allowedOrigins);
     
     if (allowedOrigins.indexOf(origin) !== -1) {
       console.log('✅ CORS allowed for origin:', origin);
@@ -79,7 +80,8 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
 }));
 
 // Rate limiting
