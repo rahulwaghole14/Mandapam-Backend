@@ -590,14 +590,120 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/bod",
+              "raw": "{{baseUrl}}/api/bod?page=1&limit=10",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "bod"]
+              "path": ["api", "bod"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
             }
           }
         },
         {
-          "name": "Create BOD Member",
+          "name": "Get Association BODs Only",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bod?type=association&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bod"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "association"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get National BODs Only",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bod?type=national&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bod"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "national"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get BODs by Specific Association",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bod/association/{{associationId}}?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bod", "association", "{{associationId}}"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get National BODs (Dedicated Route)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bod/national?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bod", "national"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Association BOD Member",
           "request": {
             "method": "POST",
             "header": [
@@ -608,7 +714,28 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Test BOD Member\",\n  \"designation\": \"President\",\n  \"contactNumber\": \"9876543210\",\n  \"email\": \"test@example.com\",\n  \"bio\": \"Test bio for BOD member\",\n  \"address\": \"Test address, Mumbai\",\n  \"city\": \"Mumbai\",\n  \"state\": \"Maharashtra\",\n  \"pincode\": \"400001\",\n  \"isActive\": true,\n  \"associationId\": 7\n}"
+              "raw": "{\n  \"name\": \"Association BOD Member\",\n  \"designation\": \"President\",\n  \"contactNumber\": \"9876543210\",\n  \"email\": \"association@example.com\",\n  \"bio\": \"Association BOD member bio\",\n  \"address\": \"Association address, Mumbai\",\n  \"city\": \"Mumbai\",\n  \"state\": \"Maharashtra\",\n  \"pincode\": \"400001\",\n  \"isActive\": true,\n  \"associationId\": 7\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/bod",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bod"]
+            }
+          }
+        },
+        {
+          "name": "Create National BOD Member",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"National BOD Member\",\n  \"designation\": \"President\",\n  \"contactNumber\": \"9876543211\",\n  \"email\": \"national@mandap.com\",\n  \"bio\": \"National BOD member bio\",\n  \"address\": \"National office address, Mumbai\",\n  \"city\": \"Mumbai\",\n  \"state\": \"Maharashtra\",\n  \"pincode\": \"400001\",\n  \"isActive\": true\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/bod",

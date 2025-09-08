@@ -19,6 +19,8 @@ router.get('/', [
   query('search').optional().isString().trim(),
   query('designation').optional().isString().trim(),
   query('isActive').optional().isBoolean(),
+  query('type').optional().isIn(['association', 'national']).withMessage('Type must be either association or national'),
+  query('associationId').optional().isInt({ min: 1 }).withMessage('Association ID must be a positive integer'),
   query('sortBy').optional().isIn(['name', 'designation', 'dateOfJoining', 'created_at']),
   query('sortOrder').optional().isIn(['asc', 'desc'])
 ], async (req, res) => {
@@ -38,6 +40,8 @@ router.get('/', [
       search,
       designation,
       isActive,
+      type,
+      associationId,
       sortBy = 'created_at',
       sortOrder = 'desc'
     } = req.query;
@@ -60,6 +64,22 @@ router.get('/', [
 
     if (isActive !== undefined) {
       where.isActive = isActive === 'true';
+    }
+
+    // Apply BOD type filtering
+    if (type === 'association') {
+      if (associationId) {
+        where.associationId = parseInt(associationId);
+      } else {
+        // If type is association but no associationId provided, get all association BODs
+        where.associationId = { [Op.ne]: null };
+      }
+    } else if (type === 'national') {
+      // National BODs have null associationId
+      where.associationId = null;
+    } else if (associationId) {
+      // If associationId is provided without type, filter by specific association
+      where.associationId = parseInt(associationId);
     }
 
     // Build sort object
@@ -107,6 +127,220 @@ router.get('/', [
     res.status(500).json({
       success: false,
       message: 'Server error while fetching BOD members'
+    });
+  }
+});
+
+// @desc    Get BOD members for a specific association
+// @route   GET /api/bod/association/:associationId
+// @access  Private
+router.get('/association/:associationId', [
+  query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100'),
+  query('search').optional().isString().trim(),
+  query('designation').optional().isString().trim(),
+  query('isActive').optional().isBoolean(),
+  query('sortBy').optional().isIn(['name', 'designation', 'dateOfJoining', 'created_at']),
+  query('sortOrder').optional().isIn(['asc', 'desc'])
+], async (req, res) => {
+  try {
+    // Check for validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        errors: errors.array()
+      });
+    }
+
+    const { associationId } = req.params;
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      designation,
+      isActive,
+      sortBy = 'created_at',
+      sortOrder = 'desc'
+    } = req.query;
+
+    // Validate associationId
+    if (!associationId || isNaN(associationId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid association ID is required'
+      });
+    }
+
+    // Build filter object
+    const where = {
+      associationId: parseInt(associationId)
+    };
+
+    // Apply search filters
+    if (search) {
+      where[Op.or] = [
+        { name: { [Op.iLike]: `%${search}%` } },
+        { designation: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } }
+      ];
+    }
+
+    if (designation) {
+      where.designation = designation;
+    }
+
+    if (isActive !== undefined) {
+      where.isActive = isActive === 'true';
+    }
+
+    // Build sort object
+    const order = [];
+    if (sortBy === 'created_at') {
+      order.push(['created_at', sortOrder.toUpperCase()]);
+    } else {
+      order.push([sortBy, sortOrder.toUpperCase()]);
+    }
+
+    // Calculate pagination
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    // Execute query
+    const { count, rows: bods } = await BOD.findAndCountAll({
+      where,
+      include: [],
+      order,
+      offset,
+      limit: parseInt(limit)
+    });
+
+    const total = count;
+
+    // Calculate pagination info
+    const totalPages = Math.ceil(total / parseInt(limit));
+    const hasNextPage = page < totalPages;
+    const hasPrevPage = page > 1;
+
+    res.status(200).json({
+      success: true,
+      count: bods.length,
+      total,
+      page: parseInt(page),
+      totalPages,
+      hasNextPage,
+      hasPrevPage,
+      associationId: parseInt(associationId),
+      type: 'association',
+      bods
+    });
+
+  } catch (error) {
+    console.error('Get Association BOD members error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching association BOD members'
+    });
+  }
+});
+
+// @desc    Get National BOD members (where associationId is null)
+// @route   GET /api/bod/national
+// @access  Private
+router.get('/national', [
+  query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100'),
+  query('search').optional().isString().trim(),
+  query('designation').optional().isString().trim(),
+  query('isActive').optional().isBoolean(),
+  query('sortBy').optional().isIn(['name', 'designation', 'dateOfJoining', 'created_at']),
+  query('sortOrder').optional().isIn(['asc', 'desc'])
+], async (req, res) => {
+  try {
+    // Check for validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        errors: errors.array()
+      });
+    }
+
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      designation,
+      isActive,
+      sortBy = 'created_at',
+      sortOrder = 'desc'
+    } = req.query;
+
+    // Build filter object - National BODs have null associationId
+    const where = {
+      associationId: null
+    };
+
+    // Apply search filters
+    if (search) {
+      where[Op.or] = [
+        { name: { [Op.iLike]: `%${search}%` } },
+        { designation: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } }
+      ];
+    }
+
+    if (designation) {
+      where.designation = designation;
+    }
+
+    if (isActive !== undefined) {
+      where.isActive = isActive === 'true';
+    }
+
+    // Build sort object
+    const order = [];
+    if (sortBy === 'created_at') {
+      order.push(['created_at', sortOrder.toUpperCase()]);
+    } else {
+      order.push([sortBy, sortOrder.toUpperCase()]);
+    }
+
+    // Calculate pagination
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    // Execute query
+    const { count, rows: bods } = await BOD.findAndCountAll({
+      where,
+      include: [],
+      order,
+      offset,
+      limit: parseInt(limit)
+    });
+
+    const total = count;
+
+    // Calculate pagination info
+    const totalPages = Math.ceil(total / parseInt(limit));
+    const hasNextPage = page < totalPages;
+    const hasPrevPage = page > 1;
+
+    res.status(200).json({
+      success: true,
+      count: bods.length,
+      total,
+      page: parseInt(page),
+      totalPages,
+      hasNextPage,
+      hasPrevPage,
+      type: 'national',
+      bods
+    });
+
+  } catch (error) {
+    console.error('Get National BOD members error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching national BOD members'
     });
   }
 });

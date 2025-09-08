@@ -207,6 +207,34 @@ router.get('/profile', protect, async (req, res) => {
   }
 });
 
+// @desc    Get user profile (alias for /profile)
+// @route   GET /api/auth/me
+// @access  Private
+router.get('/me', protect, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.user.id);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      user
+    });
+
+  } catch (error) {
+    console.error('Get profile error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching profile'
+    });
+  }
+});
+
 // @desc    Update user profile
 // @route   PUT /api/auth/profile
 // @access  Private
@@ -282,6 +310,61 @@ router.put('/password', protect, [
     const { currentPassword, newPassword } = req.body;
 
     // Get user with password
+    const user = await User.findByPk(req.user.id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Check current password
+    const isMatch = await user.matchPassword(currentPassword);
+    if (!isMatch) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password is incorrect'
+      });
+    }
+
+    // Update password
+    user.password = newPassword;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Password updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while changing password'
+    });
+  }
+});
+
+// @desc    Change password (alias for /password)
+// @route   PUT /api/auth/change-password
+// @access  Private
+router.put('/change-password', protect, [
+  body('currentPassword', 'Current password is required').exists(),
+  body('newPassword', 'New password must be at least 6 characters').isLength({ min: 6 })
+], async (req, res) => {
+  try {
+    // Check for validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        errors: errors.array()
+      });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+
+    // Get user
     const user = await User.findByPk(req.user.id);
     if (!user) {
       return res.status(404).json({
