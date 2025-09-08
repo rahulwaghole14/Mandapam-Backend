@@ -29,6 +29,31 @@
       "key": "bodId",
       "value": "1",
       "type": "string"
+    },
+    {
+      "key": "memberId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "associationId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "eventId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "vendorId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "1",
+      "type": "string"
     }
   ],
   "item": [
@@ -134,6 +159,105 @@
               "raw": "{{baseUrl}}/api/auth/logout",
               "host": ["{{baseUrl}}"],
               "path": ["api", "auth", "logout"]
+            }
+          }
+        },
+        {
+          "name": "Initialize Admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Admin User\",\n  \"email\": \"admin@mandap.com\",\n  \"password\": \"admin123\",\n  \"phone\": \"9876543210\",\n  \"district\": \"Mumbai\",\n  \"state\": \"Maharashtra\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/init-admin",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "init-admin"]
+            }
+          }
+        },
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "users"]
+            }
+          }
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New User\",\n  \"email\": \"user@mandap.com\",\n  \"password\": \"password123\",\n  \"phone\": \"9876543211\",\n  \"district\": \"Pune\",\n  \"state\": \"Maharashtra\",\n  \"role\": \"member\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "users"]
+            }
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated User\",\n  \"phone\": \"9876543212\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/users/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "users", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "user_id_here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/users/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "users", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "user_id_here"
+                }
+              ]
             }
           }
         }
@@ -537,6 +661,30 @@
               "path": ["api", "bod", "{{bodId}}"]
             }
           }
+        },
+        {
+          "name": "Get BOD Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bod/stats/overview",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bod", "stats", "overview"]
+            }
+          }
+        },
+        {
+          "name": "Toggle BOD Member Status",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bod/{{bodId}}/toggle-status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bod", "{{bodId}}", "toggle-status"]
+            }
+          }
         }
       ]
     },
@@ -549,9 +697,115 @@
             "method": "GET",
             "header": [],
             "url": {
+              "raw": "{{baseUrl}}/api/members?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "members"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Member by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/members/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "members", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "member_id_here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Member",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"businessName\": \"Doe Enterprises\",\n  \"phone\": \"9876543210\",\n  \"email\": \"john@doe.com\",\n  \"address\": \"123 Main Street\",\n  \"city\": \"Mumbai\",\n  \"state\": \"Maharashtra\",\n  \"pincode\": \"400001\",\n  \"businessType\": \"sound\",\n  \"associationId\": 7,\n  \"associationName\": \"Test Association\",\n  \"birthDate\": \"1990-01-01\",\n  \"gstNumber\": \"\",\n  \"description\": \"\",\n  \"experience\": 0,\n  \"businessImages\": [],\n  \"profileImage\": null\n}"
+            },
+            "url": {
               "raw": "{{baseUrl}}/api/members",
               "host": ["{{baseUrl}}"],
               "path": ["api", "members"]
+            }
+          }
+        },
+        {
+          "name": "Update Member",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe Updated\",\n  \"phone\": \"9876543211\",\n  \"businessType\": \"catering\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/members/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "members", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "member_id_here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Member",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/members/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "members", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "member_id_here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Member Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/members/stats/overview",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "members", "stats", "overview"]
             }
           }
         }
@@ -571,6 +825,227 @@
               "path": ["api", "associations"]
             }
           }
+        },
+        {
+          "name": "Get Association by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/associations/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "associations", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "association_id_here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Association",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Association\",\n  \"address\": \"123 Association Street\",\n  \"city\": \"Mumbai\",\n  \"state\": \"Maharashtra\",\n  \"pincode\": \"400001\",\n  \"establishedYear\": 2020,\n  \"description\": \"Test association description\",\n  \"contactPerson\": {\n    \"name\": \"John Doe\",\n    \"phone\": \"9876543210\",\n    \"email\": \"john@association.com\"\n  },\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/associations",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "associations"]
+            }
+          }
+        },
+        {
+          "name": "Update Association",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Association\",\n  \"description\": \"Updated description\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/associations/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "associations", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "association_id_here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Association",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/associations/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "associations", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "association_id_here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Toggle Association Status",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/associations/:id/toggle-status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "associations", ":id", "toggle-status"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "association_id_here"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Association Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/associations/stats/overview",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "associations", "stats", "overview"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📊 Dashboard",
+      "item": [
+        {
+          "name": "Get Dashboard Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "dashboard", "stats"]
+            }
+          }
+        },
+        {
+          "name": "Get Recent Members",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/recent-members?limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "dashboard", "recent-members"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get District Coverage",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/district-coverage",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "dashboard", "district-coverage"]
+            }
+          }
+        },
+        {
+          "name": "Get Growth Trends",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/growth-trends?period=12",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "dashboard", "growth-trends"],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "12"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Associations Map",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/associations-map",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "dashboard", "associations-map"]
+            }
+          }
+        },
+        {
+          "name": "Get Monthly Member Growth",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/monthly-member-growth",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "dashboard", "monthly-member-growth"]
+            }
+          }
+        },
+        {
+          "name": "Get Top Associations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/top-associations?limit=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "dashboard", "top-associations"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
+              ]
+            }
+          }
         }
       ]
     },
@@ -578,7 +1053,7 @@
       "name": "📁 File Upload",
       "item": [
         {
-          "name": "Upload Image",
+          "name": "Upload Profile Image",
           "request": {
             "method": "POST",
             "header": [],
@@ -593,33 +1068,593 @@
               ]
             },
             "url": {
-              "raw": "{{baseUrl}}/api/upload/image",
+              "raw": "{{baseUrl}}/api/upload/profile-image",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "upload", "image"]
+              "path": ["api", "upload", "profile-image"]
             }
           }
         },
         {
-          "name": "Upload Document",
+          "name": "Delete Upload",
           "request": {
-            "method": "POST",
+            "method": "DELETE",
             "header": [],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
+            "url": {
+              "raw": "{{baseUrl}}/api/upload/:filename",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "upload", ":filename"],
+              "variable": [
                 {
-                  "key": "document",
-                  "type": "file",
-                  "src": []
+                  "key": "filename",
+                  "value": "filename_here"
                 }
               ]
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/upload/document",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "upload", "document"]
             }
           }
+        },
+        {
+          "name": "List Uploads",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "upload"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📱 Mobile APIs",
+      "item": [
+        {
+          "name": "🔐 Mobile Authentication",
+          "item": [
+            {
+              "name": "Send OTP",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"phone\": \"9876543210\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/auth/send-otp",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "auth", "send-otp"]
+                }
+              }
+            },
+            {
+              "name": "Verify OTP",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"phone\": \"9876543210\",\n  \"otp\": \"123456\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/auth/verify-otp",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "auth", "verify-otp"]
+                }
+              }
+            },
+            {
+              "name": "Mobile Register",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"John Doe\",\n  \"phone\": \"9876543210\",\n  \"email\": \"john@example.com\",\n  \"district\": \"Mumbai\",\n  \"state\": \"Maharashtra\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/auth/register",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "auth", "register"]
+                }
+              }
+            },
+            {
+              "name": "Mobile Logout",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/auth/logout",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "auth", "logout"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "👥 Mobile Members",
+          "item": [
+            {
+              "name": "Get Mobile Profile",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/members/profile",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "members", "profile"]
+                }
+              }
+            },
+            {
+              "name": "Update Mobile Profile",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Updated Name\",\n  \"email\": \"updated@example.com\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/members/profile",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "members", "profile"]
+                }
+              }
+            },
+            {
+              "name": "Get Mobile Members",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/members/members?page=1&limit=10",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "members", "members"],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "10"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Search Mobile Members",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/members/search?q=john",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "members", "search"],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "john"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Filter Mobile Members",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/members/filter?city=Mumbai&businessType=sound",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "members", "filter"],
+                  "query": [
+                    {
+                      "key": "city",
+                      "value": "Mumbai"
+                    },
+                    {
+                      "key": "businessType",
+                      "value": "sound"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get Mobile Member by ID",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/members/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "members", ":id"],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "member_id_here"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get Today's Birthdays",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/members/birthdays/today",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "members", "birthdays", "today"]
+                }
+              }
+            },
+            {
+              "name": "Get Upcoming Birthdays",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/members/birthdays/upcoming?days=7",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "members", "birthdays", "upcoming"],
+                  "query": [
+                    {
+                      "key": "days",
+                      "value": "7"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "📅 Mobile Events",
+          "item": [
+            {
+              "name": "Get Mobile Events",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/events/events?page=1&limit=10",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "events", "events"],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "10"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get Upcoming Mobile Events",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/events/upcoming?limit=5",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "events", "upcoming"],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "5"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Search Mobile Events",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/events/search?q=meeting",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "events", "search"],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "meeting"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get Mobile Event Statistics",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/events/stats",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "events", "stats"]
+                }
+              }
+            },
+            {
+              "name": "Get Mobile Event by ID",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/events/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "events", ":id"],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "event_id_here"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "🏛️ Mobile Associations",
+          "item": [
+            {
+              "name": "Get Mobile Associations",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/associations/associations?page=1&limit=10",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "associations", "associations"],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "10"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get Mobile BOD",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/associations/bod",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "associations", "bod"]
+                }
+              }
+            },
+            {
+              "name": "Get Mobile BOD by ID",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/associations/bod/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "associations", "bod", ":id"],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "bod_id_here"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get BOD by Designation",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/associations/bod/designation/President",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "associations", "bod", "designation", "President"]
+                }
+              }
+            },
+            {
+              "name": "Search Mobile Associations",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/associations/search?q=mumbai",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "associations", "search"],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "mumbai"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get Associations by City",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/associations/city/Mumbai",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "associations", "city", "Mumbai"]
+                }
+              }
+            },
+            {
+              "name": "Get Mobile Association Statistics",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/associations/stats",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "associations", "stats"]
+                }
+              }
+            },
+            {
+              "name": "Get Mobile Association by ID",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/associations/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "associations", ":id"],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "association_id_here"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "📁 Mobile Upload",
+          "item": [
+            {
+              "name": "Upload Mobile Profile Image",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "image",
+                      "type": "file",
+                      "src": []
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/upload/profile-image",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "upload", "profile-image"]
+                }
+              }
+            },
+            {
+              "name": "Upload Mobile Images",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "images",
+                      "type": "file",
+                      "src": []
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/upload/images",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "upload", "images"]
+                }
+              }
+            },
+            {
+              "name": "Delete Mobile Upload",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/upload/:filename",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "upload", ":filename"],
+                  "variable": [
+                    {
+                      "key": "filename",
+                      "value": "filename_here"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get Mobile Upload",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/upload/:filename",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "upload", ":filename"],
+                  "variable": [
+                    {
+                      "key": "filename",
+                      "value": "filename_here"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "List Mobile Uploads",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/upload",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "upload"]
+                }
+              }
+            }
+          ]
         }
       ]
     },
