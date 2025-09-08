@@ -77,8 +77,7 @@ router.get('/', [
     const { count, rows: bods } = await BOD.findAndCountAll({
       where,
       include: [
-        { model: User, as: 'createdByUser', attributes: ['name', 'email'] },
-        { model: User, as: 'updatedByUser', attributes: ['name', 'email'] }
+        // Note: BOD model doesn't have createdBy/updatedBy fields
       ],
       order,
       offset,
@@ -119,8 +118,7 @@ router.get('/:id', async (req, res) => {
   try {
     const bod = await BOD.findByPk(req.params.id, {
       include: [
-        { model: User, as: 'createdByUser', attributes: ['name', 'email'] },
-        { model: User, as: 'updatedByUser', attributes: ['name', 'email'] }
+        // Note: BOD model doesn't have createdBy/updatedBy fields
       ]
     });
 
@@ -198,9 +196,7 @@ router.post('/', [
       req.body.contactNumber = req.body.phone;
     }
 
-    // Add createdBy and updatedBy
-    req.body.createdBy = req.user.id;
-    req.body.updatedBy = req.user.id;
+    // Note: BOD model doesn't have createdBy/updatedBy fields
 
     // Create BOD member
     const bod = await BOD.create(req.body);
@@ -208,7 +204,7 @@ router.post('/', [
     // Get BOD member with populated fields
     const bodWithDetails = await BOD.findByPk(bod.id, {
       include: [
-        { model: User, as: 'createdByUser', attributes: ['name', 'email'] }
+        // Note: BOD model doesn't have createdBy field
       ]
     });
 
@@ -299,8 +295,7 @@ router.put('/:id', [
       req.body.contactNumber = req.body.phone;
     }
 
-    // Add updatedBy
-    req.body.updatedBy = req.user.id;
+    // Note: BOD model doesn't have updatedBy field
 
     // Update BOD member
     await existingBOD.update(req.body);
@@ -308,8 +303,7 @@ router.put('/:id', [
     // Get updated BOD member with populated fields
     const bod = await BOD.findByPk(req.params.id, {
       include: [
-        { model: User, as: 'createdByUser', attributes: ['name', 'email'] },
-        { model: User, as: 'updatedByUser', attributes: ['name', 'email'] }
+        // Note: BOD model doesn't have createdBy/updatedBy fields
       ]
     });
 
@@ -432,7 +426,7 @@ router.put('/:id/toggle-status', authorize('admin'), async (req, res) => {
     const newIsActive = !bod.isActive;
     const updateData = {
       isActive: newIsActive,
-      updatedBy: req.user.id
+      // Note: BOD model doesn't have updatedBy field
     };
 
     // Set resignation date if deactivating
