@@ -164,7 +164,7 @@ router.get('/:id', async (req, res) => {
 router.post('/', [
   body('name', 'Member name is required').notEmpty().trim(),
   body('businessName', 'Business name is required').notEmpty().trim(),
-  body('phone', 'Phone number is required').matches(/^[0-9]{10}$/),
+  body('phone', 'Phone number is required').matches(/^[0-9]{10}$/).withMessage('Phone number must be exactly 10 digits'),
   body('state', 'State is required').notEmpty().trim(),
   body('businessType', 'Business type is required').isIn(['catering', 'sound', 'mandap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
   body('city', 'City is required').notEmpty().trim(),
@@ -173,7 +173,10 @@ router.post('/', [
   body('birthDate').optional().isISO8601().withMessage('Birth date must be a valid date'),
   body('email').optional().isEmail().withMessage('Please provide a valid email'),
   body('address').optional().trim().isLength({ max: 500 }).withMessage('Address cannot exceed 500 characters'),
-  body('gstNumber').optional().matches(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/).withMessage('Please provide a valid GST number'),
+  body('gstNumber').optional().custom((value) => {
+    if (!value || value === '' || value === null) return true; // Allow empty values
+    return /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(value);
+  }).withMessage('Please provide a valid GST number'),
   body('description').optional().trim().isLength({ max: 1000 }).withMessage('Description cannot exceed 1000 characters'),
   body('experience').optional().custom((value) => {
     if (value === '' || value === null || value === undefined) return true;
@@ -291,7 +294,10 @@ router.put('/:id', [
   body('birthDate').optional().isISO8601().withMessage('Birth date must be a valid date'),
   body('email').optional().isEmail().withMessage('Please provide a valid email'),
   body('address').optional().trim().isLength({ max: 500 }).withMessage('Address cannot exceed 500 characters'),
-  body('gstNumber').optional().matches(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/).withMessage('Please provide a valid GST number'),
+  body('gstNumber').optional().custom((value) => {
+    if (!value || value === '' || value === null) return true; // Allow empty values
+    return /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(value);
+  }).withMessage('Please provide a valid GST number'),
   body('description').optional().trim().isLength({ max: 1000 }).withMessage('Description cannot exceed 1000 characters'),
   body('experience').optional().custom((value) => {
     if (value === '' || value === null || value === undefined) return true;

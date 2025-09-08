@@ -68,7 +68,10 @@ const Member = sequelize.define('Member', {
     allowNull: true,
     field: 'gst_number',
     validate: {
-      is: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
+      isValidGST(value) {
+        if (!value || value === '' || value === null) return true; // Allow empty/null values
+        return /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(value);
+      }
     }
   },
   profileImage: {
