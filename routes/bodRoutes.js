@@ -111,7 +111,8 @@ router.get('/', [
     const hasNextPage = page < totalPages;
     const hasPrevPage = page > 1;
 
-    res.status(200).json({
+    // Build response object
+    const response = {
       success: true,
       count: bods.length,
       total,
@@ -120,7 +121,17 @@ router.get('/', [
       hasNextPage,
       hasPrevPage,
       bods
-    });
+    };
+
+    // Add type and associationId to response when filters are applied
+    if (type) {
+      response.type = type;
+    }
+    if (associationId) {
+      response.associationId = parseInt(associationId);
+    }
+
+    res.status(200).json(response);
 
   } catch (error) {
     console.error('Get BOD members error:', error);
@@ -384,7 +395,7 @@ router.post('/', [
   body('name', 'BOD member name is required').notEmpty().trim(),
   body('designation', 'Designation is required').isIn([
     'President', 'Vice President', 'Secretary', 'Joint Secretary', 
-    'Treasurer', 'Joint Treasurer', 'Executive Member', 'Member'
+    'Treasurer', 'Joint Treasurer', 'Executive Member'
   ]),
   body('contactNumber', 'Contact number is required').matches(/^[0-9+\-\s()]+$/),
   body('email', 'Please include a valid email').isEmail(),
@@ -404,7 +415,8 @@ router.post('/', [
   body('socialLinks.facebook').optional().custom(value => {
     if (value === '' || value === null || value === undefined) return true;
     return require('validator').isURL(value);
-  }).withMessage('Facebook must be a valid URL')
+  }).withMessage('Facebook must be a valid URL'),
+  body('associationId').optional().isInt({ min: 1 }).withMessage('Association ID must be a positive integer')
 ], authorize('admin'), async (req, res) => {
   try {
     console.log('BOD POST request received:', req.body);
@@ -441,6 +453,8 @@ router.post('/', [
     };
 
     console.log('Creating BOD with data:', bodData);
+    console.log('Association ID from request:', req.body.associationId);
+    console.log('Final associationId in bodData:', bodData.associationId);
 
     // Create BOD member
     const bod = await BOD.create(bodData);
@@ -487,7 +501,7 @@ router.put('/:id', [
   body('name').optional().notEmpty().trim().withMessage('Name cannot be empty'),
   body('designation').optional().isIn([
     'President', 'Vice President', 'Secretary', 'Joint Secretary', 
-    'Treasurer', 'Joint Treasurer', 'Executive Member', 'Member'
+    'Treasurer', 'Joint Treasurer', 'Executive Member'
   ]),
   body('contactNumber').optional().matches(/^[0-9+\-\s()]+$/).withMessage('Invalid contact number'),
   body('email').optional().isEmail().withMessage('Invalid email'),
