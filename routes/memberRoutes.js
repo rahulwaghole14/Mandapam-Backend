@@ -237,9 +237,11 @@ router.post('/', [
       req.body.associationId = association.id;
     }
 
-    // Add createdBy and updatedBy
-    req.body.createdBy = req.user.id;
-    req.body.updatedBy = req.user.id;
+    // Add createdBy and updatedBy (only if user exists)
+    if (req.user && req.user.id) {
+      req.body.createdBy = req.user.id;
+      req.body.updatedBy = req.user.id;
+    }
 
     // Create member
     const member = await Member.create(req.body);
