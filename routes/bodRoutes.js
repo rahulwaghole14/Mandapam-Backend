@@ -152,7 +152,7 @@ router.post('/', [
   body('name', 'BOD member name is required').notEmpty().trim(),
   body('designation', 'Designation is required').isIn([
     'President', 'Vice President', 'Secretary', 'Joint Secretary', 
-    'Treasurer', 'Joint Treasurer', 'Executive Member', 'Member'
+    'Treasurer', 'Joint Treasurer', 'Executive Member'
   ]),
   body('contactNumber', 'Contact number is required').matches(/^[0-9]{10}$/),
   body('email', 'Please include a valid email').isEmail(),
@@ -187,6 +187,16 @@ router.post('/', [
         success: false,
         errors: errors.array()
       });
+    }
+
+    // Handle field mapping from frontend to backend
+    // Frontend sends 'position' -> Backend expects 'designation'
+    // Frontend sends 'phone' -> Backend expects 'contactNumber'
+    if (req.body.position && !req.body.designation) {
+      req.body.designation = req.body.position;
+    }
+    if (req.body.phone && !req.body.contactNumber) {
+      req.body.contactNumber = req.body.phone;
     }
 
     // Add createdBy and updatedBy
@@ -238,7 +248,7 @@ router.put('/:id', [
   body('name').optional().notEmpty().trim().withMessage('Name cannot be empty'),
   body('designation').optional().isIn([
     'President', 'Vice President', 'Secretary', 'Joint Secretary', 
-    'Treasurer', 'Joint Treasurer', 'Executive Member', 'Member'
+    'Treasurer', 'Joint Treasurer', 'Executive Member'
   ]),
   body('contactNumber').optional().matches(/^[0-9]{10}$/).withMessage('Invalid contact number'),
   body('email').optional().isEmail().withMessage('Invalid email'),
@@ -279,6 +289,16 @@ router.put('/:id', [
         success: false,
         message: 'BOD member not found'
       });
+    }
+
+    // Handle field mapping from frontend to backend
+    // Frontend sends 'position' -> Backend expects 'designation'
+    // Frontend sends 'phone' -> Backend expects 'contactNumber'
+    if (req.body.position && !req.body.designation) {
+      req.body.designation = req.body.position;
+    }
+    if (req.body.phone && !req.body.contactNumber) {
+      req.body.contactNumber = req.body.phone;
     }
 
     // Add updatedBy

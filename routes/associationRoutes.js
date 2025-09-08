@@ -11,24 +11,22 @@ const validateAssociation = [
     .trim()
     .isLength({ min: 1, max: 100 })
     .withMessage('Association name is required and cannot exceed 100 characters'),
-  body('address.city')
+  body('city')
     .trim()
     .isLength({ min: 1, max: 50 })
     .withMessage('City is required and cannot exceed 50 characters'),
-  body('address.district')
-    .trim()
-    .isLength({ min: 1, max: 50 })
-    .withMessage('District is required and cannot exceed 50 characters'),
-  body('address.state')
+  body('state')
     .trim()
     .isLength({ min: 1, max: 50 })
     .withMessage('State is required and cannot exceed 50 characters'),
-  body('address.pincode')
+  body('pincode')
+    .optional()
     .matches(/^[0-9]{6}$/)
     .withMessage('Please enter a valid 6-digit pincode'),
-  body('establishedDate')
-    .isISO8601()
-    .withMessage('Please enter a valid established date'),
+  body('establishedYear')
+    .optional()
+    .isInt({ min: 1800, max: new Date().getFullYear() + 1 })
+    .withMessage('Please enter a valid established year'),
   body('contactPerson')
     .optional()
     .trim()
@@ -88,8 +86,20 @@ const validateAssociation = [
 // @access  Private (Admin, Sub-Admin)
 router.post('/', protect, authorize(['admin', 'sub-admin']), validateAssociation, async (req, res) => {
   try {
+    console.log('Association POST request received:', req.body);
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('Validation errors:', errors.array());
+      console.log('Request body received:', req.body);
+      console.log('Request body types:', {
+        name: typeof req.body.name,
+        city: typeof req.body.city,
+        state: typeof req.body.state,
+        pincode: typeof req.body.pincode,
+        establishedYear: typeof req.body.establishedYear,
+        address: typeof req.body.address
+      });
       return res.status(400).json({
         success: false,
         message: 'Validation failed',
@@ -99,8 +109,11 @@ router.post('/', protect, authorize(['admin', 'sub-admin']), validateAssociation
 
     const associationData = {
       name: req.body.name,
-      address: req.body.address,
-      establishedDate: req.body.establishedDate,
+      address: req.body.address || '',
+      city: req.body.city,
+      state: req.body.state,
+      pincode: req.body.pincode,
+      establishedYear: req.body.establishedYear,
       contactPerson: req.body.contactPerson || undefined,
       phone: req.body.phone || undefined,
       email: req.body.email || undefined,
@@ -253,8 +266,11 @@ router.put('/:id', protect, authorize(['admin', 'sub-admin']), validateAssociati
 
     const updateData = {
       name: req.body.name,
-      address: req.body.address,
-      establishedDate: req.body.establishedDate,
+      address: req.body.address || '',
+      city: req.body.city,
+      state: req.body.state,
+      pincode: req.body.pincode,
+      establishedYear: req.body.establishedYear,
       contactPerson: req.body.contactPerson || undefined,
       phone: req.body.phone || undefined,
       email: req.body.email || undefined,

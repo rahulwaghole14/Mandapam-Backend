@@ -15,10 +15,10 @@ const BOD = sequelize.define('BOD', {
       len: [2, 100]
     }
   },
-  position: {
+  designation: {
     type: DataTypes.STRING(100),
     allowNull: false,
-    field: 'position',
+    field: 'designation',
     validate: {
       notEmpty: true,
       len: [2, 100]
@@ -31,9 +31,10 @@ const BOD = sequelize.define('BOD', {
       isEmail: true
     }
   },
-  phone: {
+  contactNumber: {
     type: DataTypes.STRING(15),
     allowNull: true,
+    field: 'phone',
     validate: {
       is: /^[0-9+\-\s()]+$/
     }
@@ -123,5 +124,7 @@ const BOD = sequelize.define('BOD', {
 });
 
 module.exports = BOD;
+
+
 
 
