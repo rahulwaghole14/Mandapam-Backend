@@ -220,6 +220,23 @@ router.post('/', [
       });
     }
 
+    // Look up association ID if associationName is provided
+    if (req.body.associationName && !req.body.associationId) {
+      const Association = require('../models/Association');
+      const association = await Association.findOne({ 
+        where: { name: req.body.associationName } 
+      });
+      
+      if (!association) {
+        return res.status(400).json({
+          success: false,
+          message: `Association "${req.body.associationName}" not found`
+        });
+      }
+      
+      req.body.associationId = association.id;
+    }
+
     // Add createdBy and updatedBy
     req.body.createdBy = req.user.id;
     req.body.updatedBy = req.user.id;
@@ -228,11 +245,7 @@ router.post('/', [
     const member = await Member.create(req.body);
 
     // Get member with populated fields
-    const memberWithDetails = await Member.findByPk(member.id, {
-      include: [
-        { model: User, as: 'createdByUser', attributes: ['name', 'email'] }
-      ]
-    });
+    const memberWithDetails = await Member.findByPk(member.id);
 
     res.status(201).json({
       success: true,
@@ -324,6 +337,23 @@ router.put('/:id', [
         success: false,
         message: 'Member not found'
       });
+    }
+
+    // Look up association ID if associationName is provided
+    if (req.body.associationName && !req.body.associationId) {
+      const Association = require('../models/Association');
+      const association = await Association.findOne({ 
+        where: { name: req.body.associationName } 
+      });
+      
+      if (!association) {
+        return res.status(400).json({
+          success: false,
+          message: `Association "${req.body.associationName}" not found`
+        });
+      }
+      
+      req.body.associationId = association.id;
     }
 
     // Add updatedBy
