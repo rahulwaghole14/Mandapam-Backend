@@ -152,15 +152,14 @@ router.post('/', [
   body('name', 'BOD member name is required').notEmpty().trim(),
   body('designation', 'Designation is required').isIn([
     'President', 'Vice President', 'Secretary', 'Joint Secretary', 
-    'Treasurer', 'Joint Treasurer', 'Executive Member'
+    'Treasurer', 'Joint Treasurer', 'Executive Member', 'Member'
   ]),
-  body('contactNumber', 'Contact number is required').matches(/^[0-9]{10}$/),
+  body('contactNumber', 'Contact number is required').matches(/^[0-9+\-\s()]+$/),
   body('email', 'Please include a valid email').isEmail(),
-  body('address.street').optional().notEmpty().trim(),
-  body('address.city').optional().notEmpty().trim(),
-  body('address.district').optional().notEmpty().trim(),
-  body('address.state').optional().notEmpty().trim(),
-  body('address.pincode').optional().matches(/^[0-9]{6}$/),
+  body('address').optional().trim().isLength({ max: 500 }).withMessage('Address cannot exceed 500 characters'),
+  body('city').optional().trim().isLength({ max: 100 }).withMessage('City cannot exceed 100 characters'),
+  body('state').optional().trim().isLength({ max: 100 }).withMessage('State cannot exceed 100 characters'),
+  body('pincode').optional().matches(/^[0-9]{6}$/).withMessage('Pincode must be 6 digits'),
   body('bio').optional().isLength({ max: 500 }),
   body('socialLinks.linkedin').optional().custom(value => {
     if (value === '' || value === null || value === undefined) return true;
@@ -248,15 +247,14 @@ router.put('/:id', [
   body('name').optional().notEmpty().trim().withMessage('Name cannot be empty'),
   body('designation').optional().isIn([
     'President', 'Vice President', 'Secretary', 'Joint Secretary', 
-    'Treasurer', 'Joint Treasurer', 'Executive Member'
+    'Treasurer', 'Joint Treasurer', 'Executive Member', 'Member'
   ]),
-  body('contactNumber').optional().matches(/^[0-9]{10}$/).withMessage('Invalid contact number'),
+  body('contactNumber').optional().matches(/^[0-9+\-\s()]+$/).withMessage('Invalid contact number'),
   body('email').optional().isEmail().withMessage('Invalid email'),
-  body('address.street').optional().notEmpty().trim(),
-  body('address.city').optional().notEmpty().trim(),
-  body('address.district').optional().notEmpty().trim(),
-  body('address.state').optional().notEmpty().trim(),
-  body('address.pincode').optional().matches(/^[0-9]{6}$/).withMessage('Invalid pincode'),
+  body('address').optional().trim().isLength({ max: 500 }).withMessage('Address cannot exceed 500 characters'),
+  body('city').optional().trim().isLength({ max: 100 }).withMessage('City cannot exceed 100 characters'),
+  body('state').optional().trim().isLength({ max: 100 }).withMessage('State cannot exceed 100 characters'),
+  body('pincode').optional().matches(/^[0-9]{6}$/).withMessage('Invalid pincode'),
   body('bio').optional().isLength({ max: 500 }),
   body('socialLinks.linkedin').optional().custom(value => {
     if (value === '' || value === null || value === undefined) return true;
