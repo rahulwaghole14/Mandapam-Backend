@@ -139,6 +139,29 @@ const Member = sequelize.define('Member', {
       model: 'associations',
       key: 'id'
     }
+  },
+  associationName: {
+    type: DataTypes.STRING(200),
+    allowNull: true,
+    field: 'association_name'
+  },
+  createdBy: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    field: 'created_by',
+    references: {
+      model: 'users',
+      key: 'id'
+    }
+  },
+  updatedBy: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    field: 'updated_by',
+    references: {
+      model: 'users',
+      key: 'id'
+    }
   }
 }, {
   tableName: 'members',
