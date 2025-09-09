@@ -5,10 +5,10 @@ const { protectMobile } = require('../middleware/mobileAuthMiddleware');
 
 const router = express.Router();
 
-// @desc    Get all associations
+// @desc    Get all associations (Public - for registration)
 // @route   GET /api/mobile/associations
-// @access  Private
-router.get('/associations', protectMobile, async (req, res) => {
+// @access  Public
+router.get('/associations', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
@@ -196,10 +196,10 @@ router.get('/bod/designation/:designation', protectMobile, async (req, res) => {
   }
 });
 
-// @desc    Search associations
+// @desc    Search associations (Public - for registration)
 // @route   GET /api/mobile/associations/search
-// @access  Private
-router.get('/associations/search', protectMobile, async (req, res) => {
+// @access  Public
+router.get('/associations/search', async (req, res) => {
   try {
     const { q, state, city } = req.query;
     
@@ -257,10 +257,10 @@ router.get('/associations/search', protectMobile, async (req, res) => {
   }
 });
 
-// @desc    Get associations by city
+// @desc    Get associations by city (Public - for registration)
 // @route   GET /api/mobile/associations/city/:city
-// @access  Private
-router.get('/associations/city/:city', protectMobile, async (req, res) => {
+// @access  Public
+router.get('/associations/city/:city', async (req, res) => {
   try {
     const { city } = req.params;
     const page = parseInt(req.query.page) || 1;
