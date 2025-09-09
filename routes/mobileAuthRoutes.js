@@ -281,14 +281,23 @@ router.post('/register', [
 
     const { name, businessName, businessType, phone, city, pincode, associationName, state, email, birthDate } = req.body;
 
+    console.log('🔍 Mobile Registration Debug:');
+    console.log('Phone number received:', phone);
+    console.log('Phone number type:', typeof phone);
+
     // Check if member already exists
     const existingMember = await Member.findOne({ phone });
+    console.log('Existing member found:', existingMember);
+    
     if (existingMember) {
+      console.log('❌ Member already exists with phone:', existingMember.phone);
       return res.status(400).json({
         success: false,
         message: 'Member with this mobile number already exists'
       });
     }
+
+    console.log('✅ No existing member found, proceeding with registration');
 
     // Create new member
     const member = await Member.create({
