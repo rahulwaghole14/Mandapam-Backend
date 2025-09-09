@@ -1,0 +1,12 @@
+{
+  "name": "Validation Test User",
+  "businessName": "Validation Test Business",
+  "businessType": "sound",
+  "phone": "1234567890",
+  "city": "Mumbai",
+  "pincode": "400001",
+  "associationName": "Mumbai Mandap Association",
+  "state": "Maharashtra",
+  "email": "validation@example.com",
+  "birthDate": "1990-01-01"
+}

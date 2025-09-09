@@ -271,13 +271,19 @@ router.post('/register', [
   body('email').optional().isEmail().withMessage('Please provide a valid email')
 ], async (req, res) => {
   try {
+    console.log('🔍 Mobile Registration - Request received:');
+    console.log('Request body:', req.body);
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('❌ Validation errors:', errors.array());
       return res.status(400).json({
         success: false,
         errors: errors.array()
       });
     }
+    
+    console.log('✅ Validation passed');
 
     const { name, businessName, businessType, phone, city, pincode, associationName, state, email, birthDate } = req.body;
 
