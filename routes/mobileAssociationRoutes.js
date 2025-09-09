@@ -22,7 +22,7 @@ router.get('/associations', async (req, res) => {
     }
     
     if (req.query.city) {
-      whereClause.city = { [Op.iLike]: `%${req.query.city}%` };
+      whereClause.district = { [Op.iLike]: `%${req.query.city}%` };
     }
 
     // Build search query
@@ -229,7 +229,7 @@ router.get('/associations/search', async (req, res) => {
     }
     
     if (city) {
-      whereClause.city = { [Op.iLike]: `%${city}%` };
+      whereClause.district = { [Op.iLike]: `%${city}%` };
     }
 
     const associations = await Association.findAndCountAll({
@@ -267,10 +267,10 @@ router.get('/associations/city/:city', async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const offset = (page - 1) * limit;
 
-    // Build filter object for specific city
+    // Build filter object for specific city (searches district field)
     const whereClause = { 
       isActive: true,
-      city: { [Op.iLike]: `%${city}%` }
+      district: { [Op.iLike]: `%${city}%` }
     };
 
     // Build search query if provided

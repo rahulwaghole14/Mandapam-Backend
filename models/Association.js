@@ -27,6 +27,10 @@ const Association = sequelize.define('Association', {
     type: DataTypes.STRING(100),
     allowNull: true
   },
+  district: {
+    type: DataTypes.STRING(100),
+    allowNull: true
+  },
   state: {
     type: DataTypes.STRING(100),
     allowNull: true

@@ -60,7 +60,7 @@ router.get('/', [
     }
 
     if (city) {
-      where.city = city;
+      where.district = city;
     }
 
     if (state) {

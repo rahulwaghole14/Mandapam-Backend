@@ -168,7 +168,7 @@ router.get('/', protect, async (req, res) => {
       ];
     }
     
-    if (city) where['address.city'] = city;
+    if (city) where.district = { [Op.iLike]: `%${city}%` };
     if (state) where['address.state'] = state;
     if (status) where.status = status;
 
