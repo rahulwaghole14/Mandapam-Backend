@@ -393,11 +393,16 @@ router.get('/:id', async (req, res) => {
 // @access  Private (Admin only)
 router.post('/', [
   body('name', 'BOD member name is required').notEmpty().trim(),
-  body('designation', 'Designation is required').isIn([
+  body('designation').optional().isIn([
     'President', 'Vice President', 'Secretary', 'Joint Secretary', 
     'Treasurer', 'Joint Treasurer', 'Executive Member'
-  ]),
-  body('contactNumber', 'Contact number is required').matches(/^[0-9+\-\s()]+$/),
+  ]).withMessage('Invalid designation'),
+  body('position').optional().isIn([
+    'President', 'Vice President', 'Secretary', 'Joint Secretary', 
+    'Treasurer', 'Joint Treasurer', 'Executive Member'
+  ]).withMessage('Invalid position'),
+  body('contactNumber').optional().matches(/^[0-9+\-\s()]+$/).withMessage('Invalid contact number'),
+  body('phone').optional().matches(/^[0-9+\-\s()]+$/).withMessage('Invalid phone number'),
   body('email', 'Please include a valid email').isEmail(),
   body('address').optional().trim().isLength({ max: 500 }).withMessage('Address cannot exceed 500 characters'),
   body('city').optional().trim().isLength({ max: 100 }).withMessage('City cannot exceed 100 characters'),
@@ -416,7 +421,7 @@ router.post('/', [
     if (value === '' || value === null || value === undefined) return true;
     return require('validator').isURL(value);
   }).withMessage('Facebook must be a valid URL'),
-  body('associationId').optional().isInt({ min: 1 }).withMessage('Association ID must be a positive integer')
+  body('associationId').optional().isInt({ min: 1 }).withMessage('Association ID must be a positive integer'),
 ], authorize('admin'), async (req, res) => {
   try {
     console.log('BOD POST request received:', req.body);
@@ -440,6 +445,20 @@ router.post('/', [
     }
     if (req.body.phone && !req.body.contactNumber) {
       req.body.contactNumber = req.body.phone;
+    }
+
+    // Validate required fields after mapping
+    if (!req.body.designation && !req.body.position) {
+      return res.status(400).json({
+        success: false,
+        message: 'Either designation or position is required'
+      });
+    }
+    if (!req.body.contactNumber && !req.body.phone) {
+      return res.status(400).json({
+        success: false,
+        message: 'Either contactNumber or phone is required'
+      });
     }
 
     // Note: BOD model doesn't have createdBy/updatedBy fields
@@ -502,8 +521,13 @@ router.put('/:id', [
   body('designation').optional().isIn([
     'President', 'Vice President', 'Secretary', 'Joint Secretary', 
     'Treasurer', 'Joint Treasurer', 'Executive Member'
-  ]),
+  ]).withMessage('Invalid designation'),
+  body('position').optional().isIn([
+    'President', 'Vice President', 'Secretary', 'Joint Secretary', 
+    'Treasurer', 'Joint Treasurer', 'Executive Member'
+  ]).withMessage('Invalid position'),
   body('contactNumber').optional().matches(/^[0-9+\-\s()]+$/).withMessage('Invalid contact number'),
+  body('phone').optional().matches(/^[0-9+\-\s()]+$/).withMessage('Invalid phone number'),
   body('email').optional().isEmail().withMessage('Invalid email'),
   body('address').optional().trim().isLength({ max: 500 }).withMessage('Address cannot exceed 500 characters'),
   body('city').optional().trim().isLength({ max: 100 }).withMessage('City cannot exceed 100 characters'),
