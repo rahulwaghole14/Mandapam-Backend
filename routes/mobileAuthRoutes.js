@@ -292,7 +292,7 @@ router.post('/register', [
     console.log('Phone number type:', typeof phone);
 
     // Check if member already exists
-    const existingMember = await Member.findOne({ phone });
+    const existingMember = await Member.findOne({ where: { phone } });
     console.log('Existing member found:', existingMember);
     
     if (existingMember) {
