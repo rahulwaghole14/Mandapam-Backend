@@ -266,6 +266,7 @@ router.post('/register', [
   body('city', 'City is required').notEmpty().trim(),
   body('pincode', 'Pincode is required').matches(/^[0-9]{6}$/),
   body('associationName', 'Association name is required').notEmpty().trim(),
+  body('associationId', 'Association ID is required').isInt({ min: 1 }).withMessage('Association ID must be a positive integer'),
   body('state', 'State is required').notEmpty().trim(),
   body('birthDate').optional().isISO8601().withMessage('Birth date must be a valid date'),
   body('email').optional().isEmail().withMessage('Please provide a valid email')
@@ -285,11 +286,13 @@ router.post('/register', [
     
     console.log('✅ Validation passed');
 
-    const { name, businessName, businessType, phone, city, pincode, associationName, state, email, birthDate } = req.body;
+    const { name, businessName, businessType, phone, city, pincode, associationName, associationId, state, email, birthDate } = req.body;
 
     console.log('🔍 Mobile Registration Debug:');
     console.log('Phone number received:', phone);
     console.log('Phone number type:', typeof phone);
+    console.log('Association ID received:', associationId);
+    console.log('Association ID type:', typeof associationId);
 
     // Check if member already exists
     const existingMember = await Member.findOne({ where: { phone } });
@@ -314,6 +317,7 @@ router.post('/register', [
       city,
       pincode,
       associationName,
+      associationId: associationId || null,
       state: state || 'Maharashtra',
       email: email || null,
       birthDate: birthDate || null,
