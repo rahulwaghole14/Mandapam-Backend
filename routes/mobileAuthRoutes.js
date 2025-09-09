@@ -261,7 +261,7 @@ router.post('/verify-otp', [
 router.post('/register', [
   body('name', 'Name is required').notEmpty().trim(),
   body('businessName', 'Business name is required').notEmpty().trim(),
-  body('businessType', 'Business type is required').isIn(['sound', 'decorator', 'catering', 'generator', 'madap', 'light']),
+  body('businessType', 'Business type is required').isIn(['catering', 'sound', 'mandap', 'madap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
   body('phone', 'Please add a valid phone number').matches(/^[0-9]{10}$/),
   body('city', 'City is required').notEmpty().trim(),
   body('pincode', 'Pincode is required').matches(/^[0-9]{6}$/),

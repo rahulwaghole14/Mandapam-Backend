@@ -25,7 +25,7 @@ const Member = sequelize.define('Member', {
     }
   },
   businessType: {
-    type: DataTypes.ENUM('catering', 'sound', 'mandap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other'),
+    type: DataTypes.ENUM('catering', 'sound', 'mandap', 'madap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other'),
     allowNull: false,
     field: 'business_type'
   },

@@ -21,31 +21,34 @@ router.get('/associations', async (req, res) => {
       whereClause.state = { [Op.iLike]: `%${req.query.state}%` };
     }
     
-    // Build search query
+    // Build search conditions
+    const searchConditions = [];
+    const cityConditions = [];
+    
     if (req.query.search) {
-      whereClause[Op.or] = [
+      searchConditions.push(
         { name: { [Op.iLike]: `%${req.query.search}%` } },
         { phone: { [Op.iLike]: `%${req.query.search}%` } }
-      ];
+      );
     }
 
-    // City parameter searches both district and city fields
     if (req.query.city) {
-      const citySearchConditions = [
+      cityConditions.push(
         { district: { [Op.iLike]: `%${req.query.city}%` } },
         { city: { [Op.iLike]: `%${req.query.city}%` } }
+      );
+    }
+    
+    // Combine conditions
+    if (searchConditions.length > 0 && cityConditions.length > 0) {
+      whereClause[Op.and] = [
+        { [Op.or]: searchConditions },
+        { [Op.or]: cityConditions }
       ];
-      
-      if (whereClause[Op.or]) {
-        // If there's already an Op.or condition, combine them
-        whereClause[Op.and] = [
-          { [Op.or]: whereClause[Op.or] },
-          { [Op.or]: citySearchConditions }
-        ];
-        delete whereClause[Op.or];
-      } else {
-        whereClause[Op.or] = citySearchConditions;
-      }
+    } else if (searchConditions.length > 0) {
+      whereClause[Op.or] = searchConditions;
+    } else if (cityConditions.length > 0) {
+      whereClause[Op.or] = cityConditions;
     }
 
     const associations = await Association.findAndCountAll({
