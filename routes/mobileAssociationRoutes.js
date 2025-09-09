@@ -21,16 +21,31 @@ router.get('/associations', async (req, res) => {
       whereClause.state = { [Op.iLike]: `%${req.query.state}%` };
     }
     
-    if (req.query.city) {
-      whereClause.district = { [Op.iLike]: `%${req.query.city}%` };
-    }
-
     // Build search query
     if (req.query.search) {
       whereClause[Op.or] = [
         { name: { [Op.iLike]: `%${req.query.search}%` } },
         { phone: { [Op.iLike]: `%${req.query.search}%` } }
       ];
+    }
+
+    // City parameter searches both district and city fields
+    if (req.query.city) {
+      const citySearchConditions = [
+        { district: { [Op.iLike]: `%${req.query.city}%` } },
+        { city: { [Op.iLike]: `%${req.query.city}%` } }
+      ];
+      
+      if (whereClause[Op.or]) {
+        // If there's already an Op.or condition, combine them
+        whereClause[Op.and] = [
+          { [Op.or]: whereClause[Op.or] },
+          { [Op.or]: citySearchConditions }
+        ];
+        delete whereClause[Op.or];
+      } else {
+        whereClause[Op.or] = citySearchConditions;
+      }
     }
 
     const associations = await Association.findAndCountAll({
@@ -229,7 +244,10 @@ router.get('/associations/search', async (req, res) => {
     }
     
     if (city) {
-      whereClause.district = { [Op.iLike]: `%${city}%` };
+      whereClause[Op.or] = [
+        { district: { [Op.iLike]: `%${city}%` } },
+        { city: { [Op.iLike]: `%${city}%` } }
+      ];
     }
 
     const associations = await Association.findAndCountAll({
@@ -267,18 +285,27 @@ router.get('/associations/city/:city', async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const offset = (page - 1) * limit;
 
-    // Build filter object for specific city (searches district field)
+    // Build filter object for specific city (searches both district and city fields)
     const whereClause = { 
       isActive: true,
-      district: { [Op.iLike]: `%${city}%` }
+      [Op.and]: [
+        {
+          [Op.or]: [
+            { district: { [Op.iLike]: `%${city}%` } },
+            { city: { [Op.iLike]: `%${city}%` } }
+          ]
+        }
+      ]
     };
 
     // Build search query if provided
     if (req.query.search) {
-      whereClause[Op.or] = [
-        { name: { [Op.iLike]: `%${req.query.search}%` } },
-        { phone: { [Op.iLike]: `%${req.query.search}%` } }
-      ];
+      whereClause[Op.and].push({
+        [Op.or]: [
+          { name: { [Op.iLike]: `%${req.query.search}%` } },
+          { phone: { [Op.iLike]: `%${req.query.search}%` } }
+        ]
+      });
     }
 
     // Additional state filter if provided

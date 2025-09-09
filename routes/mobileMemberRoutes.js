@@ -188,7 +188,10 @@ router.get('/members/search', protectMobile, async (req, res) => {
     }
     
     if (city) {
-      whereClause.district = { [Op.iLike]: `%${city}%` };
+      whereClause[Op.or] = [
+        { district: { [Op.iLike]: `%${city}%` } },
+        { city: { [Op.iLike]: `%${city}%` } }
+      ];
     }
     
     if (associationName) {
@@ -246,7 +249,10 @@ router.get('/members/filter', protectMobile, async (req, res) => {
     }
     
     if (city) {
-      whereClause.district = { [Op.iLike]: `%${city}%` };
+      whereClause[Op.or] = [
+        { district: { [Op.iLike]: `%${city}%` } },
+        { city: { [Op.iLike]: `%${city}%` } }
+      ];
     }
     
     if (state) {

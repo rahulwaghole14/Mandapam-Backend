@@ -168,7 +168,23 @@ router.get('/', protect, async (req, res) => {
       ];
     }
     
-    if (city) where.district = { [Op.iLike]: `%${city}%` };
+    if (city) {
+      const citySearchConditions = [
+        { district: { [Op.iLike]: `%${city}%` } },
+        { city: { [Op.iLike]: `%${city}%` } }
+      ];
+      
+      if (where[Op.or]) {
+        // If there's already an Op.or condition, combine them
+        where[Op.and] = [
+          { [Op.or]: where[Op.or] },
+          { [Op.or]: citySearchConditions }
+        ];
+        delete where[Op.or];
+      } else {
+        where[Op.or] = citySearchConditions;
+      }
+    }
     if (state) where['address.state'] = state;
     if (status) where.status = status;
 

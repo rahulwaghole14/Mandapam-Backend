@@ -60,7 +60,21 @@ router.get('/', [
     }
 
     if (city) {
-      where.district = city;
+      const citySearchConditions = [
+        { district: city },
+        { city: city }
+      ];
+      
+      if (where[Op.or]) {
+        // If there's already an Op.or condition, combine them
+        where[Op.and] = [
+          { [Op.or]: where[Op.or] },
+          { [Op.or]: citySearchConditions }
+        ];
+        delete where[Op.or];
+      } else {
+        where[Op.or] = citySearchConditions;
+      }
     }
 
     if (state) {
