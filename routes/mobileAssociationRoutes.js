@@ -421,4 +421,98 @@ router.get('/associations/:id', protectMobile, async (req, res) => {
   }
 });
 
+// @desc    Get members for a specific association (Mobile)
+// @route   GET /api/mobile/associations/:id/members
+// @access  Private
+router.get('/associations/:id/members', protectMobile, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Validate integer ID format
+    if (!id.match(/^\d+$/)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid association ID format'
+      });
+    }
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const offset = (page - 1) * limit;
+
+    // First, get the association to ensure it exists
+    const association = await Association.findByPk(id);
+    if (!association) {
+      return res.status(404).json({
+        success: false,
+        message: 'Association not found'
+      });
+    }
+
+    // Build filter object - use both associationId and associationName for reliability
+    const whereClause = {
+      isActive: true,
+      [Op.or]: [
+        { associationId: parseInt(id) },
+        { associationName: association.name }
+      ]
+    };
+
+    // Add search filter if provided
+    if (req.query.search) {
+      whereClause[Op.and] = [
+        whereClause,
+        {
+          [Op.or]: [
+            { name: { [Op.iLike]: `%${req.query.search}%` } },
+            { businessName: { [Op.iLike]: `%${req.query.search}%` } },
+            { phone: { [Op.iLike]: `%${req.query.search}%` } }
+          ]
+        }
+      ];
+    }
+
+    // Add business type filter if provided
+    if (req.query.businessType) {
+      whereClause.businessType = req.query.businessType;
+    }
+
+    const members = await Member.findAndCountAll({
+      where: whereClause,
+      attributes: { exclude: ['createdBy', 'updatedBy'] },
+      order: [['created_at', 'DESC']],
+      offset,
+      limit,
+      include: [{
+        model: Association,
+        as: 'association',
+        attributes: ['name'],
+        required: false
+      }]
+    });
+
+    res.status(200).json({
+      success: true,
+      association: {
+        id: association.id,
+        name: association.name,
+        city: association.city,
+        state: association.state
+      },
+      count: members.rows.length,
+      total: members.count,
+      page,
+      pages: Math.ceil(members.count / limit),
+      members: members.rows
+    });
+
+  } catch (error) {
+    console.error('Get association members error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching association members'
+    });
+  }
+});
+
 module.exports = router;

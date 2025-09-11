@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { body, validationResult } = require('express-validator');
+const { body, query, validationResult } = require('express-validator');
 const { Op } = require('sequelize');
 const { protect, authorize } = require('../middleware/authMiddleware');
 const Association = require('../models/Association');
 const Member = require('../models/Member');
+const User = require('../models/User');
 
 // Validation middleware
 const validateAssociation = [
@@ -274,6 +275,126 @@ router.get('/:id', protect, async (req, res) => {
       success: false,
       message: 'Internal server error',
       error: error.message
+    });
+  }
+});
+
+// @desc    Get members for a specific association
+// @route   GET /api/associations/:id/members
+// @access  Private
+router.get('/:id/members', [
+  query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100'),
+  query('search').optional().isString().trim(),
+  query('businessType').optional().isIn(['catering', 'sound', 'mandap', 'madap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
+  query('sortBy').optional().isIn(['name', 'businessName', 'city', 'businessType', 'created_at']),
+  query('sortOrder').optional().isIn(['asc', 'desc'])
+], protect, async (req, res) => {
+  try {
+    // Check for validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        errors: errors.array()
+      });
+    }
+
+    // First, get the association to ensure it exists
+    const association = await Association.findByPk(req.params.id);
+    if (!association) {
+      return res.status(404).json({
+        success: false,
+        message: 'Association not found'
+      });
+    }
+
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      businessType,
+      sortBy = 'created_at',
+      sortOrder = 'desc'
+    } = req.query;
+
+    // Build filter object - use both associationId and associationName for reliability
+    const where = {
+      [Op.or]: [
+        { associationId: parseInt(req.params.id) },
+        { associationName: association.name }
+      ]
+    };
+
+    // Apply search filters
+    if (search) {
+      where[Op.and] = [
+        where,
+        {
+          [Op.or]: [
+            { name: { [Op.iLike]: `%${search}%` } },
+            { businessName: { [Op.iLike]: `%${search}%` } },
+            { city: { [Op.iLike]: `%${search}%` } },
+            { phone: { [Op.iLike]: `%${search}%` } }
+          ]
+        }
+      ];
+    }
+
+    if (businessType) {
+      where.businessType = businessType;
+    }
+
+    // Build sort object
+    const order = [];
+    if (sortBy === 'created_at') {
+      order.push(['created_at', sortOrder.toUpperCase()]);
+    } else {
+      order.push([sortBy, sortOrder.toUpperCase()]);
+    }
+
+    // Calculate pagination
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    // Execute query
+    const { count, rows: members } = await Member.findAndCountAll({
+      where,
+      include: [
+        { model: User, as: 'createdByUser', attributes: ['name', 'email'] },
+        { model: User, as: 'updatedByUser', attributes: ['name', 'email'] }
+      ],
+      order,
+      offset,
+      limit: parseInt(limit)
+    });
+
+    const total = count;
+    const totalPages = Math.ceil(total / parseInt(limit));
+    const hasNextPage = page < totalPages;
+    const hasPrevPage = page > 1;
+
+    res.status(200).json({
+      success: true,
+      association: {
+        id: association.id,
+        name: association.name,
+        city: association.city,
+        state: association.state
+      },
+      count: members.length,
+      total,
+      page: parseInt(page),
+      totalPages,
+      hasNextPage,
+      hasPrevPage,
+      members
+    });
+
+  } catch (error) {
+    console.error('Get association members error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching association members'
     });
   }
 });
