@@ -19,6 +19,11 @@ const validateAssociation = [
     .trim()
     .isLength({ min: 1, max: 50 })
     .withMessage('State is required and cannot exceed 50 characters'),
+  body('district')
+    .optional()
+    .trim()
+    .isLength({ max: 50 })
+    .withMessage('District cannot exceed 50 characters'),
   body('pincode')
     .optional()
     .matches(/^[0-9]{6}$/)
@@ -111,6 +116,7 @@ router.post('/', protect, authorize(['admin', 'sub-admin']), validateAssociation
       name: req.body.name,
       address: req.body.address || '',
       city: req.body.city,
+      district: req.body.district || undefined,
       state: req.body.state,
       pincode: req.body.pincode,
       establishedYear: req.body.establishedYear,
@@ -284,6 +290,7 @@ router.put('/:id', protect, authorize(['admin', 'sub-admin']), validateAssociati
       name: req.body.name,
       address: req.body.address || '',
       city: req.body.city,
+      district: req.body.district || undefined,
       state: req.body.state,
       pincode: req.body.pincode,
       establishedYear: req.body.establishedYear,
