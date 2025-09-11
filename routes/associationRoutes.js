@@ -4,6 +4,7 @@ const { body, validationResult } = require('express-validator');
 const { Op } = require('sequelize');
 const { protect, authorize } = require('../middleware/authMiddleware');
 const Association = require('../models/Association');
+const Member = require('../models/Member');
 
 // Validation middleware
 const validateAssociation = [
@@ -212,12 +213,26 @@ router.get('/', protect, async (req, res) => {
       limit: parseInt(limit)
     });
 
+    // Calculate actual member count for each association
+    const associationsWithMemberCount = await Promise.all(
+      associations.map(async (association) => {
+        const actualMemberCount = await Member.count({
+          where: { associationName: association.name }
+        });
+        
+        return {
+          ...association.toJSON(),
+          totalMembers: actualMemberCount
+        };
+      })
+    );
+
     const total = count;
     const totalPages = Math.ceil(total / parseInt(limit));
 
     res.json({
       success: true,
-      associations,
+      associations: associationsWithMemberCount,
       pagination: {
         currentPage: parseInt(page),
         totalPages,

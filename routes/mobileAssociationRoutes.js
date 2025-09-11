@@ -1,5 +1,5 @@
 const express = require('express');
-const { Association, BOD } = require('../models');
+const { Association, BOD, Member } = require('../models');
 const { Op } = require('sequelize');
 const { protectMobile } = require('../middleware/mobileAuthMiddleware');
 
@@ -58,13 +58,27 @@ router.get('/associations', async (req, res) => {
       limit
     });
 
+    // Calculate actual member count for each association
+    const associationsWithMemberCount = await Promise.all(
+      associations.rows.map(async (association) => {
+        const actualMemberCount = await Member.count({
+          where: { associationName: association.name }
+        });
+        
+        return {
+          ...association.toJSON(),
+          totalMembers: actualMemberCount
+        };
+      })
+    );
+
     res.status(200).json({
       success: true,
       count: associations.rows.length,
       total: associations.count,
       page,
       pages: Math.ceil(associations.count / limit),
-      associations: associations.rows
+      associations: associationsWithMemberCount
     });
 
   } catch (error) {
