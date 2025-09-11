@@ -31,15 +31,7 @@ const defineAssociations = () => {
     as: 'association'
   });
 
-  // Association has many Events
-  Association.hasMany(Event, {
-    foreignKey: 'associationId',
-    as: 'events'
-  });
-  Event.belongsTo(Association, {
-    foreignKey: 'associationId',
-    as: 'association'
-  });
+  // Events are independent - no association relationship
 
   // Association has many BOD members
   Association.hasMany(BOD, {
