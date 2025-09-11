@@ -121,15 +121,6 @@ const Event = sequelize.define('Event', {
     type: DataTypes.STRING(255),
     allowNull: true
   },
-  associationId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    field: 'association_id',
-    references: {
-      model: 'associations',
-      key: 'id'
-    }
-  },
   createdBy: {
     type: DataTypes.INTEGER,
     allowNull: false,
@@ -199,11 +190,6 @@ Event.associate = function(models) {
     as: 'updatedByUser'
   });
   
-  // Event belongs to Association
-  Event.belongsTo(models.Association, {
-    foreignKey: 'associationId',
-    as: 'association'
-  });
 };
 
 module.exports = Event;

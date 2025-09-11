@@ -225,8 +225,7 @@ router.post('/', [
   body('isActive').optional().isBoolean(),
   body('isPublic').optional().isBoolean(),
   body('image').optional().trim(),
-  body('imageURL').optional().trim(),
-  body('associationId').optional().isInt({ min: 1 })
+  body('imageURL').optional().trim()
 ], authorizeDistrict, async (req, res) => {
   try {
     // Check for validation errors
@@ -290,6 +289,7 @@ router.post('/', [
       maxAttendees = parseInt(maxAttendees);
     }
 
+
     // Prepare event data
     const eventData = {
       title: req.body.title,
@@ -311,7 +311,6 @@ router.post('/', [
       isActive: req.body.isActive !== undefined ? req.body.isActive : true,
       isPublic: req.body.isPublic !== undefined ? req.body.isPublic : true,
       image: req.body.image || req.body.imageURL,
-      associationId: req.body.associationId || 1, // Default to association 1 if not provided
       createdBy: req.user.id,
       updatedBy: req.user.id,
       status: 'Upcoming',
@@ -366,7 +365,6 @@ router.put('/:id', [
   body('isActive').optional().isBoolean(),
   body('isPublic').optional().isBoolean(),
   body('image').optional().trim(),
-  body('associationId').optional().isInt({ min: 1 }).withMessage('Invalid association ID')
 ], authorizeDistrict, async (req, res) => {
   try {
     // Check for validation errors
