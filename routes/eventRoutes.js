@@ -200,22 +200,33 @@ router.post('/', [
   body('type', 'Event type is required').isIn([
     'Meeting', 'Workshop', 'Seminar', 'Celebration', 'Other'
   ]),
-  body('startDate', 'Event start date is required').isISO8601(),
-  body('endDate').optional().isISO8601(),
+  body('startDate', 'Event start date is required').notEmpty(),
+  body('endDate').optional(),
+  body('startTime').optional().matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/),
+  body('endTime').optional().matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/),
   body('location').optional().trim(),
   body('address').optional().trim(),
   body('city').optional().trim(),
+  body('district').optional().trim(),
   body('state').optional().trim(),
   body('pincode').optional().matches(/^[0-9]{6}$/),
-  body('contactPerson').optional().trim(),
+  body('organizer').optional().trim(),
+  body('contactPerson').optional(),
+  body('contactPerson.name').optional().trim(),
+  body('contactPerson.phone').optional().matches(/^[0-9]{10}$/),
+  body('contactPerson.email').optional().isEmail(),
   body('contactPhone').optional().matches(/^[0-9+\-\s()]+$/),
   body('contactEmail').optional().isEmail(),
-  body('maxAttendees').optional().isInt({ min: 1 }),
+  body('priority').optional().isIn(['Low', 'Medium', 'High', 'Urgent']),
+  body('targetAudience').optional().isArray(),
+  body('maxAttendees').optional(),
+  body('registrationRequired').optional().isBoolean(),
   body('registrationFee').optional().isFloat({ min: 0 }),
   body('isActive').optional().isBoolean(),
   body('isPublic').optional().isBoolean(),
   body('image').optional().trim(),
-  body('associationId', 'Association ID is required').isInt({ min: 1 })
+  body('imageURL').optional().trim(),
+  body('associationId').optional().isInt({ min: 1 })
 ], authorizeDistrict, async (req, res) => {
   try {
     // Check for validation errors
@@ -227,15 +238,56 @@ router.post('/', [
       });
     }
 
-    // Validate date logic
-    const startDate = new Date(req.body.startDate);
-    const endDate = req.body.endDate ? new Date(req.body.endDate) : null;
+    // Handle date and time conversion
+    let startDate, endDate;
     
-    if (endDate && endDate < startDate) {
+    if (req.body.startDate) {
+      // If startTime is provided, combine date and time
+      if (req.body.startTime) {
+        startDate = new Date(`${req.body.startDate}T${req.body.startTime}:00`);
+      } else {
+        startDate = new Date(req.body.startDate);
+      }
+    }
+    
+    if (req.body.endDate) {
+      // If endTime is provided, combine date and time
+      if (req.body.endTime) {
+        endDate = new Date(`${req.body.endDate}T${req.body.endTime}:00`);
+      } else {
+        endDate = new Date(req.body.endDate);
+      }
+    }
+    
+    // If no endDate but endTime is provided, use startDate with endTime
+    if (!endDate && req.body.endTime && startDate) {
+      const startDateStr = startDate.toISOString().split('T')[0];
+      endDate = new Date(`${startDateStr}T${req.body.endTime}:00`);
+    }
+    
+    if (endDate && startDate && endDate < startDate) {
       return res.status(400).json({
         success: false,
         message: 'End date must be after start date'
       });
+    }
+
+    // Handle contact person data (nested or flat)
+    let contactPerson, contactPhone, contactEmail;
+    if (req.body.contactPerson && typeof req.body.contactPerson === 'object') {
+      contactPerson = req.body.contactPerson.name;
+      contactPhone = req.body.contactPerson.phone;
+      contactEmail = req.body.contactPerson.email;
+    } else {
+      contactPerson = req.body.contactPerson;
+      contactPhone = req.body.contactPhone;
+      contactEmail = req.body.contactEmail;
+    }
+
+    // Handle maxAttendees conversion
+    let maxAttendees = req.body.maxAttendees;
+    if (typeof maxAttendees === 'string') {
+      maxAttendees = parseInt(maxAttendees);
     }
 
     // Prepare event data
@@ -248,19 +300,22 @@ router.post('/', [
       location: req.body.location,
       address: req.body.address,
       city: req.body.city,
+      district: req.body.district,
       state: req.body.state,
       pincode: req.body.pincode,
-      contactPerson: req.body.contactPerson,
-      contactPhone: req.body.contactPhone,
-      contactEmail: req.body.contactEmail,
-      maxAttendees: req.body.maxAttendees,
+      contactPerson: contactPerson,
+      contactPhone: contactPhone,
+      contactEmail: contactEmail,
+      maxAttendees: maxAttendees,
       registrationFee: req.body.registrationFee,
       isActive: req.body.isActive !== undefined ? req.body.isActive : true,
       isPublic: req.body.isPublic !== undefined ? req.body.isPublic : true,
-      image: req.body.image,
-      associationId: req.body.associationId,
+      image: req.body.image || req.body.imageURL,
+      associationId: req.body.associationId || 1, // Default to association 1 if not provided
       createdBy: req.user.id,
-      updatedBy: req.user.id
+      updatedBy: req.user.id,
+      status: 'Upcoming',
+      priority: req.body.priority || 'Medium'
     };
 
     // Create event
