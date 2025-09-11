@@ -154,7 +154,7 @@ router.get('/recent-members', [
     // Get recent members
     const recentMembers = await Member.findAll({
       where,
-      attributes: ['name', 'businessName', 'phone', 'city', 'state', 'created_at', 'profileImage', 'association_name'],
+      attributes: ['name', 'businessName', 'phone', 'city', 'state', 'created_at', 'profileImage', 'associationName'],
       include: [
         { model: User, as: 'createdByUser', attributes: ['name'] }
       ],
@@ -168,7 +168,7 @@ router.get('/recent-members', [
       name: member.name,
       businessName: member.businessName,
       phone: member.phone,
-      associationName: member.association_name,
+      associationName: member.associationName || 'N/A',
       dateAdded: member.created_at,
       profileImage: member.profileImage,
       city: member.city,
@@ -455,26 +455,32 @@ router.get('/top-associations', async (req, res) => {
     const currentYear = new Date().getFullYear();
     const lastYear = currentYear - 1;
 
-      // Get associations with member counts for both years
-      const associations = await Association.findAll({
+      // Get all associations first
+      const allAssociations = await Association.findAll({
         where: filter,
-        attributes: ['id', 'name', 'city', 'state', 'district', 'isActive', 'totalMembers', 'created_at'],
-        order: [['totalMembers', 'DESC']],
-        limit: parseInt(limit)
+        attributes: ['id', 'name', 'city', 'state', 'district', 'isActive', 'totalMembers', 'created_at']
       });
 
-    console.log('Found associations:', associations.length);
-    console.log('Associations:', associations.map(a => ({ name: a.name, city: a.city, state: a.state })));
+    console.log('Found associations:', allAssociations.length);
+    console.log('Associations:', allAssociations.map(a => ({ 
+      id: a.id, 
+      name: a.name, 
+      nameType: typeof a.name,
+      nameIsNull: a.name === null,
+      nameIsUndefined: a.name === undefined,
+      city: a.city, 
+      state: a.state 
+    })));
 
-    // Calculate growth percentage for each association
+    // Calculate growth percentage and current member count for each association
     const associationsWithGrowth = await Promise.all(
-      associations.map(async (association) => {
+      allAssociations.map(async (association) => {
         console.log(`Processing association: ${association.name}`);
         
         // Get member count for current year
         const currentYearMembers = await Member.count({
           where: {
-            association_name: association.name,
+            associationName: association.name,
             created_at: {
               [Op.gte]: new Date(currentYear, 0, 1),
               [Op.lt]: new Date(currentYear + 1, 0, 1)
@@ -485,7 +491,7 @@ router.get('/top-associations', async (req, res) => {
         // Get member count for last year
         const lastYearMembers = await Member.count({
           where: {
-            association_name: association.name,
+            associationName: association.name,
             created_at: {
               [Op.gte]: new Date(lastYear, 0, 1),
               [Op.lt]: new Date(lastYear + 1, 0, 1)
@@ -505,7 +511,7 @@ router.get('/top-associations', async (req, res) => {
 
         const result = {
           id: association.id,
-          name: association.name,
+          name: association.name || 'N/A',
           city: association.city || 'Unknown',
           state: association.state || 'Unknown',
           district: association.district || 'Unknown',
@@ -514,20 +520,35 @@ router.get('/top-associations', async (req, res) => {
           growthPercentage: Math.round(growthPercentage * 10) / 10 // Round to 1 decimal place
         };
         
+        console.log(`Association data for ${association.name}:`, {
+          id: association.id,
+          name: association.name,
+          nameType: typeof association.name,
+          nameIsNull: association.name === null,
+          nameIsUndefined: association.name === undefined,
+          nameIsEmpty: association.name === '',
+          fullAssociation: association
+        });
         console.log(`Result for ${association.name}:`, result);
         return result;
       })
     );
 
+    // Sort by current year member count (DESC) and take top N
+    const sortedAssociations = associationsWithGrowth
+      .sort((a, b) => b.memberCount - a.memberCount)
+      .slice(0, parseInt(limit));
+
     console.log('Final associations with growth:', associationsWithGrowth);
-    console.log('Response being sent:', { success: true, associations: associationsWithGrowth });
-    console.log('Response associations length:', associationsWithGrowth.length);
-    console.log('Response associations type:', typeof associationsWithGrowth);
-    console.log('Response associations isArray:', Array.isArray(associationsWithGrowth));
+    console.log('Sorted associations (top', limit, '):', sortedAssociations);
+    console.log('Response being sent:', { success: true, associations: sortedAssociations });
+    console.log('Response associations length:', sortedAssociations.length);
+    console.log('Response associations type:', typeof sortedAssociations);
+    console.log('Response associations isArray:', Array.isArray(sortedAssociations));
     
     res.status(200).json({
       success: true,
-      associations: associationsWithGrowth
+      associations: sortedAssociations
     });
 
   } catch (error) {
