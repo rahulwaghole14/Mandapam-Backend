@@ -121,11 +121,6 @@ const Event = sequelize.define('Event', {
     type: DataTypes.STRING(255),
     allowNull: true
   },
-  associationId: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    field: 'association_id'
-  },
   createdBy: {
     type: DataTypes.INTEGER,
     allowNull: false,
