@@ -196,28 +196,26 @@ router.get('/:id', async (req, res) => {
 // @access  Private
 router.post('/', [
   body('title', 'Event title is required').notEmpty().trim(),
-  body('description', 'Event description is required').notEmpty().trim(),
+  body('description').optional().trim(),
   body('type', 'Event type is required').isIn([
-    'Meeting', 'Workshop', 'Seminar', 'Conference', 'Celebration', 
-    'Training', 'Announcement', 'Other'
+    'Meeting', 'Workshop', 'Seminar', 'Celebration', 'Other'
   ]),
-  body('date', 'Event date is required').isISO8601(),
-  body('startTime', 'Start time is required').matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/),
-  body('endTime', 'End time is required').matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/),
-  body('location.address', 'Event address is required').notEmpty().trim(),
-  body('location.city', 'City is required').notEmpty().trim(),
-  body('location.district', 'District is required').notEmpty().trim(),
-  body('location.state', 'State is required').notEmpty().trim(),
-  body('location.pincode', 'Pincode is required').matches(/^[0-9]{6}$/),
-  body('organizer', 'Organizer name is required').notEmpty().trim(),
-  body('contactPerson.name', 'Contact person name is required').notEmpty().trim(),
-  body('contactPerson.phone', 'Contact phone is required').matches(/^[0-9]{10}$/),
-  body('priority').optional().isIn(['Low', 'Medium', 'High', 'Urgent']),
-  body('targetAudience').optional().isArray(),
+  body('startDate', 'Event start date is required').isISO8601(),
+  body('endDate').optional().isISO8601(),
+  body('location').optional().trim(),
+  body('address').optional().trim(),
+  body('city').optional().trim(),
+  body('state').optional().trim(),
+  body('pincode').optional().matches(/^[0-9]{6}$/),
+  body('contactPerson').optional().trim(),
+  body('contactPhone').optional().matches(/^[0-9+\-\s()]+$/),
+  body('contactEmail').optional().isEmail(),
   body('maxAttendees').optional().isInt({ min: 1 }),
-  body('registrationRequired').optional().isBoolean(),
-  body('registrationDeadline').optional().isISO8601(),
-  body('tags').optional().isArray()
+  body('registrationFee').optional().isFloat({ min: 0 }),
+  body('isActive').optional().isBoolean(),
+  body('isPublic').optional().isBoolean(),
+  body('image').optional().trim(),
+  body('associationId', 'Association ID is required').isInt({ min: 1 })
 ], authorizeDistrict, async (req, res) => {
   try {
     // Check for validation errors
@@ -229,23 +227,44 @@ router.post('/', [
       });
     }
 
-    // Validate time logic
-    const startTime = req.body.startTime;
-    const endTime = req.body.endTime;
+    // Validate date logic
+    const startDate = new Date(req.body.startDate);
+    const endDate = req.body.endDate ? new Date(req.body.endDate) : null;
     
-    if (startTime >= endTime) {
+    if (endDate && endDate < startDate) {
       return res.status(400).json({
         success: false,
-        message: 'End time must be after start time'
+        message: 'End date must be after start date'
       });
     }
 
-    // Add createdBy and updatedBy
-    req.body.createdBy = req.user.id;
-    req.body.updatedBy = req.user.id;
+    // Prepare event data
+    const eventData = {
+      title: req.body.title,
+      description: req.body.description,
+      type: req.body.type,
+      startDate: startDate,
+      endDate: endDate,
+      location: req.body.location,
+      address: req.body.address,
+      city: req.body.city,
+      state: req.body.state,
+      pincode: req.body.pincode,
+      contactPerson: req.body.contactPerson,
+      contactPhone: req.body.contactPhone,
+      contactEmail: req.body.contactEmail,
+      maxAttendees: req.body.maxAttendees,
+      registrationFee: req.body.registrationFee,
+      isActive: req.body.isActive !== undefined ? req.body.isActive : true,
+      isPublic: req.body.isPublic !== undefined ? req.body.isPublic : true,
+      image: req.body.image,
+      associationId: req.body.associationId,
+      createdBy: req.user.id,
+      updatedBy: req.user.id
+    };
 
     // Create event
-    const event = await Event.create(req.body);
+    const event = await Event.create(eventData);
 
     // Get event with populated fields
     const eventWithDetails = await Event.findByPk(event.id, {
@@ -273,25 +292,26 @@ router.post('/', [
 // @access  Private
 router.put('/:id', [
   body('title').optional().notEmpty().trim().withMessage('Title cannot be empty'),
-  body('description').optional().notEmpty().trim().withMessage('Description cannot be empty'),
+  body('description').optional().trim(),
   body('type').optional().isIn([
-    'Meeting', 'Workshop', 'Seminar', 'Conference', 'Celebration', 
-    'Training', 'Announcement', 'Other'
+    'Meeting', 'Workshop', 'Seminar', 'Celebration', 'Other'
   ]),
-  body('date').optional().isISO8601().withMessage('Invalid date format'),
-  body('startTime').optional().matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('Invalid time format'),
-  body('endTime').optional().matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('Invalid time format'),
-  body('location.address').optional().notEmpty().trim().withMessage('Address cannot be empty'),
-  body('location.city').optional().notEmpty().trim().withMessage('City cannot be empty'),
-  body('location.district').optional().notEmpty().trim().withMessage('District cannot be empty'),
-  body('location.state').optional().notEmpty().trim().withMessage('State cannot be empty'),
-  body('location.pincode').optional().matches(/^[0-9]{6}$/).withMessage('Invalid pincode'),
-  body('organizer').optional().notEmpty().trim().withMessage('Organizer cannot be empty'),
-  body('contactPerson.name').optional().notEmpty().trim().withMessage('Contact person name cannot be empty'),
-  body('contactPerson.phone').optional().matches(/^[0-9]{10}$/).withMessage('Invalid phone number'),
-  body('priority').optional().isIn(['Low', 'Medium', 'High', 'Urgent']),
+  body('startDate').optional().isISO8601().withMessage('Invalid start date format'),
+  body('endDate').optional().isISO8601().withMessage('Invalid end date format'),
+  body('location').optional().trim(),
+  body('address').optional().trim(),
+  body('city').optional().trim(),
+  body('state').optional().trim(),
+  body('pincode').optional().matches(/^[0-9]{6}$/).withMessage('Invalid pincode'),
+  body('contactPerson').optional().trim(),
+  body('contactPhone').optional().matches(/^[0-9+\-\s()]+$/).withMessage('Invalid phone number'),
+  body('contactEmail').optional().isEmail().withMessage('Invalid email format'),
   body('maxAttendees').optional().isInt({ min: 1 }).withMessage('Max attendees must be at least 1'),
-  body('registrationDeadline').optional().isISO8601().withMessage('Invalid deadline format')
+  body('registrationFee').optional().isFloat({ min: 0 }).withMessage('Registration fee must be non-negative'),
+  body('isActive').optional().isBoolean(),
+  body('isPublic').optional().isBoolean(),
+  body('image').optional().trim(),
+  body('associationId').optional().isInt({ min: 1 }).withMessage('Invalid association ID')
 ], authorizeDistrict, async (req, res) => {
   try {
     // Check for validation errors
@@ -320,21 +340,34 @@ router.put('/:id', [
       });
     }
 
-    // Validate time logic if both times are provided
-    if (req.body.startTime && req.body.endTime) {
-      if (req.body.startTime >= req.body.endTime) {
+    // Validate date logic if both dates are provided
+    if (req.body.startDate && req.body.endDate) {
+      const startDate = new Date(req.body.startDate);
+      const endDate = new Date(req.body.endDate);
+      if (endDate < startDate) {
         return res.status(400).json({
           success: false,
-          message: 'End time must be after start time'
+          message: 'End date must be after start date'
         });
       }
     }
 
-    // Add updatedBy
-    req.body.updatedBy = req.user.id;
+    // Prepare update data
+    const updateData = {
+      ...req.body,
+      updatedBy: req.user.id
+    };
+
+    // Convert dates if provided
+    if (req.body.startDate) {
+      updateData.startDate = new Date(req.body.startDate);
+    }
+    if (req.body.endDate) {
+      updateData.endDate = new Date(req.body.endDate);
+    }
 
     // Update event
-    await existingEvent.update(req.body);
+    await existingEvent.update(updateData);
 
     // Get updated event with populated fields
     const event = await Event.findByPk(req.params.id, {
@@ -582,6 +615,7 @@ router.put('/:id/status', [
 });
 
 module.exports = router;
+
 
 
 

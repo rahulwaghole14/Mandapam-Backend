@@ -129,6 +129,38 @@ const Event = sequelize.define('Event', {
       model: 'associations',
       key: 'id'
     }
+  },
+  createdBy: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    field: 'created_by',
+    references: {
+      model: 'users',
+      key: 'id'
+    }
+  },
+  updatedBy: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    field: 'updated_by',
+    references: {
+      model: 'users',
+      key: 'id'
+    }
+  },
+  district: {
+    type: DataTypes.STRING(100),
+    allowNull: true
+  },
+  status: {
+    type: DataTypes.ENUM('Upcoming', 'Ongoing', 'Completed', 'Cancelled', 'Postponed'),
+    allowNull: false,
+    defaultValue: 'Upcoming'
+  },
+  priority: {
+    type: DataTypes.ENUM('Low', 'Medium', 'High', 'Urgent'),
+    allowNull: true,
+    defaultValue: 'Medium'
   }
 }, {
   tableName: 'events',
@@ -153,7 +185,29 @@ const Event = sequelize.define('Event', {
   }
 });
 
+// Define associations
+Event.associate = function(models) {
+  // Event belongs to User (createdBy)
+  Event.belongsTo(models.User, {
+    foreignKey: 'createdBy',
+    as: 'createdByUser'
+  });
+  
+  // Event belongs to User (updatedBy)
+  Event.belongsTo(models.User, {
+    foreignKey: 'updatedBy',
+    as: 'updatedByUser'
+  });
+  
+  // Event belongs to Association
+  Event.belongsTo(models.Association, {
+    foreignKey: 'associationId',
+    as: 'association'
+  });
+};
+
 module.exports = Event;
+
 
 
 
