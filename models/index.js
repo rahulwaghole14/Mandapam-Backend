@@ -8,6 +8,7 @@ const Event = require('./Event');
 const Vendor = require('./Vendor');
 const BOD = require('./BOD');
 const OTP = require('./OTP');
+const AppVersion = require('./AppVersion');
 
 // Define associations
 const defineAssociations = () => {
@@ -141,5 +142,6 @@ module.exports = {
   Event,
   Vendor,
   BOD,
-  OTP
+  OTP,
+  AppVersion
 };
