@@ -90,13 +90,13 @@ router.get('/associations', async (req, res) => {
   }
 });
 
-// @desc    Get all Board of Directors members
+// @desc    Get all Board of Directors members (Mobile App Format)
 // @route   GET /api/mobile/bod
 // @access  Private
 router.get('/bod', protectMobile, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
+    const limit = parseInt(req.query.limit) || 50;
     const offset = (page - 1) * limit;
 
     // Build filter object
@@ -128,13 +128,25 @@ router.get('/bod', protectMobile, async (req, res) => {
       }]
     });
 
+    // Transform data to match mobile app expectations
+    const transformedBods = bod.rows.map(bodMember => ({
+      _id: bodMember.id.toString(),
+      name: bodMember.name,
+      designation: bodMember.position || bodMember.designation,
+      profileImage: bodMember.profileImage || `https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face&sig=${bodMember.id}`,
+      contactNumber: bodMember.contactNumber || bodMember.phone,
+      email: bodMember.email,
+      isActive: bodMember.isActive,
+      associationName: bodMember.association?.name || 'National Board'
+    }));
+
     res.status(200).json({
       success: true,
-      count: bod.rows.length,
+      bods: transformedBods, // ✅ Use 'bods' field name as required by mobile app
       total: bod.count,
       page,
-      pages: Math.ceil(bod.count / limit),
-      bod: bod.rows
+      limit,
+      hasNextPage: (page * limit) < bod.count
     });
 
   } catch (error) {
@@ -407,9 +419,26 @@ router.get('/associations/:id', protectMobile, async (req, res) => {
       });
     }
 
+    // Calculate actual member count for this association
+    const memberCount = await Member.count({
+      where: { 
+        isActive: true,
+        [Op.or]: [
+          { associationId: parseInt(id) },
+          { associationName: association.name }
+        ]
+      }
+    });
+
+    // Add memberCount to association data
+    const associationWithMemberCount = {
+      ...association.toJSON(),
+      memberCount
+    };
+
     res.status(200).json({
       success: true,
-      association
+      association: associationWithMemberCount
     });
 
   } catch (error) {

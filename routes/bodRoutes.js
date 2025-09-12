@@ -1,14 +1,71 @@
 const express = require('express');
 const { body, validationResult, query } = require('express-validator');
 const { Op } = require('sequelize');
+const jwt = require('jsonwebtoken');
 const BOD = require('../models/BOD');
 const User = require('../models/User');
+const Member = require('../models/Member');
 const { protect, authorize } = require('../middleware/authMiddleware');
+const { protectMobile } = require('../middleware/mobileAuthMiddleware');
 
 const router = express.Router();
 
-// Apply protection to all routes
-router.use(protect);
+// Flexible authentication middleware for BOD endpoints
+// Accepts both web (User) and mobile (Member) tokens
+const flexibleAuth = async (req, res, next) => {
+  let token;
+
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    try {
+      // Get token from header
+      token = req.headers.authorization.split(' ')[1];
+
+      // Verify token
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+      // Try to find user first (web app)
+      let user = await User.findByPk(decoded.id);
+      
+      if (user) {
+        req.user = user;
+        req.userType = 'web';
+        return next();
+      }
+
+      // If not found in User, try Member (mobile app)
+      if (decoded.userType === 'member') {
+        let member = await Member.findByPk(decoded.id);
+        
+        if (member && member.isActive) {
+          req.user = member;
+          req.userType = 'mobile';
+          return next();
+        }
+      }
+      return res.status(401).json({
+        success: false,
+        message: 'User not found'
+      });
+
+    } catch (error) {
+      console.error('BOD Flexible Auth - Error:', error);
+      return res.status(401).json({
+        success: false,
+        message: 'Not authorized, token failed'
+      });
+    }
+  }
+
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      message: 'Not authorized, no token'
+    });
+  }
+};
+
+// Apply flexible protection to all routes
+router.use(flexibleAuth);
 
 // @desc    Get all BOD members with filtering and pagination
 // @route   GET /api/bod
@@ -97,7 +154,12 @@ router.get('/', [
     const { count, rows: bods } = await BOD.findAndCountAll({
       where,
       include: [
-        // Note: BOD model doesn't have createdBy/updatedBy fields
+        {
+          model: require('../models').Association,
+          as: 'association',
+          attributes: ['name'],
+          required: false
+        }
       ],
       order,
       offset,
@@ -111,16 +173,48 @@ router.get('/', [
     const hasNextPage = page < totalPages;
     const hasPrevPage = page > 1;
 
+    // Transform BOD data to include both web and mobile fields
+    const transformedBods = bods.map(bod => {
+      const bodData = bod.toJSON();
+      return {
+        // Web app fields (existing - keep for backward compatibility)
+        id: bodData.id,
+        name: bodData.name,
+        position: bodData.designation, // Map designation to position for web app
+        phone: bodData.contactNumber,   // Map contactNumber to phone for web app
+        email: bodData.email,
+        address: bodData.address,
+        city: bodData.city,
+        state: bodData.state,
+        pincode: bodData.pincode,
+        profileImage: bodData.profileImage,
+        bio: bodData.bio,
+        experience: bodData.experience,
+        termStart: bodData.termStart,
+        termEnd: bodData.termEnd,
+        isActive: bodData.isActive,
+        associationId: bodData.associationId,
+        created_at: bodData.created_at,
+        updated_at: bodData.updated_at,
+        
+        // Mobile app fields (new - for mobile app compatibility)
+        _id: bodData.id.toString(),
+        designation: bodData.designation,
+        contactNumber: bodData.contactNumber,
+        associationName: bodData.association?.name || (bodData.associationId ? 'Association' : 'National Board')
+      };
+    });
+
     // Build response object
     const response = {
       success: true,
-      count: bods.length,
+      count: transformedBods.length,
       total,
       page: parseInt(page),
       totalPages,
       hasNextPage,
       hasPrevPage,
-      bods
+      bods: transformedBods
     };
 
     // Add type and associationId to response when filters are applied
@@ -219,7 +313,14 @@ router.get('/association/:associationId', [
     // Execute query
     const { count, rows: bods } = await BOD.findAndCountAll({
       where,
-      include: [],
+      include: [
+        {
+          model: require('../models').Association,
+          as: 'association',
+          attributes: ['name'],
+          required: false
+        }
+      ],
       order,
       offset,
       limit: parseInt(limit)
@@ -232,9 +333,41 @@ router.get('/association/:associationId', [
     const hasNextPage = page < totalPages;
     const hasPrevPage = page > 1;
 
+    // Transform BOD data to include both web and mobile fields
+    const transformedBods = bods.map(bod => {
+      const bodData = bod.toJSON();
+      return {
+        // Web app fields (existing - keep for backward compatibility)
+        id: bodData.id,
+        name: bodData.name,
+        position: bodData.designation,
+        phone: bodData.contactNumber,
+        email: bodData.email,
+        address: bodData.address,
+        city: bodData.city,
+        state: bodData.state,
+        pincode: bodData.pincode,
+        profileImage: bodData.profileImage,
+        bio: bodData.bio,
+        experience: bodData.experience,
+        termStart: bodData.termStart,
+        termEnd: bodData.termEnd,
+        isActive: bodData.isActive,
+        associationId: bodData.associationId,
+        created_at: bodData.created_at,
+        updated_at: bodData.updated_at,
+        
+        // Mobile app fields (new - for mobile app compatibility)
+        _id: bodData.id.toString(),
+        designation: bodData.designation,
+        contactNumber: bodData.contactNumber,
+        associationName: bodData.association?.name || 'Association'
+      };
+    });
+
     res.status(200).json({
       success: true,
-      count: bods.length,
+      count: transformedBods.length,
       total,
       page: parseInt(page),
       totalPages,
@@ -242,7 +375,7 @@ router.get('/association/:associationId', [
       hasPrevPage,
       associationId: parseInt(associationId),
       type: 'association',
-      bods
+      bods: transformedBods
     });
 
   } catch (error) {
@@ -322,7 +455,14 @@ router.get('/national', [
     // Execute query
     const { count, rows: bods } = await BOD.findAndCountAll({
       where,
-      include: [],
+      include: [
+        {
+          model: require('../models').Association,
+          as: 'association',
+          attributes: ['name'],
+          required: false
+        }
+      ],
       order,
       offset,
       limit: parseInt(limit)
@@ -335,16 +475,48 @@ router.get('/national', [
     const hasNextPage = page < totalPages;
     const hasPrevPage = page > 1;
 
+    // Transform BOD data to include both web and mobile fields
+    const transformedBods = bods.map(bod => {
+      const bodData = bod.toJSON();
+      return {
+        // Web app fields (existing - keep for backward compatibility)
+        id: bodData.id,
+        name: bodData.name,
+        position: bodData.designation,
+        phone: bodData.contactNumber,
+        email: bodData.email,
+        address: bodData.address,
+        city: bodData.city,
+        state: bodData.state,
+        pincode: bodData.pincode,
+        profileImage: bodData.profileImage,
+        bio: bodData.bio,
+        experience: bodData.experience,
+        termStart: bodData.termStart,
+        termEnd: bodData.termEnd,
+        isActive: bodData.isActive,
+        associationId: bodData.associationId,
+        created_at: bodData.created_at,
+        updated_at: bodData.updated_at,
+        
+        // Mobile app fields (new - for mobile app compatibility)
+        _id: bodData.id.toString(),
+        designation: bodData.designation,
+        contactNumber: bodData.contactNumber,
+        associationName: 'National Board'
+      };
+    });
+
     res.status(200).json({
       success: true,
-      count: bods.length,
+      count: transformedBods.length,
       total,
       page: parseInt(page),
       totalPages,
       hasNextPage,
       hasPrevPage,
       type: 'national',
-      bods
+      bods: transformedBods
     });
 
   } catch (error) {

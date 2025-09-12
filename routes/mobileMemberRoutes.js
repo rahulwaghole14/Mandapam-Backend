@@ -97,7 +97,7 @@ router.put('/profile', protectMobile, [
 router.get('/members', protectMobile, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
+    const limit = parseInt(req.query.limit) || 50;
     const offset = (page - 1) * limit;
 
     // Build filter object
@@ -122,10 +122,15 @@ router.get('/members', protectMobile, async (req, res) => {
       ];
     }
 
+    // Add paymentStatus filter if provided
+    if (req.query.paymentStatus) {
+      whereClause.paymentStatus = req.query.paymentStatus;
+    }
+
     const members = await Member.findAndCountAll({
       where: whereClause,
       attributes: { exclude: ['createdBy', 'updatedBy'] },
-      order: [['created_at', 'DESC']],
+      order: [['name', 'ASC']], // Sort by name as required by mobile app
       offset,
       limit,
       include: [{
@@ -136,13 +141,32 @@ router.get('/members', protectMobile, async (req, res) => {
       }]
     });
 
+    // Transform data to match mobile app expectations
+    const transformedMembers = members.rows.map(member => ({
+      _id: member.id.toString(),
+      name: member.name,
+      businessName: member.businessName,
+      businessType: member.businessType,
+      phone: member.phone,
+      city: member.city,
+      state: member.state,
+      pincode: member.pincode,
+      associationName: member.associationName || member.association?.name || 'Unknown Association',
+      profileImage: member.profileImage || `https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face&sig=${member.id}`,
+      isActive: member.isActive,
+      isMobileVerified: member.isVerified || false,
+      paymentStatus: member.paymentStatus || 'Paid', // Default to 'Paid' if not set
+      createdAt: member.created_at,
+      updatedAt: member.updated_at
+    }));
+
     res.status(200).json({
       success: true,
-      count: members.rows.length,
+      members: transformedMembers, // ✅ Use 'members' field name as required by mobile app
       total: members.count,
       page,
-      pages: Math.ceil(members.count / limit),
-      members: members.rows
+      limit,
+      hasNextPage: (page * limit) < members.count
     });
 
   } catch (error) {
