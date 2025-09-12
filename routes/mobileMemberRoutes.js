@@ -152,7 +152,7 @@ router.get('/members', protectMobile, async (req, res) => {
       state: member.state,
       pincode: member.pincode,
       associationName: member.associationName || member.association?.name || 'Unknown Association',
-      profileImage: member.profileImage || `https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face&sig=${member.id}`,
+      profileImage: member.profileImage || 'https://via.placeholder.com/100x100/cccccc/666666?text=No+Photo',
       isActive: member.isActive,
       isMobileVerified: member.isVerified || false,
       paymentStatus: member.paymentStatus || 'Paid', // Default to 'Paid' if not set

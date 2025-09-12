@@ -1,5 +1,5 @@
 const express = require('express');
-const { Event, Association } = require('../models');
+const { Event } = require('../models');
 const { Op, sequelize } = require('sequelize');
 const { protectMobile } = require('../middleware/mobileAuthMiddleware');
 
@@ -46,12 +46,7 @@ router.get('/events', protectMobile, async (req, res) => {
       attributes: { exclude: ['createdBy', 'updatedBy'] },
       order: [['startDate', 'ASC']], // Sort by start date ascending
       offset,
-      limit,
-      include: [{
-        model: Association,
-        as: 'association',
-        attributes: ['name']
-      }]
+      limit
     });
 
     res.status(200).json({

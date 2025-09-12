@@ -133,7 +133,7 @@ router.get('/bod', protectMobile, async (req, res) => {
       _id: bodMember.id.toString(),
       name: bodMember.name,
       designation: bodMember.position || bodMember.designation,
-      profileImage: bodMember.profileImage || `https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face&sig=${bodMember.id}`,
+      profileImage: bodMember.profileImage || 'https://via.placeholder.com/100x100/cccccc/666666?text=No+Photo',
       contactNumber: bodMember.contactNumber || bodMember.phone,
       email: bodMember.email,
       isActive: bodMember.isActive,
@@ -446,6 +446,104 @@ router.get('/associations/:id', protectMobile, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error while fetching association'
+    });
+  }
+});
+
+// @desc    Get BOD members for a specific association (Mobile)
+// @route   GET /api/mobile/associations/:id/bod
+// @access  Private
+router.get('/associations/:id/bod', protectMobile, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Validate integer ID format
+    if (!id.match(/^\d+$/)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid association ID format'
+      });
+    }
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+
+    // First, get the association to ensure it exists
+    const association = await Association.findByPk(id);
+    if (!association) {
+      return res.status(404).json({
+        success: false,
+        message: 'Association not found'
+      });
+    }
+
+    // Build filter object for BOD members of this association
+    const whereClause = {
+      isActive: true,
+      associationId: parseInt(id)
+    };
+
+    // Add designation filter if provided
+    if (req.query.designation) {
+      whereClause.position = req.query.designation;
+    }
+
+    // Add search filter if provided
+    if (req.query.search) {
+      whereClause[Op.or] = [
+        { name: { [Op.iLike]: `%${req.query.search}%` } },
+        { position: { [Op.iLike]: `%${req.query.search}%` } },
+        { email: { [Op.iLike]: `%${req.query.search}%` } }
+      ];
+    }
+
+    const bodMembers = await BOD.findAndCountAll({
+      where: whereClause,
+      attributes: { exclude: ['createdBy', 'updatedBy'] },
+      order: [['position', 'ASC'], ['name', 'ASC']],
+      offset,
+      limit,
+      include: [{
+        model: Association,
+        as: 'association',
+        attributes: ['name']
+      }]
+    });
+
+    // Transform data to match mobile app expectations
+    const transformedBods = bodMembers.rows.map(bodMember => ({
+      _id: bodMember.id.toString(),
+      name: bodMember.name,
+      designation: bodMember.position || bodMember.designation,
+      profileImage: bodMember.profileImage || 'https://via.placeholder.com/100x100/cccccc/666666?text=No+Photo',
+      contactNumber: bodMember.contactNumber || bodMember.phone,
+      email: bodMember.email,
+      isActive: bodMember.isActive,
+      associationName: association.name
+    }));
+
+    res.status(200).json({
+      success: true,
+      association: {
+        id: association.id,
+        name: association.name,
+        city: association.city,
+        state: association.state
+      },
+      count: transformedBods.length,
+      total: bodMembers.count,
+      page,
+      limit,
+      hasNextPage: (page * limit) < bodMembers.count,
+      bods: transformedBods
+    });
+
+  } catch (error) {
+    console.error('Get association BOD error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching association BOD members'
     });
   }
 });
