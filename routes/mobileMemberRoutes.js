@@ -48,7 +48,7 @@ router.put('/profile', protectMobile, [
   body('businessName', 'Business name is required').notEmpty().trim(),
   body('businessType', 'Business type is required').isIn(['sound', 'decorator', 'catering', 'generator', 'madap', 'light']),
   body('city', 'City is required').notEmpty().trim(),
-  body('pincode', 'Pincode is required').matches(/^[0-9]{6}$/),
+  body('pincode').optional().matches(/^[0-9]{6}$/).withMessage('Please enter a valid 6-digit pincode'),
   body('associationName', 'Association name is required').notEmpty().trim(),
   body('birthDate').optional().isISO8601().withMessage('Birth date must be a valid date'),
   body('email').optional().isEmail().withMessage('Please provide a valid email')
