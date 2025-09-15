@@ -20,6 +20,7 @@ const memberRoutes = require('./routes/memberRoutes');
 const associationRoutes = require('./routes/associationRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
+const memberImportRoutes = require('./routes/memberImportRoutes');
 
 // Import mobile routes
 const mobileAuthRoutes = require('./routes/mobileAuthRoutes');
@@ -286,6 +287,7 @@ app.use('/api/vendors', vendorRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/bod', bodRoutes);
 app.use('/api/members', memberRoutes);
+app.use('/api/members', memberImportRoutes);
 app.use('/api/associations', associationRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/dashboard', dashboardRoutes);
