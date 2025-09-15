@@ -154,7 +154,7 @@ router.get('/recent-members', [
     // Get recent members
     const recentMembers = await Member.findAll({
       where,
-      attributes: ['name', 'businessName', 'phone', 'city', 'state', 'created_at', 'profileImage', 'associationName'],
+      attributes: ['id', 'name', 'businessName', 'phone', 'city', 'state', 'created_at', 'profileImage', 'associationName', 'birthDate'],
       include: [
         { model: User, as: 'createdByUser', attributes: ['name'] }
       ],
@@ -173,8 +173,12 @@ router.get('/recent-members', [
       profileImage: member.profileImage,
       city: member.city,
       state: member.state,
-      createdBy: member.createdBy?.name || 'Admin'
+      birthDate: member.birthDate,
+      createdBy: member.createdByUser?.name || 'Admin'
     }));
+
+    // Debug logging for birthDate
+    console.log('Recent members with birthDate:', members.map(m => ({ name: m.name, birthDate: m.birthDate })));
 
     res.status(200).json({
       success: true,
