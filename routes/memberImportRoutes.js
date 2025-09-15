@@ -14,8 +14,12 @@ router.post('/import-csv', [
   body('members').isArray({ min: 1, max: 1000 }).withMessage('Members must be an array with 1-1000 items'),
   body('members.*.name').notEmpty().withMessage('Name is required'),
   body('members.*.businessName').notEmpty().withMessage('Business name is required'),
-  body('members.*.businessType').optional().isIn(['catering', 'sound', 'mandap', 'madap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']).withMessage('Invalid business type'),
-  body('members.*.phone').isMobilePhone('en-IN').withMessage('Invalid phone number'),
+  body('members.*.businessType').optional().custom((value) => {
+    if (!value) return true; // Allow empty/null values
+    const validTypes = ['catering', 'sound', 'mandap', 'madap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other'];
+    return validTypes.includes(value);
+  }).withMessage('Invalid business type'),
+  body('members.*.phone').matches(/^[0-9+\-\s()]{10,15}$/).withMessage('Invalid phone number format'),
   body('members.*.email').optional().isEmail().withMessage('Invalid email'),
   body('members.*.city').notEmpty().withMessage('City is required'),
   body('members.*.state').notEmpty().withMessage('State is required'),
@@ -29,9 +33,15 @@ router.post('/import-csv', [
   body('members.*.description').optional().isLength({ max: 1000 }).withMessage('Description cannot exceed 1000 characters')
 ], async (req, res) => {
   try {
+    console.log('CSV Import Request received:', {
+      membersCount: req.body.members?.length,
+      sampleMember: req.body.members?.[0]
+    });
+    
     // Check validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('CSV Import Validation Errors:', errors.array());
       return res.status(400).json({
         success: false,
         message: 'Validation failed',
