@@ -25,9 +25,22 @@ router.post('/import-csv', [
   body('members.*.state').notEmpty().withMessage('State is required'),
   body('members.*.district').optional().notEmpty().withMessage('District cannot be empty if provided'),
   body('members.*.associationName').notEmpty().withMessage('Association name is required'),
-  body('members.*.birthDate').optional().isISO8601().withMessage('Invalid birth date format'),
-  body('members.*.gstNumber').optional().matches(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/).withMessage('Invalid GST number format'),
-  body('members.*.experience').optional().isInt({ min: 0, max: 100 }).withMessage('Experience must be between 0-100 years'),
+  body('members.*.birthDate').optional().custom((value) => {
+    if (!value) return true; // Allow empty values
+    // Accept both DD-MM-YYYY and YYYY-MM-DD formats
+    const dateRegex1 = /^\d{2}-\d{2}-\d{4}$/; // DD-MM-YYYY
+    const dateRegex2 = /^\d{4}-\d{2}-\d{2}$/; // YYYY-MM-DD
+    return dateRegex1.test(value) || dateRegex2.test(value);
+  }).withMessage('Invalid birth date format. Use DD-MM-YYYY or YYYY-MM-DD'),
+  body('members.*.gstNumber').optional().custom((value) => {
+    if (!value || value === '') return true; // Allow empty values
+    return /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(value);
+  }).withMessage('Invalid GST number format'),
+  body('members.*.experience').optional().custom((value) => {
+    if (!value || value === '') return true; // Allow empty values
+    const num = parseInt(value);
+    return !isNaN(num) && num >= 0 && num <= 100;
+  }).withMessage('Experience must be between 0-100 years'),
   body('members.*.pincode').optional().matches(/^[0-9]{6}$/).withMessage('Pincode must be 6 digits'),
   body('members.*.address').optional().isLength({ max: 500 }).withMessage('Address cannot exceed 500 characters'),
   body('members.*.description').optional().isLength({ max: 1000 }).withMessage('Description cannot exceed 1000 characters')

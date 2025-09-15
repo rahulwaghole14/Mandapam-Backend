@@ -202,11 +202,22 @@ class MemberImportService {
         continue;
       }
 
-      // Validate birth date
+      // Validate and convert birth date
       if (member.birthDate) {
-        const birthDateValidation = validateBirthDate(member.birthDate);
+        let formattedBirthDate = member.birthDate;
+        
+        // Convert DD-MM-YYYY to YYYY-MM-DD if needed
+        if (/^\d{2}-\d{2}-\d{4}$/.test(member.birthDate)) {
+          const [day, month, year] = member.birthDate.split('-');
+          formattedBirthDate = `${year}-${month}-${day}`;
+        }
+        
+        const birthDateValidation = validateBirthDate(formattedBirthDate);
         if (!birthDateValidation.isValid) {
           errors.push(birthDateValidation.message);
+        } else {
+          // Update the member object with formatted date
+          member.birthDate = formattedBirthDate;
         }
       }
 
@@ -281,3 +292,4 @@ class MemberImportService {
 }
 
 module.exports = new MemberImportService();
+
