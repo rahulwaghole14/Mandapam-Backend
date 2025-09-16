@@ -4,6 +4,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const dotenv = require('dotenv');
 const path = require('path');
+const fs = require('fs');
 
 // Load environment variables
 dotenv.config();
@@ -106,7 +107,15 @@ app.use('/api/', limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// This configuration is missing on your production server:
+// Static file serving for uploads with CORS headers
+const uploadsPath = path.join(__dirname, 'uploads');
+
+// Ensure uploads directory exists
+if (!fs.existsSync(uploadsPath)) {
+  fs.mkdirSync(uploadsPath, { recursive: true });
+  console.log('Created uploads directory:', uploadsPath);
+}
+
 app.use('/uploads', (req, res, next) => {
   // CORS headers for static files
   const origin = req.headers.origin;
@@ -121,7 +130,50 @@ app.use('/uploads', (req, res, next) => {
   } else {
     next();
   }
-}, express.static(path.join(__dirname, 'uploads')));
+}, express.static(uploadsPath, {
+  // Add error handling for missing files
+  fallthrough: false,
+  setHeaders: (res, path) => {
+    res.set('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+  }
+}));
+
+// Debug route for uploads
+app.get('/uploads/*', (req, res) => {
+  const filePath = path.join(uploadsPath, req.params[0]);
+  console.log('Requested file:', filePath);
+  console.log('File exists:', fs.existsSync(filePath));
+  console.log('Uploads directory exists:', fs.existsSync(uploadsPath));
+  
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({
+      error: 'File not found',
+      message: `File ${req.params[0]} not found in uploads directory`,
+      uploadsPath: uploadsPath,
+      requestedPath: filePath
+    });
+  }
+  
+  res.sendFile(filePath);
+});
+
+// Debug route to list uploads directory contents
+app.get('/debug/uploads', (req, res) => {
+  try {
+    const files = fs.readdirSync(uploadsPath);
+    res.json({
+      uploadsPath: uploadsPath,
+      files: files,
+      count: files.length
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to read uploads directory',
+      message: error.message,
+      uploadsPath: uploadsPath
+    });
+  }
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {
