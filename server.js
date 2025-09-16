@@ -62,6 +62,7 @@ const allowedOrigins = [
   'https://mandap-ui-all-modals-web.vercel.app',
   'https://mandap-ui-all-modals-web.netlify.app',
   'https://mandap-ui-all-modals-web.onrender.com',
+  'https://mandapam-backend-97mi.onrender.com',
   // Production domain
   'https://mandapassociation.com'
 ];
