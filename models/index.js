@@ -9,6 +9,7 @@ const Vendor = require('./Vendor');
 const BOD = require('./BOD');
 const OTP = require('./OTP');
 const AppVersion = require('./AppVersion');
+const Gallery = require('./Gallery');
 
 // Define associations
 const defineAssociations = () => {
@@ -128,6 +129,56 @@ const defineAssociations = () => {
     foreignKey: 'updatedBy',
     as: 'updatedByUser'
   });
+
+  // Gallery associations
+  User.hasMany(Gallery, {
+    foreignKey: 'uploadedBy',
+    as: 'uploadedImages'
+  });
+  Gallery.belongsTo(User, {
+    foreignKey: 'uploadedBy',
+    as: 'uploadedByUser'
+  });
+
+  // Event has many Gallery images
+  Event.hasMany(Gallery, {
+    foreignKey: 'entityId',
+    constraints: false,
+    scope: {
+      entityType: 'event'
+    },
+    as: 'galleryImages'
+  });
+
+  // Member has many Gallery images
+  Member.hasMany(Gallery, {
+    foreignKey: 'entityId',
+    constraints: false,
+    scope: {
+      entityType: 'member'
+    },
+    as: 'galleryImages'
+  });
+
+  // Association has many Gallery images
+  Association.hasMany(Gallery, {
+    foreignKey: 'entityId',
+    constraints: false,
+    scope: {
+      entityType: 'association'
+    },
+    as: 'galleryImages'
+  });
+
+  // Vendor has many Gallery images
+  Vendor.hasMany(Gallery, {
+    foreignKey: 'entityId',
+    constraints: false,
+    scope: {
+      entityType: 'vendor'
+    },
+    as: 'galleryImages'
+  });
 };
 
 // Initialize associations
@@ -143,5 +194,6 @@ module.exports = {
   Vendor,
   BOD,
   OTP,
-  AppVersion
+  AppVersion,
+  Gallery
 };

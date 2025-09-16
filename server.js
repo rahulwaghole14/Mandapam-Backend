@@ -22,6 +22,7 @@ const associationRoutes = require('./routes/associationRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const memberImportRoutes = require('./routes/memberImportRoutes');
+const galleryRoutes = require('./routes/galleryRoutes');
 
 // Import mobile routes
 const mobileAuthRoutes = require('./routes/mobileAuthRoutes');
@@ -444,6 +445,7 @@ app.use('/api/members', memberImportRoutes);
 app.use('/api/associations', associationRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/gallery', galleryRoutes);
 
 // Mobile API Routes
 app.use('/api/mobile', mobileAuthRoutes);
