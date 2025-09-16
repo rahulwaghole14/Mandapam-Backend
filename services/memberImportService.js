@@ -72,37 +72,27 @@ class MemberImportService {
   }
 
   /**
-   * Check for duplicate members by phone and email
+   * Check for duplicate members by phone only
    * @param {Array} members - Array of member objects
-   * @returns {Map} - Map of duplicate phone/email to type
+   * @returns {Map} - Map of duplicate phone to type
    */
   async checkDuplicates(members) {
     const phones = members.map(m => m.phone).filter(Boolean);
-    const emails = members.map(m => m.email).filter(Boolean);
     
-    if (phones.length === 0 && emails.length === 0) {
+    if (phones.length === 0) {
       return new Map();
-    }
-
-    const whereConditions = [];
-    if (phones.length > 0) {
-      whereConditions.push({ phone: { [Op.in]: phones } });
-    }
-    if (emails.length > 0) {
-      whereConditions.push({ email: { [Op.in]: emails } });
     }
 
     const existingMembers = await Member.findAll({
       where: {
-        [Op.or]: whereConditions
+        phone: { [Op.in]: phones }
       },
-      attributes: ['phone', 'email']
+      attributes: ['phone']
     });
 
     const duplicateMap = new Map();
     existingMembers.forEach(member => {
       if (member.phone) duplicateMap.set(member.phone, 'phone');
-      if (member.email) duplicateMap.set(member.email, 'email');
     });
 
     return duplicateMap;
@@ -112,7 +102,7 @@ class MemberImportService {
    * Process a batch of members
    * @param {Array} batch - Batch of members to process
    * @param {Map} associationMap - Association name to ID mapping
-   * @param {Map} duplicateMap - Duplicate phone/email mapping
+   * @param {Map} duplicateMap - Duplicate phone mapping
    * @param {number} createdBy - User ID
    * @param {Object} results - Results object to update
    * @param {number} startIndex - Starting index for row numbering
@@ -192,15 +182,6 @@ class MemberImportService {
         continue;
       }
 
-      if (member.email && duplicateMap.has(member.email)) {
-        results.warnings.push({
-          row: rowNumber,
-          data: { name: member.name, email: member.email },
-          message: `Member with email ${member.email} already exists, skipped`
-        });
-        results.summary.skipped++;
-        continue;
-      }
 
       // Validate and convert birth date
       if (member.birthDate) {
