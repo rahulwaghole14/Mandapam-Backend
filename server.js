@@ -43,6 +43,7 @@ app.use(helmet());
 const allowedOrigins = [
   'http://localhost:3000', 
   'http://localhost:3001', 
+  'http://localhost:3002', // Added for current dev server
   'http://localhost:8080',
   'http://localhost:8081', 
   'http://localhost:8082',
@@ -50,6 +51,7 @@ const allowedOrigins = [
   'http://localhost:4200', // Angular default
   'http://127.0.0.1:3000',
   'http://127.0.0.1:3001',
+  'http://127.0.0.1:3002', // Added for current dev server
   'http://127.0.0.1:8080',
   'http://127.0.0.1:8081',
   'http://127.0.0.1:8082',
@@ -116,8 +118,41 @@ if (!fs.existsSync(uploadsPath)) {
   console.log('Created uploads directory:', uploadsPath);
 }
 
-// Simple static file serving for uploads - no CORS complexity
-app.use('/uploads', express.static(uploadsPath));
+// Static file serving with CORS headers for uploads
+app.use('/uploads', (req, res, next) => {
+  const origin = req.headers.origin;
+  
+  // Set CORS headers for all requests
+  if (!origin || allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin || '*');
+  } else {
+    // For development, be more permissive
+    if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
+      res.header('Access-Control-Allow-Origin', '*');
+    } else {
+      res.header('Access-Control-Allow-Origin', 'null');
+    }
+  }
+  
+  res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Vary', 'Origin');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+}, express.static(uploadsPath, {
+  setHeaders: (res, path) => {
+    // Set additional headers for static files
+    res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  }
+}));
 
 // Debug route for uploads
 app.get('/uploads/*', (req, res) => {
@@ -156,12 +191,31 @@ app.get('/debug/uploads', (req, res) => {
   }
 });
 
-// Simple image serving route
+// Simple image serving route with CORS headers
 app.get('/uploads/:filename', (req, res) => {
   const filename = req.params.filename;
   const filePath = path.join(uploadsPath, filename);
+  const origin = req.headers.origin;
   
-  console.log('Image request:', filename);
+  console.log('Image request:', filename, 'from origin:', origin);
+  
+  // Set CORS headers
+  if (!origin || allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin || '*');
+  } else {
+    // For development, be more permissive
+    if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
+      res.header('Access-Control-Allow-Origin', '*');
+    } else {
+      res.header('Access-Control-Allow-Origin', 'null');
+    }
+  }
+  
+  res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Vary', 'Origin');
+  res.header('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
   
   // Check if file exists
   if (!fs.existsSync(filePath)) {
