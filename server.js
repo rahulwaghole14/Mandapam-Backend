@@ -116,25 +116,46 @@ if (!fs.existsSync(uploadsPath)) {
   console.log('Created uploads directory:', uploadsPath);
 }
 
+// CORS middleware for uploads - must be before static file serving
 app.use('/uploads', (req, res, next) => {
-  // CORS headers for static files
   const origin = req.headers.origin;
+  
+  // Set CORS headers for all requests
   if (!origin || allowedOrigins.includes(origin)) {
     res.header('Access-Control-Allow-Origin', origin || '*');
+  } else {
+    // For development, allow all origins
+    if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
+      res.header('Access-Control-Allow-Origin', '*');
+    }
   }
+  
   res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
   
+  // Handle preflight requests
   if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
-  } else {
-    next();
+    res.status(200).end();
+    return;
   }
-}, express.static(uploadsPath, {
+  
+  next();
+});
+
+// Static file serving for uploads
+app.use('/uploads', express.static(uploadsPath, {
   // Add error handling for missing files
   fallthrough: false,
   setHeaders: (res, path) => {
     res.set('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+    // Ensure CORS headers are set on the response
+    const origin = res.req.headers.origin;
+    if (!origin || allowedOrigins.includes(origin)) {
+      res.set('Access-Control-Allow-Origin', origin || '*');
+    } else if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
+      res.set('Access-Control-Allow-Origin', '*');
+    }
   }
 }));
 
@@ -174,6 +195,30 @@ app.get('/debug/uploads', (req, res) => {
     });
   }
 });
+
+// Additional CORS route specifically for image access
+app.get('/uploads/:filename', (req, res, next) => {
+  const origin = req.headers.origin;
+  
+  // Set permissive CORS headers for image access
+  if (origin) {
+    res.header('Access-Control-Allow-Origin', origin);
+  } else {
+    res.header('Access-Control-Allow-Origin', '*');
+  }
+  
+  res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+  
+  next();
+}, express.static(uploadsPath));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
