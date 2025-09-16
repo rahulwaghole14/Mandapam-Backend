@@ -120,22 +120,31 @@ if (!fs.existsSync(uploadsPath)) {
 app.use('/uploads', (req, res, next) => {
   const origin = req.headers.origin;
   
-  // Set CORS headers for all requests
-  if (!origin || allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin || '*');
+  // Log CORS request for debugging
+  console.log('CORS request for uploads:', {
+    origin: origin,
+    method: req.method,
+    url: req.url,
+    userAgent: req.headers['user-agent']
+  });
+  
+  // Set permissive CORS headers for production
+  if (origin) {
+    res.header('Access-Control-Allow-Origin', origin);
+    console.log('Set CORS origin to:', origin);
   } else {
-    // For development, allow all origins
-    if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
-      res.header('Access-Control-Allow-Origin', '*');
-    }
+    res.header('Access-Control-Allow-Origin', '*');
+    console.log('Set CORS origin to: *');
   }
   
   res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
   
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
+    console.log('Handling preflight OPTIONS request');
     res.status(200).end();
     return;
   }
@@ -149,13 +158,20 @@ app.use('/uploads', express.static(uploadsPath, {
   fallthrough: false,
   setHeaders: (res, path) => {
     res.set('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+    
     // Ensure CORS headers are set on the response
     const origin = res.req.headers.origin;
-    if (!origin || allowedOrigins.includes(origin)) {
-      res.set('Access-Control-Allow-Origin', origin || '*');
-    } else if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
+    if (origin) {
+      res.set('Access-Control-Allow-Origin', origin);
+      console.log('Static file CORS origin set to:', origin);
+    } else {
       res.set('Access-Control-Allow-Origin', '*');
+      console.log('Static file CORS origin set to: *');
     }
+    
+    res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.set('Access-Control-Allow-Credentials', 'true');
   }
 }));
 
@@ -200,7 +216,47 @@ app.get('/debug/uploads', (req, res) => {
 app.get('/uploads/:filename', (req, res, next) => {
   const origin = req.headers.origin;
   
+  console.log('Image access request:', {
+    filename: req.params.filename,
+    origin: origin,
+    method: req.method
+  });
+  
   // Set permissive CORS headers for image access
+  if (origin) {
+    res.header('Access-Control-Allow-Origin', origin);
+    console.log('Image CORS origin set to:', origin);
+  } else {
+    res.header('Access-Control-Allow-Origin', '*');
+    console.log('Image CORS origin set to: *');
+  }
+  
+  res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Max-Age', '86400');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    console.log('Handling image preflight OPTIONS request');
+    res.status(200).end();
+    return;
+  }
+  
+  next();
+}, express.static(uploadsPath));
+
+// CORS test endpoint
+app.get('/cors-test', (req, res) => {
+  const origin = req.headers.origin;
+  
+  console.log('CORS test request:', {
+    origin: origin,
+    method: req.method,
+    headers: req.headers
+  });
+  
+  // Set CORS headers
   if (origin) {
     res.header('Access-Control-Allow-Origin', origin);
   } else {
@@ -211,14 +267,13 @@ app.get('/uploads/:filename', (req, res, next) => {
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   res.header('Access-Control-Allow-Credentials', 'true');
   
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
-  
-  next();
-}, express.static(uploadsPath));
+  res.json({
+    success: true,
+    message: 'CORS test successful',
+    origin: origin,
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {
