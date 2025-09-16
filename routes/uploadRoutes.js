@@ -53,10 +53,11 @@ router.post('/profile-image', protect, upload.single('image'), async (req, res) 
       });
     }
 
-    // Return the filename for storage in database
+    // Return the filename and full URL for storage in database
     res.status(200).json({
       success: true,
       filename: req.file.filename,
+      url: `/uploads/${req.file.filename}`,
       message: 'Profile image uploaded successfully'
     });
 
@@ -102,6 +103,35 @@ router.delete('/:filename', protect, async (req, res) => {
   }
 });
 
+// @desc    Upload event image
+// @route   POST /api/upload/event-image
+// @access  Private
+router.post('/event-image', protect, upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No image file provided'
+      });
+    }
+
+    // Return the filename and full URL for storage in database
+    res.status(200).json({
+      success: true,
+      filename: req.file.filename,
+      url: `/uploads/${req.file.filename}`,
+      message: 'Event image uploaded successfully'
+    });
+
+  } catch (error) {
+    console.error('Event image upload error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while uploading event image'
+    });
+  }
+});
+
 // @desc    Get upload info
 // @route   GET /api/upload
 // @access  Private
@@ -110,6 +140,7 @@ router.get('/', protect, (req, res) => {
     message: 'Upload API is working!',
     endpoints: {
       'POST /profile-image': 'Upload profile image (multipart/form-data with "image" field)',
+      'POST /event-image': 'Upload event image (multipart/form-data with "image" field)',
       'DELETE /:filename': 'Delete uploaded file'
     }
   });

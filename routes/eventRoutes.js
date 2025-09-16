@@ -130,6 +130,13 @@ router.get('/', [
     const hasNextPage = page < totalPages;
     const hasPrevPage = page > 1;
 
+    // Transform image field to include full URL for all events
+    events.forEach(event => {
+      if (event.image) {
+        event.imageURL = `/uploads/${event.image}`;
+      }
+    });
+
     res.status(200).json({
       success: true,
       count: events.length,
@@ -175,6 +182,11 @@ router.get('/:id', async (req, res) => {
         success: false,
         message: 'Access denied to event in different district'
       });
+    }
+
+    // Transform image field to include full URL if image exists
+    if (event.image) {
+      event.imageURL = `/uploads/${event.image}`;
     }
 
     res.status(200).json({
@@ -310,7 +322,7 @@ router.post('/', [
       registrationFee: req.body.registrationFee,
       isActive: req.body.isActive !== undefined ? req.body.isActive : true,
       isPublic: req.body.isPublic !== undefined ? req.body.isPublic : true,
-      image: req.body.image || req.body.imageURL,
+      image: req.body.image || req.body.imageURL || req.body.url,
       createdBy: req.user.id,
       updatedBy: req.user.id,
       status: 'Upcoming',
@@ -326,6 +338,11 @@ router.post('/', [
         { model: User, as: 'createdByUser', attributes: ['name', 'email'] }
       ]
     });
+
+    // Transform image field to include full URL if image exists
+    if (eventWithDetails.image) {
+      eventWithDetails.imageURL = `/uploads/${eventWithDetails.image}`;
+    }
 
     res.status(201).json({
       success: true,
@@ -430,6 +447,11 @@ router.put('/:id', [
       ]
     });
 
+    // Transform image field to include full URL if image exists
+    if (event.image) {
+      event.imageURL = `/uploads/${event.image}`;
+    }
+
     res.status(200).json({
       success: true,
       event
@@ -506,6 +528,13 @@ router.get('/upcoming', async (req, res) => {
       ],
       order: [['startDate', 'ASC']],
       limit: parseInt(limit)
+    });
+
+    // Transform image field to include full URL for all events
+    upcomingEvents.forEach(event => {
+      if (event.image) {
+        event.imageURL = `/uploads/${event.image}`;
+      }
     });
 
     res.status(200).json({
