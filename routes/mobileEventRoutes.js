@@ -1,5 +1,5 @@
 const express = require('express');
-const { Event } = require('../models');
+const { Event, Association } = require('../models');
 const { Op, sequelize } = require('sequelize');
 const { protectMobile } = require('../middleware/mobileAuthMiddleware');
 
@@ -14,12 +14,11 @@ router.get('/events', protectMobile, async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const offset = (page - 1) * limit;
 
-    // Build filter object - only show current and future events
-    const now = new Date();
+    // Build filter object - show all events (past, current, and future)
     const whereClause = { 
       isPublic: true,
-      isActive: true,
-      startDate: { [Op.gte]: now } // Only events starting from today onwards
+      isActive: true
+      // Removed date filter to include old events
     };
     
     if (req.query.type) {
@@ -76,11 +75,10 @@ router.get('/events/upcoming', protectMobile, async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
 
-    const now = new Date();
     const whereClause = {
       isPublic: true,
-      startDate: { [Op.gte]: now },
       isActive: true
+      // Removed date filter to include old events
     };
 
     const events = await Event.findAndCountAll({
@@ -114,6 +112,72 @@ router.get('/events/upcoming', protectMobile, async (req, res) => {
   }
 });
 
+// @desc    Get past events
+// @route   GET /api/mobile/events/past
+// @access  Private
+router.get('/events/past', protectMobile, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const offset = (page - 1) * limit;
+
+    const now = new Date();
+    const whereClause = {
+      isPublic: true,
+      isActive: true,
+      startDate: { [Op.lt]: now } // Only past events
+    };
+    
+    if (req.query.type) {
+      whereClause.type = req.query.type;
+    }
+    
+    if (req.query.city) {
+      whereClause.city = {
+        [Op.iLike]: `%${req.query.city}%`
+      };
+    }
+
+    // Build search query
+    if (req.query.search) {
+      whereClause[Op.or] = [
+        { title: { [Op.iLike]: `%${req.query.search}%` } },
+        { description: { [Op.iLike]: `%${req.query.search}%` } },
+        { contactPerson: { [Op.iLike]: `%${req.query.search}%` } }
+      ];
+    }
+
+    const events = await Event.findAndCountAll({
+      where: whereClause,
+      attributes: { exclude: ['createdBy', 'updatedBy'] },
+      order: [['startDate', 'DESC']], // Sort by start date descending (most recent first)
+      offset,
+      limit,
+      include: [{
+        model: Association,
+        as: 'association',
+        attributes: ['name']
+      }]
+    });
+
+    res.status(200).json({
+      success: true,
+      count: events.rows.length,
+      total: events.count,
+      page,
+      pages: Math.ceil(events.count / limit),
+      events: events.rows
+    });
+
+  } catch (error) {
+    console.error('Get past events error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching past events'
+    });
+  }
+});
+
 // @desc    Search events
 // @route   GET /api/mobile/events/search
 // @access  Private
@@ -132,12 +196,11 @@ router.get('/events/search', protectMobile, async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const offset = (page - 1) * limit;
 
-    // Build search query - only show current and future events
-    const now = new Date();
+    // Build search query - show all events (past, current, and future)
     const whereClause = { 
       isPublic: true,
-      isActive: true,
-      startDate: { [Op.gte]: now } // Only events starting from today onwards
+      isActive: true
+      // Removed date filter to include old events
     };
     
     if (q) {
@@ -206,6 +269,14 @@ router.get('/events/stats', protectMobile, async (req, res) => {
       }
     });
 
+    const pastEvents = await Event.count({
+      where: {
+        isPublic: true,
+        startDate: { [Op.lt]: now },
+        isActive: true
+      }
+    });
+
     // Get event types with counts using a simpler approach
     const allEvents = await Event.findAll({
       where: { isPublic: true },
@@ -228,8 +299,9 @@ router.get('/events/stats', protectMobile, async (req, res) => {
       stats: {
         totalEvents,
         upcomingEvents,
+        pastEvents,
         ongoingEvents: 0,
-        completedEvents: 0
+        completedEvents: pastEvents
       },
       eventTypes
     });
