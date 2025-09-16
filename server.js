@@ -116,52 +116,8 @@ if (!fs.existsSync(uploadsPath)) {
   console.log('Created uploads directory:', uploadsPath);
 }
 
-// CORS middleware for uploads - must be before static file serving
-app.use('/uploads', (req, res, next) => {
-  const origin = req.headers.origin;
-  
-  // Log CORS request for debugging
-  console.log('CORS request for uploads:', {
-    origin: origin,
-    method: req.method,
-    url: req.url,
-    userAgent: req.headers['user-agent'],
-    referer: req.headers.referer
-  });
-  
-  // Always set CORS headers - be very permissive
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
-  
-  console.log('Set CORS headers for uploads request');
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    console.log('Handling preflight OPTIONS request');
-    res.status(200).end();
-    return;
-  }
-  
-  next();
-});
-
-// Static file serving for uploads
-app.use('/uploads', express.static(uploadsPath, {
-  // Add error handling for missing files
-  fallthrough: false,
-  setHeaders: (res, path) => {
-    res.set('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
-    
-    // Always set CORS headers - be very permissive
-    res.set('Access-Control-Allow-Origin', '*');
-    res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.set('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-    
-    console.log('Static file CORS headers set for:', path);
-  }
-}));
+// Simple static file serving for uploads - no CORS complexity
+app.use('/uploads', express.static(uploadsPath));
 
 // Debug route for uploads
 app.get('/uploads/*', (req, res) => {
@@ -200,68 +156,20 @@ app.get('/debug/uploads', (req, res) => {
   }
 });
 
-// Direct image serving route with guaranteed CORS headers
+// Simple image serving route
 app.get('/uploads/:filename', (req, res) => {
   const filename = req.params.filename;
   const filePath = path.join(uploadsPath, filename);
   
-  console.log('Direct image access request:', {
-    filename: filename,
-    filePath: filePath,
-    origin: req.headers.origin,
-    method: req.method,
-    referer: req.headers.referer
-  });
-  
-  // Set CORS headers first - be very explicit
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Max-Age', '86400');
-  res.header('Vary', 'Origin'); // Important for CORS caching
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    console.log('Handling direct image preflight OPTIONS request');
-    res.status(200).end();
-    return;
-  }
+  console.log('Image request:', filename);
   
   // Check if file exists
   if (!fs.existsSync(filePath)) {
-    console.log('File not found:', filePath);
     return res.status(404).json({
       error: 'File not found',
-      message: `File ${filename} not found in uploads directory`
+      message: `File ${filename} not found`
     });
   }
-  
-  console.log('Serving file directly with CORS headers:', filename);
-  
-  // Set content type based on file extension
-  const ext = path.extname(filename).toLowerCase();
-  const contentTypes = {
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.gif': 'image/gif',
-    '.webp': 'image/webp'
-  };
-  
-  if (contentTypes[ext]) {
-    res.set('Content-Type', contentTypes[ext]);
-  }
-  
-  // Add cache-busting headers to prevent CORS caching issues
-  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.set('Pragma', 'no-cache');
-  res.set('Expires', '0');
-  
-  console.log('Final response headers being sent:', {
-    'Access-Control-Allow-Origin': res.get('Access-Control-Allow-Origin'),
-    'Content-Type': res.get('Content-Type'),
-    'Cache-Control': res.get('Cache-Control')
-  });
   
   // Send the file
   res.sendFile(filePath);
