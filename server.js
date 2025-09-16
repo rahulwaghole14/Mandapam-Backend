@@ -125,22 +125,17 @@ app.use('/uploads', (req, res, next) => {
     origin: origin,
     method: req.method,
     url: req.url,
-    userAgent: req.headers['user-agent']
+    userAgent: req.headers['user-agent'],
+    referer: req.headers.referer
   });
   
-  // Set permissive CORS headers for production
-  if (origin) {
-    res.header('Access-Control-Allow-Origin', origin);
-    console.log('Set CORS origin to:', origin);
-  } else {
-    res.header('Access-Control-Allow-Origin', '*');
-    console.log('Set CORS origin to: *');
-  }
-  
+  // Always set CORS headers - be very permissive
+  res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
+  
+  console.log('Set CORS headers for uploads request');
   
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
@@ -159,19 +154,12 @@ app.use('/uploads', express.static(uploadsPath, {
   setHeaders: (res, path) => {
     res.set('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
     
-    // Ensure CORS headers are set on the response
-    const origin = res.req.headers.origin;
-    if (origin) {
-      res.set('Access-Control-Allow-Origin', origin);
-      console.log('Static file CORS origin set to:', origin);
-    } else {
-      res.set('Access-Control-Allow-Origin', '*');
-      console.log('Static file CORS origin set to: *');
-    }
-    
+    // Always set CORS headers - be very permissive
+    res.set('Access-Control-Allow-Origin', '*');
     res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.set('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-    res.set('Access-Control-Allow-Credentials', 'true');
+    
+    console.log('Static file CORS headers set for:', path);
   }
 }));
 
@@ -212,39 +200,60 @@ app.get('/debug/uploads', (req, res) => {
   }
 });
 
-// Additional CORS route specifically for image access
-app.get('/uploads/:filename', (req, res, next) => {
-  const origin = req.headers.origin;
+// Direct image serving route with guaranteed CORS headers
+app.get('/uploads/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const filePath = path.join(uploadsPath, filename);
   
-  console.log('Image access request:', {
-    filename: req.params.filename,
-    origin: origin,
-    method: req.method
+  console.log('Direct image access request:', {
+    filename: filename,
+    filePath: filePath,
+    origin: req.headers.origin,
+    method: req.method,
+    referer: req.headers.referer
   });
   
-  // Set permissive CORS headers for image access
-  if (origin) {
-    res.header('Access-Control-Allow-Origin', origin);
-    console.log('Image CORS origin set to:', origin);
-  } else {
-    res.header('Access-Control-Allow-Origin', '*');
-    console.log('Image CORS origin set to: *');
-  }
-  
+  // Set CORS headers first
+  res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Max-Age', '86400');
   
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
-    console.log('Handling image preflight OPTIONS request');
+    console.log('Handling direct image preflight OPTIONS request');
     res.status(200).end();
     return;
   }
   
-  next();
-}, express.static(uploadsPath));
+  // Check if file exists
+  if (!fs.existsSync(filePath)) {
+    console.log('File not found:', filePath);
+    return res.status(404).json({
+      error: 'File not found',
+      message: `File ${filename} not found in uploads directory`
+    });
+  }
+  
+  console.log('Serving file directly with CORS headers:', filename);
+  
+  // Set content type based on file extension
+  const ext = path.extname(filename).toLowerCase();
+  const contentTypes = {
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp'
+  };
+  
+  if (contentTypes[ext]) {
+    res.set('Content-Type', contentTypes[ext]);
+  }
+  
+  // Send the file
+  res.sendFile(filePath);
+});
 
 // CORS test endpoint
 app.get('/cors-test', (req, res) => {
