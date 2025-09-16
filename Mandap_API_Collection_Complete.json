@@ -1,0 +1,946 @@
+{
+  "info": {
+    "name": "Mandap Backend API - Complete Collection",
+    "description": "Complete API collection for Mandap Backend with all endpoints and parameters",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://mandapam-backend-97mi.onrender.com/api",
+      "type": "string"
+    },
+    {
+      "key": "auth_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "mobile_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@mandap.com\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "logout"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/profile",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "profile"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Mobile Authentication",
+      "item": [
+        {
+          "name": "Send OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mobileNumber\": \"9881976526\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mobile/send-otp",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "send-otp"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Verify OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mobileNumber\": \"9881976526\",\n  \"otp\": \"123456\",\n  \"otpId\": \"unique-otp-id\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mobile/verify-otp",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "verify-otp"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Members",
+      "item": [
+        {
+          "name": "Get All Members",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/members?page=1&limit=20&search=mumbai&businessType=mandap",
+              "host": ["{{base_url}}"],
+              "path": ["members"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "search",
+                  "value": "mumbai"
+                },
+                {
+                  "key": "businessType",
+                  "value": "mandap"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Member by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/members/1",
+              "host": ["{{base_url}}"],
+              "path": ["members", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Member",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Member\",\n  \"businessName\": \"Test Business\",\n  \"businessType\": \"mandap\",\n  \"phone\": \"9881976526\",\n  \"email\": \"test@example.com\",\n  \"city\": \"Mumbai\",\n  \"state\": \"Maharashtra\",\n  \"district\": \"Mumbai\",\n  \"associationName\": \"Nanded Association\",\n  \"birthDate\": \"1990-01-01\",\n  \"address\": \"123 Main Street\",\n  \"pincode\": \"400001\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/members",
+              "host": ["{{base_url}}"],
+              "path": ["members"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "CSV Import",
+      "item": [
+        {
+          "name": "Import CSV Members",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"members\": [\n    {\n      \"name\": \"Rahul Waghole\",\n      \"businessName\": \"RSL Solution PVT LTD\",\n      \"businessType\": \"mandap\",\n      \"phone\": \"9881976526\",\n      \"email\": \"test@example.com\",\n      \"city\": \"Mumbai\",\n      \"state\": \"Maharashtra\",\n      \"district\": \"Mumbai\",\n      \"associationName\": \"Nanded Association\",\n      \"birthDate\": \"01-01-1990\",\n      \"address\": \"123 Main Street\",\n      \"pincode\": \"400001\",\n      \"gstNumber\": \"\",\n      \"description\": \"\",\n      \"experience\": \"\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/members/import-csv",
+              "host": ["{{base_url}}"],
+              "path": ["members", "import-csv"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Events",
+      "item": [
+        {
+          "name": "Get All Events",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/events?page=1&limit=20&search=meeting&type=Meeting&status=Upcoming",
+              "host": ["{{base_url}}"],
+              "path": ["events"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "search",
+                  "value": "meeting"
+                },
+                {
+                  "key": "type",
+                  "value": "Meeting"
+                },
+                {
+                  "key": "status",
+                  "value": "Upcoming"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Test Event\",\n  \"description\": \"Event description\",\n  \"type\": \"Meeting\",\n  \"startDate\": \"2025-12-25T10:00:00.000Z\",\n  \"endDate\": \"2025-12-25T18:00:00.000Z\",\n  \"location\": \"Event Location\",\n  \"address\": \"Event Address\",\n  \"city\": \"Mumbai\",\n  \"state\": \"Maharashtra\",\n  \"pincode\": \"400001\",\n  \"contactPerson\": \"Contact Person\",\n  \"contactPhone\": \"9876543210\",\n  \"contactEmail\": \"contact@example.com\",\n  \"maxAttendees\": 100,\n  \"registrationFee\": 500,\n  \"priority\": \"Medium\",\n  \"isPublic\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/events",
+              "host": ["{{base_url}}"],
+              "path": ["events"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Mobile Events",
+      "item": [
+        {
+          "name": "Get All Events (Mobile)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mobile_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mobile/events?page=1&limit=20&type=Meeting&city=Mumbai",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "events"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "type",
+                  "value": "Meeting"
+                },
+                {
+                  "key": "city",
+                  "value": "Mumbai"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Past Events (Mobile)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mobile_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mobile/events/past?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "events", "past"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search Events (Mobile)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mobile_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mobile/events/search?q=meeting&type=Meeting&city=Mumbai",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "events", "search"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "meeting"
+                },
+                {
+                  "key": "type",
+                  "value": "Meeting"
+                },
+                {
+                  "key": "city",
+                  "value": "Mumbai"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Event Stats (Mobile)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mobile_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mobile/events/stats",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "events", "stats"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Get Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/stats",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "stats"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Recent Members",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/recent-members?limit=5",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "recent-members"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Growth Trends",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/growth-trends?year=2025",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "growth-trends"],
+              "query": [
+                {
+                  "key": "year",
+                  "value": "2025"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Associations",
+      "item": [
+        {
+          "name": "Get All Associations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/associations?page=1&limit=20&search=mumbai",
+              "host": ["{{base_url}}"],
+              "path": ["associations"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "search",
+                  "value": "mumbai"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Association",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Association\",\n  \"description\": \"Association description\",\n  \"address\": \"Association address\",\n  \"city\": \"Mumbai\",\n  \"state\": \"Maharashtra\",\n  \"pincode\": \"400001\",\n  \"contactPerson\": \"Contact Person\",\n  \"contactPhone\": \"9876543210\",\n  \"contactEmail\": \"contact@association.com\",\n  \"website\": \"https://association.com\",\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/associations",
+              "host": ["{{base_url}}"],
+              "path": ["associations"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "BOD (Board of Directors)",
+      "item": [
+        {
+          "name": "Get All BOD Members",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/bod?page=1&limit=20&search=president&designation=President",
+              "host": ["{{base_url}}"],
+              "path": ["bod"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "search",
+                  "value": "president"
+                },
+                {
+                  "key": "designation",
+                  "value": "President"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create BOD Member",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"BOD Member Name\",\n  \"designation\": \"President\",\n  \"email\": \"bod@example.com\",\n  \"contactNumber\": \"9876543210\",\n  \"address\": \"BOD Address\",\n  \"city\": \"Mumbai\",\n  \"state\": \"Maharashtra\",\n  \"pincode\": \"400001\",\n  \"profileImage\": \"image_url\",\n  \"bio\": \"BOD member bio\",\n  \"experience\": 10,\n  \"termStart\": \"2025-01-01\",\n  \"termEnd\": \"2027-12-31\",\n  \"associationId\": 1,\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/bod",
+              "host": ["{{base_url}}"],
+              "path": ["bod"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Vendors",
+      "item": [
+        {
+          "name": "Get All Vendors",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/vendors?page=1&limit=20&search=catering&businessType=catering&status=Active",
+              "host": ["{{base_url}}"],
+              "path": ["vendors"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "search",
+                  "value": "catering"
+                },
+                {
+                  "key": "businessType",
+                  "value": "catering"
+                },
+                {
+                  "key": "status",
+                  "value": "Active"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Vendor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Vendor Name\",\n  \"businessName\": \"Business Name\",\n  \"businessType\": \"catering\",\n  \"phone\": \"9876543210\",\n  \"email\": \"vendor@example.com\",\n  \"address\": \"Vendor Address\",\n  \"city\": \"Mumbai\",\n  \"state\": \"Maharashtra\",\n  \"pincode\": \"400001\",\n  \"gstNumber\": \"27ABCDE1234F1Z5\",\n  \"description\": \"Vendor description\",\n  \"experience\": 5,\n  \"status\": \"Active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/vendors",
+              "host": ["{{base_url}}"],
+              "path": ["vendors"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Mobile Members",
+      "item": [
+        {
+          "name": "Get Profile (Mobile)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mobile_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mobile/profile",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "profile"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Profile (Mobile)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mobile_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\",\n  \"businessName\": \"Updated Business\",\n  \"email\": \"updated@example.com\",\n  \"address\": \"Updated Address\",\n  \"description\": \"Updated Description\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mobile/profile",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "profile"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Members (Mobile)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mobile_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mobile/members?page=1&limit=50&businessType=mandap&city=Mumbai",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "members"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "businessType",
+                  "value": "mandap"
+                },
+                {
+                  "key": "city",
+                  "value": "Mumbai"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Today's Birthdays (Mobile)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mobile_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mobile/birthdays/today",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "birthdays", "today"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Upcoming Birthdays (Mobile)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mobile_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mobile/birthdays/upcoming?days=7",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "birthdays", "upcoming"],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "7"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Mobile App Updates",
+      "item": [
+        {
+          "name": "Check App Update",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/app/update-check?currentVersion=1.0.0&platform=android",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "app", "update-check"],
+              "query": [
+                {
+                  "key": "currentVersion",
+                  "value": "1.0.0"
+                },
+                {
+                  "key": "platform",
+                  "value": "android"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get App Version",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mobile/app/version",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "app", "version"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Upload",
+      "item": [
+        {
+          "name": "Upload Profile Image",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/upload/profile-image",
+              "host": ["{{base_url}}"],
+              "path": ["upload", "profile-image"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete File",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/upload/filename.jpg",
+              "host": ["{{base_url}}"],
+              "path": ["upload", "filename.jpg"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
