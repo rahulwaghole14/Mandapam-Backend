@@ -213,11 +213,12 @@ app.get('/uploads/:filename', (req, res) => {
     referer: req.headers.referer
   });
   
-  // Set CORS headers first
+  // Set CORS headers first - be very explicit
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   res.header('Access-Control-Max-Age', '86400');
+  res.header('Vary', 'Origin'); // Important for CORS caching
   
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
@@ -251,6 +252,17 @@ app.get('/uploads/:filename', (req, res) => {
     res.set('Content-Type', contentTypes[ext]);
   }
   
+  // Add cache-busting headers to prevent CORS caching issues
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  
+  console.log('Final response headers being sent:', {
+    'Access-Control-Allow-Origin': res.get('Access-Control-Allow-Origin'),
+    'Content-Type': res.get('Content-Type'),
+    'Cache-Control': res.get('Cache-Control')
+  });
+  
   // Send the file
   res.sendFile(filePath);
 });
@@ -266,21 +278,20 @@ app.get('/cors-test', (req, res) => {
   });
   
   // Set CORS headers
-  if (origin) {
-    res.header('Access-Control-Allow-Origin', origin);
-  } else {
-    res.header('Access-Control-Allow-Origin', '*');
-  }
-  
+  res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Vary', 'Origin');
   
   res.json({
     success: true,
     message: 'CORS test successful',
     origin: origin,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    headers: {
+      'Access-Control-Allow-Origin': res.get('Access-Control-Allow-Origin'),
+      'Access-Control-Allow-Methods': res.get('Access-Control-Allow-Methods')
+    }
   });
 });
 
