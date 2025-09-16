@@ -55,6 +55,10 @@ const allowedOrigins = [
   'http://127.0.0.1:5173',
   // Add your Render frontend URL here when deployed
   'https://mandap-web-frontend.onrender.com',
+  // Common frontend hosting domains
+  'https://mandap-ui-all-modals-web.vercel.app',
+  'https://mandap-ui-all-modals-web.netlify.app',
+  'https://mandap-ui-all-modals-web.onrender.com',
   // Production domain
   'https://mandapassociation.com'
 ];
@@ -102,8 +106,25 @@ app.use('/api/', limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Static file serving
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Static file serving with CORS headers
+app.use('/uploads', (req, res, next) => {
+  const origin = req.headers.origin;
+  
+  // Check if origin is allowed (same logic as main CORS)
+  if (!origin || allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin || '*');
+  }
+  
+  res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+}, express.static(path.join(__dirname, 'uploads')));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
