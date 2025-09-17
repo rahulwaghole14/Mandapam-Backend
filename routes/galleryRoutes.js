@@ -180,20 +180,68 @@ router.post('/:entityType/:entityId', [
     // Check if captions is an array or needs to be converted
     if (req.body.captions) {
       if (Array.isArray(req.body.captions)) {
-        captions = req.body.captions;
+        // If it's an array, check if it's an array of characters (single string split)
+        if (req.body.captions.length > 1 && req.body.captions.every(item => typeof item === 'string' && item.length === 1)) {
+          // This is likely a single string that was split into characters
+          captions = [req.body.captions.join('')];
+        } else {
+          // Normal array of captions
+          captions = req.body.captions;
+        }
       } else {
-        // If it's a string, convert to array
-        captions = [req.body.captions];
+        // If it's a string, try to parse it as JSON first, then convert to array
+        let captionValue = req.body.captions;
+        try {
+          // Check if it's a JSON string (starts with [ or {)
+          if (typeof captionValue === 'string' && (captionValue.startsWith('[') || captionValue.startsWith('{'))) {
+            const parsed = JSON.parse(captionValue);
+            if (Array.isArray(parsed)) {
+              captions = parsed;
+            } else {
+              captions = [parsed];
+            }
+          } else {
+            // Regular string, convert to array
+            captions = [captionValue];
+          }
+        } catch (e) {
+          // If JSON parsing fails, treat as regular string
+          captions = [captionValue];
+        }
       }
     }
     
     // Check if altTexts is an array or needs to be converted
     if (req.body.altTexts) {
       if (Array.isArray(req.body.altTexts)) {
-        altTexts = req.body.altTexts;
+        // If it's an array, check if it's an array of characters (single string split)
+        if (req.body.altTexts.length > 1 && req.body.altTexts.every(item => typeof item === 'string' && item.length === 1)) {
+          // This is likely a single string that was split into characters
+          altTexts = [req.body.altTexts.join('')];
+        } else {
+          // Normal array of altTexts
+          altTexts = req.body.altTexts;
+        }
       } else {
-        // If it's a string, convert to array
-        altTexts = [req.body.altTexts];
+        // If it's a string, try to parse it as JSON first, then convert to array
+        let altTextValue = req.body.altTexts;
+        try {
+          // Check if it's a JSON string (starts with [ or {)
+          if (typeof altTextValue === 'string' && (altTextValue.startsWith('[') || altTextValue.startsWith('{'))) {
+            const parsed = JSON.parse(altTextValue);
+            if (Array.isArray(parsed)) {
+              altTexts = parsed;
+            } else {
+              altTexts = [parsed];
+            }
+          } else {
+            // Regular string, convert to array
+            altTexts = [altTextValue];
+          }
+        } catch (e) {
+          // If JSON parsing fails, treat as regular string
+          altTexts = [altTextValue];
+        }
       }
     }
     
@@ -207,8 +255,25 @@ router.post('/:entityType/:entityId', [
             const indexB = parseInt(b.match(/\[(\d+)\]/)[1]);
             return indexA - indexB;
           })
-          .map(key => req.body[key]);
+          .map(key => {
+            const value = req.body[key];
+            // Check if the value is a JSON string that needs parsing
+            if (typeof value === 'string' && (value.startsWith('[') || value.startsWith('{'))) {
+              try {
+                const parsed = JSON.parse(value);
+                return Array.isArray(parsed) ? parsed[0] : parsed;
+              } catch (e) {
+                return value; // Return original value if parsing fails
+              }
+            }
+            return value;
+          });
       }
+    }
+    
+    // Handle the case where caption is sent as singular field
+    if (captions.length === 0 && req.body.caption) {
+      captions = [req.body.caption];
     }
     
     // Handle the case where altTexts might be sent as individual fields like altTexts[0], altTexts[1], etc.
@@ -221,8 +286,25 @@ router.post('/:entityType/:entityId', [
             const indexB = parseInt(b.match(/\[(\d+)\]/)[1]);
             return indexA - indexB;
           })
-          .map(key => req.body[key]);
+          .map(key => {
+            const value = req.body[key];
+            // Check if the value is a JSON string that needs parsing
+            if (typeof value === 'string' && (value.startsWith('[') || value.startsWith('{'))) {
+              try {
+                const parsed = JSON.parse(value);
+                return Array.isArray(parsed) ? parsed[0] : parsed;
+              } catch (e) {
+                return value; // Return original value if parsing fails
+              }
+            }
+            return value;
+          });
       }
+    }
+    
+    // Handle the case where altText is sent as singular field
+    if (altTexts.length === 0 && req.body.altText) {
+      altTexts = [req.body.altText];
     }
     
     // Debug logging for captions (can be removed in production)
@@ -265,8 +347,8 @@ router.post('/:entityType/:entityId', [
         entityId: parseInt(entityId),
         filename: file.filename,
         originalName: file.originalname,
-        caption: captions[index] || null,
-        altText: altTexts[index] || null,
+        caption: captions.length > 0 ? (captions[index] || captions[0] || null) : null,
+        altText: altTexts.length > 0 ? (altTexts[index] || altTexts[0] || null) : null,
         displayOrder: currentOrder + index,
         isActive: true,
         isFeatured: false,
