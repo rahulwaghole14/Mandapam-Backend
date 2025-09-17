@@ -31,6 +31,8 @@ const mobileEventRoutes = require('./routes/mobileEventRoutes');
 const mobileAssociationRoutes = require('./routes/mobileAssociationRoutes');
 const mobileUploadRoutes = require('./routes/mobileUploadRoutes');
 const mobileAppUpdateRoutes = require('./routes/mobileAppUpdateRoutes');
+const mobileNotificationRoutes = require('./routes/mobileNotificationRoutes');
+const adminNotificationRoutes = require('./routes/adminNotificationRoutes');
 
 // Import middleware
 const { errorHandler } = require('./middleware/errorMiddleware');
@@ -446,6 +448,7 @@ app.use('/api/associations', associationRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/gallery', galleryRoutes);
+app.use('/api/admin/notifications', adminNotificationRoutes);
 
 // Mobile API Routes
 app.use('/api/mobile', mobileAuthRoutes);
@@ -454,6 +457,7 @@ app.use('/api/mobile', mobileEventRoutes);
 app.use('/api/mobile', mobileAssociationRoutes);
 app.use('/api/mobile', mobileUploadRoutes);
 app.use('/api/mobile', mobileAppUpdateRoutes);
+app.use('/api/mobile/notifications', mobileNotificationRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

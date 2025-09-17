@@ -4,6 +4,7 @@ const { Op } = require('sequelize');
 const Event = require('../models/Event');
 const User = require('../models/User');
 const { protect, authorize, authorizeDistrict } = require('../middleware/authMiddleware');
+const fcmService = require('../services/fcmService');
 
 const router = express.Router();
 
@@ -344,6 +345,28 @@ router.post('/', [
       eventWithDetails.imageURL = `/uploads/${eventWithDetails.image}`;
     }
 
+    // Send notification for new event
+    try {
+      const notification = {
+        title: `New Event: ${eventWithDetails.title}`,
+        body: `${eventWithDetails.type} on ${new Date(eventWithDetails.startDate).toLocaleDateString()} at ${eventWithDetails.location || eventWithDetails.city}`,
+        type: 'event',
+        data: {
+          type: 'event',
+          eventId: eventWithDetails.id.toString(),
+          action: 'view_event'
+        },
+        eventId: eventWithDetails.id
+      };
+
+      // Send to all users (you can modify this to target specific users)
+      await fcmService.sendNotificationToAllUsers(notification);
+      console.log(`✅ Event notification sent for event: ${eventWithDetails.title}`);
+    } catch (notificationError) {
+      console.error('❌ Error sending event notification:', notificationError);
+      // Don't fail the event creation if notification fails
+    }
+
     res.status(201).json({
       success: true,
       event: eventWithDetails
@@ -450,6 +473,28 @@ router.put('/:id', [
     // Transform image field to include full URL if image exists
     if (event.image) {
       event.imageURL = `/uploads/${event.image}`;
+    }
+
+    // Send notification for event update
+    try {
+      const notification = {
+        title: `Event Updated: ${event.title}`,
+        body: `Event details have been updated. Check for changes in time, location, or other details.`,
+        type: 'event',
+        data: {
+          type: 'event',
+          eventId: event.id.toString(),
+          action: 'view_event'
+        },
+        eventId: event.id
+      };
+
+      // Send to all users (you can modify this to target specific users)
+      await fcmService.sendNotificationToAllUsers(notification);
+      console.log(`✅ Event update notification sent for event: ${event.title}`);
+    } catch (notificationError) {
+      console.error('❌ Error sending event update notification:', notificationError);
+      // Don't fail the event update if notification fails
     }
 
     res.status(200).json({

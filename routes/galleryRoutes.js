@@ -343,18 +343,18 @@ router.post('/:entityType/:entityId', [
     // Prepare gallery records
     const galleryRecords = req.files.map((file, index) => {
       const record = {
-        entityType,
-        entityId: parseInt(entityId),
-        filename: file.filename,
-        originalName: file.originalname,
+      entityType,
+      entityId: parseInt(entityId),
+      filename: file.filename,
+      originalName: file.originalname,
         caption: captions.length > 0 ? (captions[index] || captions[0] || null) : null,
         altText: altTexts.length > 0 ? (altTexts[index] || altTexts[0] || null) : null,
-        displayOrder: currentOrder + index,
-        isActive: true,
-        isFeatured: false,
-        fileSize: file.size,
-        mimeType: file.mimetype,
-        uploadedBy: req.user.id
+      displayOrder: currentOrder + index,
+      isActive: true,
+      isFeatured: false,
+      fileSize: file.size,
+      mimeType: file.mimetype,
+      uploadedBy: req.user.id
       };
       
       // Debug logging for each record (can be removed in production)

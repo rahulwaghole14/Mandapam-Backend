@@ -10,6 +10,8 @@ const BOD = require('./BOD');
 const OTP = require('./OTP');
 const AppVersion = require('./AppVersion');
 const Gallery = require('./Gallery');
+const FCMToken = require('./FCMToken');
+const NotificationLog = require('./NotificationLog');
 
 // Define associations
 const defineAssociations = () => {
@@ -179,6 +181,36 @@ const defineAssociations = () => {
     },
     as: 'galleryImages'
   });
+
+  // User has many FCM tokens
+  User.hasMany(FCMToken, {
+    foreignKey: 'userId',
+    as: 'fcmTokens'
+  });
+  FCMToken.belongsTo(User, {
+    foreignKey: 'userId',
+    as: 'user'
+  });
+
+  // User has many Notification logs
+  User.hasMany(NotificationLog, {
+    foreignKey: 'userId',
+    as: 'notificationLogs'
+  });
+  NotificationLog.belongsTo(User, {
+    foreignKey: 'userId',
+    as: 'user'
+  });
+
+  // Event has many Notification logs
+  Event.hasMany(NotificationLog, {
+    foreignKey: 'eventId',
+    as: 'notificationLogs'
+  });
+  NotificationLog.belongsTo(Event, {
+    foreignKey: 'eventId',
+    as: 'event'
+  });
 };
 
 // Initialize associations
@@ -195,5 +227,7 @@ module.exports = {
   BOD,
   OTP,
   AppVersion,
-  Gallery
+  Gallery,
+  FCMToken,
+  NotificationLog
 };
