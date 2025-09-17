@@ -172,7 +172,64 @@ router.post('/:entityType/:entityId', [
     }
 
     const { entityType, entityId } = req.params;
-    const { captions = [], altTexts = [] } = req.body;
+    
+    // Handle captions and altTexts - they might come as arrays or individual fields
+    let captions = [];
+    let altTexts = [];
+    
+    // Check if captions is an array or needs to be converted
+    if (req.body.captions) {
+      if (Array.isArray(req.body.captions)) {
+        captions = req.body.captions;
+      } else {
+        // If it's a string, convert to array
+        captions = [req.body.captions];
+      }
+    }
+    
+    // Check if altTexts is an array or needs to be converted
+    if (req.body.altTexts) {
+      if (Array.isArray(req.body.altTexts)) {
+        altTexts = req.body.altTexts;
+      } else {
+        // If it's a string, convert to array
+        altTexts = [req.body.altTexts];
+      }
+    }
+    
+    // Handle the case where captions might be sent as individual fields like captions[0], captions[1], etc.
+    if (captions.length === 0) {
+      const captionKeys = Object.keys(req.body).filter(key => key.startsWith('captions['));
+      if (captionKeys.length > 0) {
+        captions = captionKeys
+          .sort((a, b) => {
+            const indexA = parseInt(a.match(/\[(\d+)\]/)[1]);
+            const indexB = parseInt(b.match(/\[(\d+)\]/)[1]);
+            return indexA - indexB;
+          })
+          .map(key => req.body[key]);
+      }
+    }
+    
+    // Handle the case where altTexts might be sent as individual fields like altTexts[0], altTexts[1], etc.
+    if (altTexts.length === 0) {
+      const altTextKeys = Object.keys(req.body).filter(key => key.startsWith('altTexts['));
+      if (altTextKeys.length > 0) {
+        altTexts = altTextKeys
+          .sort((a, b) => {
+            const indexA = parseInt(a.match(/\[(\d+)\]/)[1]);
+            const indexB = parseInt(b.match(/\[(\d+)\]/)[1]);
+            return indexA - indexB;
+          })
+          .map(key => req.body[key]);
+      }
+    }
+    
+    // Debug logging for captions (can be removed in production)
+    console.log('=== GALLERY UPLOAD DEBUG ===');
+    console.log('req.body keys:', Object.keys(req.body));
+    console.log('captions received:', captions);
+    console.log('altTexts received:', altTexts);
 
     // Validate entity type
     const validEntityTypes = ['event', 'member', 'association', 'vendor'];
@@ -202,24 +259,46 @@ router.post('/:entityType/:entityId', [
     let currentOrder = (maxOrder || 0) + 1;
 
     // Prepare gallery records
-    const galleryRecords = req.files.map((file, index) => ({
-      entityType,
-      entityId: parseInt(entityId),
-      filename: file.filename,
-      originalName: file.originalname,
-      caption: captions[index] || null,
-      altText: altTexts[index] || null,
-      displayOrder: currentOrder + index,
-      isActive: true,
-      isFeatured: false,
-      fileSize: file.size,
-      mimeType: file.mimetype,
-      uploadedBy: req.user.id
-    }));
+    const galleryRecords = req.files.map((file, index) => {
+      const record = {
+        entityType,
+        entityId: parseInt(entityId),
+        filename: file.filename,
+        originalName: file.originalname,
+        caption: captions[index] || null,
+        altText: altTexts[index] || null,
+        displayOrder: currentOrder + index,
+        isActive: true,
+        isFeatured: false,
+        fileSize: file.size,
+        mimeType: file.mimetype,
+        uploadedBy: req.user.id
+      };
+      
+      // Debug logging for each record (can be removed in production)
+      console.log(`Gallery record ${index + 1}:`, {
+        filename: record.filename,
+        caption: record.caption,
+        altText: record.altText
+      });
+      
+      return record;
+    });
 
     // Create gallery records
     const createdImages = await Gallery.bulkCreate(galleryRecords, {
       returning: true
+    });
+    
+    // Debug logging for created images (can be removed in production)
+    console.log('=== CREATED IMAGES DEBUG ===');
+    createdImages.forEach((image, index) => {
+      console.log(`Created image ${index + 1}:`, {
+        id: image.id,
+        filename: image.filename,
+        caption: image.caption,
+        altText: image.altText
+      });
     });
 
     res.status(201).json({
