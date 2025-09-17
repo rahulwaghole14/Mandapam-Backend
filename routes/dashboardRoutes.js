@@ -445,7 +445,7 @@ router.get('/monthly-member-growth', async (req, res) => {
 router.get('/top-associations', async (req, res) => {
   try {
     
-    const { limit = 10 } = req.query;
+    const { limit = 5 } = req.query;
     
     // Build filter for district-based access
     const filter = {};
