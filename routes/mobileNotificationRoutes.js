@@ -43,12 +43,12 @@ router.post('/register-token', [
 // Get notification preferences (simplified - just return current status)
 router.get('/preferences', protectMobile, async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.id; // This is actually memberId from mobileAuthMiddleware
 
-    // Check if user has active FCM tokens
+    // Check if user has active FCM tokens (for mobile members, use memberId)
     const activeTokens = await FCMToken.count({
       where: {
-        userId: userId,
+        memberId: userId, // Use memberId for mobile users
         isActive: true
       }
     });
@@ -88,19 +88,19 @@ router.put('/preferences', [
     }
 
     const { eventNotifications, appUpdateNotifications } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.id; // This is actually memberId from mobileAuthMiddleware
 
     // If both are false, deactivate all tokens
     if (!eventNotifications && !appUpdateNotifications) {
       await FCMToken.update(
         { isActive: false },
-        { where: { userId: userId } }
+        { where: { memberId: userId } } // Use memberId for mobile users
       );
     } else {
       // If any are true, ensure user has active tokens
       const activeTokens = await FCMToken.count({
         where: {
-          userId: userId,
+          memberId: userId, // Use memberId for mobile users
           isActive: true
         }
       });
@@ -131,10 +131,18 @@ router.put('/preferences', [
 // Get notification history
 router.get('/history', protectMobile, async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.id; // This is actually memberId from mobileAuthMiddleware
     const { limit = 50, offset = 0 } = req.query;
 
-    const logs = await fcmService.getNotificationLogs(userId, parseInt(limit), parseInt(offset));
+    // For mobile users, we need to get notification logs by memberId
+    const logs = await NotificationLog.findAndCountAll({
+      where: {
+        memberId: userId // Use memberId for mobile users
+      },
+      order: [['created_at', 'DESC']],
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
 
     res.json({
       success: true,
@@ -159,7 +167,7 @@ router.get('/history', protectMobile, async (req, res) => {
 // Test notification (for development/testing)
 router.post('/test', protectMobile, async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.id; // This is actually memberId from mobileAuthMiddleware
     const { title, body, type = 'app_update' } = req.body;
 
     if (!title || !body) {
@@ -179,7 +187,8 @@ router.post('/test', protectMobile, async (req, res) => {
       }
     };
 
-    const result = await fcmService.sendNotificationToUser(userId, notification);
+    // For mobile users, pass 'member' as userType
+    const result = await fcmService.sendNotificationToUser(userId, notification, 'member');
 
     res.json({
       success: result.success,
