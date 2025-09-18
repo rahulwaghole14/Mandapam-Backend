@@ -1,4 +1,5 @@
 const admin = require('firebase-admin');
+const { Op } = require('sequelize');
 const { FCMToken, NotificationLog } = require('../models');
 
 class FCMService {
@@ -177,7 +178,7 @@ class FCMService {
     return results;
   }
 
-  async sendNotificationToAllUsers(notification) {
+  async sendNotificationToAllUsers(notification, userType = 'all') {
     if (!this.isInitialized) {
       console.log('⚠️ FCM not initialized - notification not sent');
       return { success: false, message: 'FCM not configured' };
@@ -190,11 +191,21 @@ class FCMService {
     }
 
     try {
-      // Get all active FCM tokens
+      // Build where clause based on userType
+      let whereClause = { isActive: true };
+      
+      if (userType === 'admin') {
+        // Only send to admin users (users table)
+        whereClause.userId = { [Op.ne]: null };
+      } else if (userType === 'member') {
+        // Only send to members
+        whereClause.memberId = { [Op.ne]: null };
+      }
+      // If userType is 'all', send to both (no additional filter)
+
+      // Get active FCM tokens based on userType
       const fcmTokens = await FCMToken.findAll({
-        where: {
-          isActive: true
-        }
+        where: whereClause
       });
 
       if (fcmTokens.length === 0) {
@@ -338,16 +349,17 @@ class FCMService {
 
   async deactivateToken(token) {
     try {
-      // First find the token to get its current state
-      const fcmToken = await FCMToken.findOne({ where: { token } });
-      if (!fcmToken) {
+      // Use direct update to avoid validation issues
+      const [updatedRows] = await FCMToken.update(
+        { isActive: false },
+        { where: { token } }
+      );
+      
+      if (updatedRows > 0) {
+        console.log(`✅ FCM token deactivated: ${token.substring(0, 20)}...`);
+      } else {
         console.log(`⚠️ FCM token not found for deactivation: ${token.substring(0, 20)}...`);
-        return;
       }
-
-      // Update only the isActive field to avoid validation issues
-      await fcmToken.update({ isActive: false });
-      console.log(`✅ FCM token deactivated: ${token.substring(0, 20)}...`);
     } catch (error) {
       console.error('❌ Error deactivating FCM token:', error);
     }

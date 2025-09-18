@@ -359,8 +359,8 @@ router.post('/', [
         eventId: eventWithDetails.id
       };
 
-      // Send to all users (you can modify this to target specific users)
-      await fcmService.sendNotificationToAllUsers(notification);
+      // Send to members (mobile app users) when admin creates event
+      await fcmService.sendNotificationToAllUsers(notification, 'member');
       console.log(`✅ Event notification sent for event: ${eventWithDetails.title}`);
     } catch (notificationError) {
       console.error('❌ Error sending event notification:', notificationError);
@@ -489,8 +489,8 @@ router.put('/:id', [
         eventId: event.id
       };
 
-      // Send to all users (you can modify this to target specific users)
-      await fcmService.sendNotificationToAllUsers(notification);
+      // Send to members (mobile app users) when admin updates event
+      await fcmService.sendNotificationToAllUsers(notification, 'member');
       console.log(`✅ Event update notification sent for event: ${event.title}`);
     } catch (notificationError) {
       console.error('❌ Error sending event update notification:', notificationError);
