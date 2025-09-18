@@ -82,12 +82,9 @@ const Gallery = sequelize.define('Gallery', {
   },
   uploadedBy: {
     type: DataTypes.INTEGER,
-    allowNull: false,
-    field: 'uploaded_by',
-    references: {
-      model: 'users',
-      key: 'id'
-    }
+    allowNull: true, // Made nullable to support both users and members
+    field: 'uploaded_by'
+    // Removed foreign key constraint as it can reference either users or members
   }
 }, {
   tableName: 'gallery',

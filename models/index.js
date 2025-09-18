@@ -142,6 +142,16 @@ const defineAssociations = () => {
     as: 'uploadedByUser'
   });
 
+  // Member can also upload gallery images
+  Member.hasMany(Gallery, {
+    foreignKey: 'uploadedBy',
+    as: 'uploadedImages'
+  });
+  Gallery.belongsTo(Member, {
+    foreignKey: 'uploadedBy',
+    as: 'uploadedByMember'
+  });
+
   // Event has many Gallery images
   Event.hasMany(Gallery, {
     foreignKey: 'entityId',

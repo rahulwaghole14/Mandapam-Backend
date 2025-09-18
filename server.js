@@ -32,6 +32,7 @@ const mobileAssociationRoutes = require('./routes/mobileAssociationRoutes');
 const mobileUploadRoutes = require('./routes/mobileUploadRoutes');
 const mobileAppUpdateRoutes = require('./routes/mobileAppUpdateRoutes');
 const mobileNotificationRoutes = require('./routes/mobileNotificationRoutes');
+const mobileGalleryRoutes = require('./routes/mobileGalleryRoutes');
 const adminNotificationRoutes = require('./routes/adminNotificationRoutes');
 
 // Import middleware
@@ -458,6 +459,7 @@ app.use('/api/mobile', mobileAssociationRoutes);
 app.use('/api/mobile', mobileUploadRoutes);
 app.use('/api/mobile', mobileAppUpdateRoutes);
 app.use('/api/mobile/notifications', mobileNotificationRoutes);
+app.use('/api/mobile/gallery', mobileGalleryRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
