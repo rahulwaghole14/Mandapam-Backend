@@ -23,7 +23,7 @@ router.post('/register-token', [
     const { token, deviceType } = req.body;
     const userId = req.user.id;
 
-    const result = await fcmService.registerToken(userId, token, deviceType);
+    const result = await fcmService.registerToken(userId, token, deviceType, 'member');
 
     res.json({
       success: true,

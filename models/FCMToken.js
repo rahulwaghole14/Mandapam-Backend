@@ -9,10 +9,20 @@ const FCMToken = sequelize.define('FCMToken', {
   },
   userId: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    allowNull: true,
     field: 'user_id',
     references: {
       model: 'users',
+      key: 'id'
+    },
+    onDelete: 'CASCADE'
+  },
+  memberId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    field: 'member_id',
+    references: {
+      model: 'members',
       key: 'id'
     },
     onDelete: 'CASCADE'
@@ -48,12 +58,23 @@ const FCMToken = sequelize.define('FCMToken', {
       fields: ['user_id']
     },
     {
+      fields: ['member_id']
+    },
+    {
       fields: ['token']
     },
     {
       fields: ['is_active']
     }
-  ]
+  ],
+  validate: {
+    // Ensure either userId or memberId is provided, but not both
+    eitherUserOrMember() {
+      if ((!this.userId && !this.memberId) || (this.userId && this.memberId)) {
+        throw new Error('Either userId or memberId must be provided, but not both');
+      }
+    }
+  }
 });
 
 module.exports = FCMToken;

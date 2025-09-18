@@ -192,6 +192,16 @@ const defineAssociations = () => {
     as: 'user'
   });
 
+  // Member has many FCM tokens
+  Member.hasMany(FCMToken, {
+    foreignKey: 'memberId',
+    as: 'fcmTokens'
+  });
+  FCMToken.belongsTo(Member, {
+    foreignKey: 'memberId',
+    as: 'member'
+  });
+
   // User has many Notification logs
   User.hasMany(NotificationLog, {
     foreignKey: 'userId',
@@ -200,6 +210,16 @@ const defineAssociations = () => {
   NotificationLog.belongsTo(User, {
     foreignKey: 'userId',
     as: 'user'
+  });
+
+  // Member has many Notification logs
+  Member.hasMany(NotificationLog, {
+    foreignKey: 'memberId',
+    as: 'notificationLogs'
+  });
+  NotificationLog.belongsTo(Member, {
+    foreignKey: 'memberId',
+    as: 'member'
   });
 
   // Event has many Notification logs

@@ -9,10 +9,20 @@ const NotificationLog = sequelize.define('NotificationLog', {
   },
   userId: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    allowNull: true,
     field: 'user_id',
     references: {
       model: 'users',
+      key: 'id'
+    },
+    onDelete: 'CASCADE'
+  },
+  memberId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    field: 'member_id',
+    references: {
+      model: 'members',
       key: 'id'
     },
     onDelete: 'CASCADE'
@@ -65,6 +75,9 @@ const NotificationLog = sequelize.define('NotificationLog', {
       fields: ['user_id']
     },
     {
+      fields: ['member_id']
+    },
+    {
       fields: ['type']
     },
     {
@@ -73,7 +86,14 @@ const NotificationLog = sequelize.define('NotificationLog', {
     {
       fields: ['status']
     }
-  ]
+  ],
+  validate: {
+    eitherUserOrMember() {
+      if ((!this.userId && !this.memberId) || (this.userId && this.memberId)) {
+        throw new Error('Either userId or memberId must be provided, but not both');
+      }
+    }
+  }
 });
 
 module.exports = NotificationLog;

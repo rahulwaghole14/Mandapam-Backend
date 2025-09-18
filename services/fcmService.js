@@ -59,19 +59,27 @@ class FCMService {
     }
   }
 
-  async sendNotificationToUser(userId, notification) {
+  async sendNotificationToUser(userId, notification, userType = 'user') {
     if (!this.isInitialized) {
       console.log('⚠️ FCM not initialized - notification not sent');
       return { success: false, message: 'FCM not configured' };
     }
 
     try {
+      // Build where clause based on user type
+      const whereClause = {
+        isActive: true
+      };
+
+      if (userType === 'member') {
+        whereClause.memberId = userId;
+      } else {
+        whereClause.userId = userId;
+      }
+
       // Get active FCM tokens for the user
       const fcmTokens = await FCMToken.findAll({
-        where: {
-          userId: userId,
-          isActive: true
-        }
+        where: whereClause
       });
 
       if (fcmTokens.length === 0) {
@@ -175,17 +183,18 @@ class FCMService {
       return { success: false, message: 'FCM not configured' };
     }
 
+    // Check if admin.messaging is available
+    if (!admin.messaging) {
+      console.error('❌ Firebase admin.messaging is not available');
+      return { success: false, message: 'Firebase messaging not available' };
+    }
+
     try {
       // Get all active FCM tokens
       const fcmTokens = await FCMToken.findAll({
         where: {
           isActive: true
-        },
-        include: [{
-          model: require('../models').User,
-          as: 'user',
-          attributes: ['id']
-        }]
+        }
       });
 
       if (fcmTokens.length === 0) {
@@ -194,49 +203,75 @@ class FCMService {
       }
 
       const tokens = fcmTokens.map(token => token.token);
-      const userIds = [...new Set(fcmTokens.map(token => token.userId))];
+      const userIds = [...new Set(fcmTokens.map(token => token.userId || token.memberId))];
 
-      // Send notification to all tokens
-      const response = await admin.messaging().sendMulticast({
-        tokens: tokens,
-        notification: {
-          title: notification.title,
-          body: notification.body
-        },
-        data: notification.data || {},
-        android: {
-          priority: 'high',
-          notification: {
-            sound: 'default',
-            click_action: 'FLUTTER_NOTIFICATION_CLICK'
-          }
-        },
-        apns: {
-          payload: {
-            aps: {
-              sound: 'default',
-              badge: 1
+      // Send notification to all tokens using individual sends (fallback for older SDK versions)
+      const results = [];
+      let successCount = 0;
+      let failureCount = 0;
+
+      for (const token of tokens) {
+        try {
+          const message = {
+            token: token,
+            notification: {
+              title: notification.title,
+              body: notification.body
+            },
+            data: notification.data || {},
+            android: {
+              priority: 'high',
+              notification: {
+                sound: 'default',
+                click_action: 'FLUTTER_NOTIFICATION_CLICK'
+              }
+            },
+            apns: {
+              payload: {
+                aps: {
+                  sound: 'default',
+                  badge: 1
+                }
+              }
             }
+          };
+
+          const response = await admin.messaging().send(message);
+          results.push({ token, success: true, messageId: response });
+          successCount++;
+        } catch (error) {
+          console.error(`❌ Failed to send to token ${token.substring(0, 20)}...:`, error);
+          results.push({ token, success: false, error: error.message });
+          failureCount++;
+
+          // If token is invalid, mark it as inactive
+          if (error.code === 'messaging/invalid-registration-token' || 
+              error.code === 'messaging/registration-token-not-registered') {
+            await this.deactivateToken(token);
           }
         }
-      });
+      }
+
+      const response = {
+        successCount,
+        failureCount,
+        responses: results
+      };
 
       console.log(`✅ Multicast notification sent: ${response.successCount} successful, ${response.failureCount} failed`);
 
       // Log notifications for all users
-      for (const userId of userIds) {
-        await this.logNotification(userId, notification, 'sent', null, notification.eventId);
+      for (const fcmToken of fcmTokens) {
+        const userId = fcmToken.userId || fcmToken.memberId;
+        const userType = fcmToken.userId ? 'user' : 'member';
+        await this.logNotification(userId, notification, 'sent', null, notification.eventId, userType);
       }
 
       // Handle failed tokens
       if (response.failureCount > 0) {
-        const failedTokens = [];
-        response.responses.forEach((resp, idx) => {
-          if (!resp.success) {
-            failedTokens.push(tokens[idx]);
-            console.error(`❌ Failed to send to token ${tokens[idx].substring(0, 20)}...:`, resp.error);
-          }
-        });
+        const failedTokens = response.responses
+          .filter(resp => !resp.success)
+          .map(resp => resp.token);
 
         // Deactivate failed tokens
         for (const token of failedTokens) {
@@ -257,33 +292,42 @@ class FCMService {
     }
   }
 
-  async registerToken(userId, token, deviceType) {
+  async registerToken(userId, token, deviceType, userType = 'user') {
     try {
+      console.log('🔍 FCM Service - registerToken called with:', { userId, token: token.substring(0, 20) + '...', deviceType, userType });
+      
       // Check if token already exists
       const existingToken = await FCMToken.findOne({
         where: { token }
       });
 
+      const tokenData = {
+        token: token,
+        deviceType: deviceType,
+        isActive: true,
+        lastUsedAt: new Date()
+      };
+
+      // Set the appropriate ID based on user type
+      if (userType === 'member') {
+        tokenData.memberId = userId;
+        tokenData.userId = null;
+        console.log('🔍 FCM Service - Setting memberId:', userId, 'userId: null');
+      } else {
+        tokenData.userId = userId;
+        tokenData.memberId = null;
+        console.log('🔍 FCM Service - Setting userId:', userId, 'memberId: null');
+      }
+
       if (existingToken) {
         // Update existing token
-        await existingToken.update({
-          userId: userId,
-          deviceType: deviceType,
-          isActive: true,
-          lastUsedAt: new Date()
-        });
-        console.log(`✅ FCM token updated for user ${userId}`);
+        await existingToken.update(tokenData);
+        console.log(`✅ FCM token updated for ${userType} ${userId}`);
         return { success: true, message: 'Token updated successfully' };
       } else {
         // Create new token
-        await FCMToken.create({
-          userId: userId,
-          token: token,
-          deviceType: deviceType,
-          isActive: true,
-          lastUsedAt: new Date()
-        });
-        console.log(`✅ FCM token registered for user ${userId}`);
+        await FCMToken.create(tokenData);
+        console.log(`✅ FCM token registered for ${userType} ${userId}`);
         return { success: true, message: 'Token registered successfully' };
       }
     } catch (error) {
@@ -294,27 +338,42 @@ class FCMService {
 
   async deactivateToken(token) {
     try {
-      await FCMToken.update(
-        { isActive: false },
-        { where: { token } }
-      );
+      // First find the token to get its current state
+      const fcmToken = await FCMToken.findOne({ where: { token } });
+      if (!fcmToken) {
+        console.log(`⚠️ FCM token not found for deactivation: ${token.substring(0, 20)}...`);
+        return;
+      }
+
+      // Update only the isActive field to avoid validation issues
+      await fcmToken.update({ isActive: false });
       console.log(`✅ FCM token deactivated: ${token.substring(0, 20)}...`);
     } catch (error) {
       console.error('❌ Error deactivating FCM token:', error);
     }
   }
 
-  async logNotification(userId, notification, status, errorMessage = null, eventId = null) {
+  async logNotification(userId, notification, status, errorMessage = null, eventId = null, userType = 'user') {
     try {
-      await NotificationLog.create({
-        userId: userId,
+      const logData = {
         title: notification.title,
         message: notification.body,
         type: notification.type || 'app_update',
         eventId: eventId,
         status: status,
         errorMessage: errorMessage
-      });
+      };
+
+      if (userType === 'member') {
+        logData.memberId = userId;
+        logData.userId = null;
+      } else {
+        logData.userId = userId;
+        logData.memberId = null;
+      }
+
+      await NotificationLog.create(logData);
+      console.log(`✅ Notification logged for ${userType} ${userId}`);
     } catch (error) {
       console.error('❌ Error logging notification:', error);
     }
