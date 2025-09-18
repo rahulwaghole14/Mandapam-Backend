@@ -1,5 +1,5 @@
 const express = require('express');
-const { Event, Association } = require('../models');
+const { Event } = require('../models');
 const { Op, sequelize } = require('sequelize');
 const { protectMobile } = require('../middleware/mobileAuthMiddleware');
 
@@ -87,11 +87,7 @@ router.get('/events/upcoming', protectMobile, async (req, res) => {
       order: [['startDate', 'ASC']],
       offset,
       limit,
-      include: [{
-        model: Association,
-        as: 'association',
-        attributes: ['name']
-      }]
+      // Removed Association include as Event model doesn't have this association
     });
 
     res.status(200).json({
@@ -153,11 +149,7 @@ router.get('/events/past', protectMobile, async (req, res) => {
       order: [['startDate', 'DESC']], // Sort by start date descending (most recent first)
       offset,
       limit,
-      include: [{
-        model: Association,
-        as: 'association',
-        attributes: ['name']
-      }]
+      // Removed Association include as Event model doesn't have this association
     });
 
     res.status(200).json({
@@ -225,11 +217,7 @@ router.get('/events/search', protectMobile, async (req, res) => {
       order: [['startDate', 'ASC']],
       offset,
       limit,
-      include: [{
-        model: Association,
-        as: 'association',
-        attributes: ['name']
-      }]
+      // Removed Association include as Event model doesn't have this association
     });
 
     res.status(200).json({
@@ -332,11 +320,7 @@ router.get('/events/:id', protectMobile, async (req, res) => {
 
     const event = await Event.findByPk(id, {
       attributes: { exclude: ['createdBy', 'updatedBy'] },
-      include: [{
-        model: Association,
-        as: 'association',
-        attributes: ['name']
-      }]
+      // Removed Association include as Event model doesn't have this association
     });
 
     if (!event) {
