@@ -1,7 +1,8 @@
 const express = require('express');
-const { Event } = require('../models');
+const { Event, EventRegistration } = require('../models');
 const { Op, sequelize } = require('sequelize');
 const { protectMobile } = require('../middleware/mobileAuthMiddleware');
+const RSVPService = require('../services/rsvpService');
 
 const router = express.Router();
 
@@ -45,7 +46,35 @@ router.get('/events', protectMobile, async (req, res) => {
       attributes: { exclude: ['createdBy', 'updatedBy'] },
       order: [['startDate', 'ASC']], // Sort by start date ascending
       offset,
-      limit
+      limit,
+      include: [
+        {
+          model: EventRegistration,
+          as: 'registrations',
+          where: { memberId: req.user.id },
+          required: false,
+          attributes: ['id', 'status', 'registeredAt']
+        }
+      ]
+    });
+
+    // Transform events to include RSVP status
+    const eventsWithRSVP = events.rows.map(event => {
+      const eventData = event.toJSON();
+      const isRegistered = eventData.registrations && eventData.registrations.length > 0;
+      const registration = isRegistered ? eventData.registrations[0] : null;
+      
+      // Remove registrations array from response (we only need the status)
+      delete eventData.registrations;
+      
+      return {
+        ...eventData,
+        isRegistered,
+        registrationStatus: registration ? registration.status : null,
+        registeredAt: registration ? registration.registeredAt : null,
+        canRegister: RSVPService.isEventUpcoming(event) && 
+                     (!event.maxAttendees || event.currentAttendees < event.maxAttendees)
+      };
     });
 
     res.status(200).json({
@@ -54,7 +83,7 @@ router.get('/events', protectMobile, async (req, res) => {
       total: events.count,
       page,
       pages: Math.ceil(events.count / limit),
-      events: events.rows
+      events: eventsWithRSVP
     });
 
   } catch (error) {
@@ -340,6 +369,217 @@ router.get('/events/:id', protectMobile, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error while fetching event'
+    });
+  }
+});
+
+// @desc    Register for an event (RSVP)
+// @route   POST /api/mobile/events/:id/rsvp
+// @access  Private
+router.post('/events/:id/rsvp', protectMobile, async (req, res) => {
+  try {
+    const { id: eventId } = req.params;
+    const { id: memberId } = req.user;
+    const { notes } = req.body;
+
+    // Validate event ID
+    if (!eventId || isNaN(eventId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid event ID'
+      });
+    }
+
+    // Register for event using RSVP service
+    const registration = await RSVPService.registerForEvent(eventId, memberId, notes);
+
+    res.status(201).json({
+      success: true,
+      message: 'Successfully registered for event',
+      registration: {
+        id: registration.id,
+        eventId: registration.eventId,
+        memberId: registration.memberId,
+        status: registration.status,
+        registeredAt: registration.registeredAt,
+        notes: registration.notes
+      }
+    });
+
+  } catch (error) {
+    console.error('RSVP registration error:', error);
+    
+    if (error.message.includes('not found') || error.message.includes('Cannot register') || 
+        error.message.includes('already registered') || error.message.includes('full capacity')) {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Server error while registering for event'
+    });
+  }
+});
+
+// @desc    Cancel event registration
+// @route   DELETE /api/mobile/events/:id/rsvp
+// @access  Private
+router.delete('/events/:id/rsvp', protectMobile, async (req, res) => {
+  try {
+    const { id: eventId } = req.params;
+    const { id: memberId } = req.user;
+
+    // Validate event ID
+    if (!eventId || isNaN(eventId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid event ID'
+      });
+    }
+
+    // Cancel registration using RSVP service
+    const registration = await RSVPService.cancelRegistration(eventId, memberId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Successfully cancelled event registration',
+      registration: {
+        id: registration.id,
+        eventId: registration.eventId,
+        memberId: registration.memberId,
+        status: registration.status,
+        registeredAt: registration.registeredAt
+      }
+    });
+
+  } catch (error) {
+    console.error('RSVP cancellation error:', error);
+    
+    if (error.message.includes('No active registration')) {
+      return res.status(404).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Server error while cancelling registration'
+    });
+  }
+});
+
+// @desc    Check registration status for an event
+// @route   GET /api/mobile/events/:id/rsvp
+// @access  Private
+router.get('/events/:id/rsvp', protectMobile, async (req, res) => {
+  try {
+    const { id: eventId } = req.params;
+    const { id: memberId } = req.user;
+
+    // Validate event ID
+    if (!eventId || isNaN(eventId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid event ID'
+      });
+    }
+
+    // Get registration status using RSVP service
+    const registration = await RSVPService.getRegistrationStatus(eventId, memberId);
+
+    if (!registration) {
+      return res.status(200).json({
+        success: true,
+        isRegistered: false,
+        message: 'Not registered for this event'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      isRegistered: true,
+      registration: {
+        id: registration.id,
+        eventId: registration.eventId,
+        memberId: registration.memberId,
+        status: registration.status,
+        registeredAt: registration.registeredAt,
+        notes: registration.notes,
+        event: registration.event ? {
+          id: registration.event.id,
+          title: registration.event.title,
+          startDate: registration.event.startDate,
+          status: registration.event.status
+        } : null
+      }
+    });
+
+  } catch (error) {
+    console.error('RSVP status check error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while checking registration status'
+    });
+  }
+});
+
+// @desc    Get member's event registrations
+// @route   GET /api/mobile/events/my-registrations
+// @access  Private
+router.get('/events/my-registrations', protectMobile, async (req, res) => {
+  try {
+    const { id: memberId } = req.user;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const offset = (page - 1) * limit;
+    const status = req.query.status; // Optional filter by status
+
+    // Get member registrations using RSVP service
+    const result = await RSVPService.getMemberRegistrations(memberId, {
+      status,
+      limit,
+      offset,
+      includeEvent: true
+    });
+
+    // Transform data for mobile app
+    const transformedRegistrations = result.rows.map(registration => ({
+      id: registration.id,
+      eventId: registration.eventId,
+      status: registration.status,
+      registeredAt: registration.registeredAt,
+      notes: registration.notes,
+      event: registration.event ? {
+        id: registration.event.id,
+        title: registration.event.title,
+        description: registration.event.description,
+        startDate: registration.event.startDate,
+        endDate: registration.event.endDate,
+        location: registration.event.location,
+        status: registration.event.status,
+        maxAttendees: registration.event.maxAttendees,
+        currentAttendees: registration.event.currentAttendees
+      } : null
+    }));
+
+    res.status(200).json({
+      success: true,
+      registrations: transformedRegistrations,
+      total: result.count,
+      page,
+      limit,
+      hasNextPage: (page * limit) < result.count
+    });
+
+  } catch (error) {
+    console.error('Get member registrations error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching registrations'
     });
   }
 });

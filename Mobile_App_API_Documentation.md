@@ -137,10 +137,6 @@ Authorization: Bearer <jwt_token>
 ```json
 {
   "success": true,
-  "count": 20,
-  "total": 150,
-  "page": 1,
-  "pages": 8,
   "members": [
     {
       "_id": "member_id",
@@ -156,9 +152,22 @@ Authorization: Bearer <jwt_token>
       "isActive": true,
       "paymentStatus": "Paid"
     }
-  ]
+  ],
+  "total": 150,
+  "totalMembers": 9904,
+  "page": 1,
+  "limit": 20,
+  "hasNextPage": true
 }
 ```
+
+**Response Fields:**
+- `members`: Array of member objects for current page
+- `total`: Total members matching current filters (e.g., 150 sound business members)
+- `totalMembers`: Total members in entire database (e.g., 9904 all members)
+- `page`: Current page number
+- `limit`: Number of members per page
+- `hasNextPage`: Boolean indicating if more pages are available
 
 #### **Get Specific Member**
 ```http
@@ -345,6 +354,137 @@ Authorization: Bearer <jwt_token>
 GET /api/mobile/events/stats
 Authorization: Bearer <jwt_token>
 ```
+
+### **3.1. Event RSVP APIs**
+
+#### **Register for Event (RSVP)**
+```http
+POST /api/mobile/events/:id/rsvp
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "notes": "Looking forward to attending"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Successfully registered for event",
+  "registration": {
+    "id": 1,
+    "eventId": 18,
+    "memberId": 217,
+    "status": "registered",
+    "registeredAt": "2025-09-19T11:21:06.000Z",
+    "notes": "Looking forward to attending"
+  }
+}
+```
+
+#### **Cancel Event Registration**
+```http
+DELETE /api/mobile/events/:id/rsvp
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Successfully cancelled event registration",
+  "registration": {
+    "id": 1,
+    "eventId": 18,
+    "memberId": 217,
+    "status": "cancelled",
+    "registeredAt": "2025-09-19T11:21:06.000Z"
+  }
+}
+```
+
+#### **Check Registration Status**
+```http
+GET /api/mobile/events/:id/rsvp
+Authorization: Bearer <jwt_token>
+```
+
+**Response (Registered):**
+```json
+{
+  "success": true,
+  "isRegistered": true,
+  "registration": {
+    "id": 1,
+    "eventId": 18,
+    "memberId": 217,
+    "status": "registered",
+    "registeredAt": "2025-09-19T11:21:06.000Z",
+    "notes": "Looking forward to attending",
+    "event": {
+      "id": 18,
+      "title": "RSVP Test Event - Annual Meeting",
+      "startDate": "2025-09-26T11:20:17.000Z",
+      "status": "Upcoming"
+    }
+  }
+}
+```
+
+**Response (Not Registered):**
+```json
+{
+  "success": true,
+  "isRegistered": false,
+  "message": "Not registered for this event"
+}
+```
+
+#### **Get My Event Registrations**
+```http
+GET /api/mobile/events/my-registrations?page=1&limit=20&status=registered
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "registrations": [
+    {
+      "id": 1,
+      "eventId": 18,
+      "status": "registered",
+      "registeredAt": "2025-09-19T11:21:06.000Z",
+      "notes": "Looking forward to attending",
+      "event": {
+        "id": 18,
+        "title": "RSVP Test Event - Annual Meeting",
+        "description": "This is a test event created specifically for testing RSVP functionality.",
+        "startDate": "2025-09-26T11:20:17.000Z",
+        "endDate": "2025-09-26T13:20:17.000Z",
+        "location": "Test Conference Hall",
+        "status": "Upcoming",
+        "maxAttendees": 50,
+        "currentAttendees": 1
+      }
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "limit": 20,
+  "hasNextPage": false
+}
+```
+
+**RSVP Business Rules:**
+- ✅ Members can only register for **upcoming events** (status = 'Upcoming' and start date in future)
+- ✅ Members can only register **once per event** (duplicate registrations prevented)
+- ✅ Registration is subject to **event capacity limits** (maxAttendees)
+- ✅ Members can **cancel and re-register** for the same event
+- ✅ Registration status includes: `registered`, `cancelled`, `attended`, `no_show`
 
 ### **4. Association APIs**
 

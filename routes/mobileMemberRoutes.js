@@ -141,6 +141,9 @@ router.get('/members', protectMobile, async (req, res) => {
       }]
     });
 
+    // Get total count of all members in database (without filters)
+    const totalMembers = await Member.count();
+
     // Transform data to match mobile app expectations
     const transformedMembers = members.rows.map(member => ({
       _id: member.id.toString(),
@@ -164,6 +167,7 @@ router.get('/members', protectMobile, async (req, res) => {
       success: true,
       members: transformedMembers, // ✅ Use 'members' field name as required by mobile app
       total: members.count,
+      totalMembers,
       page,
       limit,
       hasNextPage: (page * limit) < members.count

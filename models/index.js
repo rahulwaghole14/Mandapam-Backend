@@ -12,6 +12,7 @@ const AppVersion = require('./AppVersion');
 const Gallery = require('./Gallery');
 const FCMToken = require('./FCMToken');
 const NotificationLog = require('./NotificationLog');
+const EventRegistration = require('./EventRegistration');
 
 // Define associations
 const defineAssociations = () => {
@@ -241,6 +242,27 @@ const defineAssociations = () => {
     foreignKey: 'eventId',
     as: 'event'
   });
+
+  // Event Registration associations
+  // Event has many registrations
+  Event.hasMany(EventRegistration, {
+    foreignKey: 'eventId',
+    as: 'registrations'
+  });
+  EventRegistration.belongsTo(Event, {
+    foreignKey: 'eventId',
+    as: 'event'
+  });
+
+  // Member has many event registrations
+  Member.hasMany(EventRegistration, {
+    foreignKey: 'memberId',
+    as: 'eventRegistrations'
+  });
+  EventRegistration.belongsTo(Member, {
+    foreignKey: 'memberId',
+    as: 'member'
+  });
 };
 
 // Initialize associations
@@ -259,5 +281,6 @@ module.exports = {
   AppVersion,
   Gallery,
   FCMToken,
-  NotificationLog
+  NotificationLog,
+  EventRegistration
 };

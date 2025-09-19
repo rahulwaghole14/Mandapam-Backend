@@ -112,6 +112,9 @@ router.get('/', [
       limit: parseInt(limit)
     });
 
+    // Get total count of all members in database (without filters)
+    const totalMembers = await Member.count();
+
     const total = count;
 
     // Calculate pagination info
@@ -123,6 +126,7 @@ router.get('/', [
       success: true,
       count: members.length,
       total,
+      totalMembers,
       page: parseInt(page),
       totalPages,
       hasNextPage,
