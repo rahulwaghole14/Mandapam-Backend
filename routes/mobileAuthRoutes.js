@@ -3,6 +3,8 @@ const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
 const { Member, Association, OTP } = require('../models');
 const { Op } = require('sequelize');
+const RefreshTokenService = require('../services/refreshTokenService');
+const { protectMobile } = require('../middleware/mobileAuthMiddleware');
 
 const router = express.Router();
 
@@ -221,29 +223,27 @@ router.post('/verify-otp', [
     // Mark OTP as used
     await otpRecord.update({ isUsed: true });
 
-    // Generate token
-    const token = generateMemberToken(member);
+    // Generate token pair (access + refresh token)
+    const deviceInfo = {
+      platform: req.headers['x-platform'] || 'unknown',
+      appVersion: req.headers['x-app-version'] || 'unknown'
+    };
+    
+    const tokenPair = await RefreshTokenService.generateTokenPair(
+      member,
+      deviceInfo,
+      req.ip,
+      req.get('User-Agent')
+    );
 
     res.status(200).json({
       success: true,
       message: 'Login successful',
-      token,
-      member: {
-        id: member.id,
-        name: member.name,
-        businessName: member.businessName,
-        businessType: member.businessType,
-        phone: member.phone,
-        city: member.city,
-        state: member.state,
-        pincode: member.pincode,
-        associationName: member.association?.name || 'Unknown Association',
-        profileImage: member.profileImage,
-        email: member.email,
-        isMobileVerified: member.isMobileVerified,
-        paymentStatus: member.paymentStatus,
-        isActive: member.isActive
-      }
+      accessToken: tokenPair.accessToken,
+      refreshToken: tokenPair.refreshToken,
+      expiresIn: tokenPair.expiresIn,
+      refreshExpiresIn: tokenPair.refreshExpiresIn,
+      member: tokenPair.member
     });
 
   } catch (error) {
@@ -350,14 +350,135 @@ router.post('/register', [
   }
 });
 
+// @desc    Refresh access token
+// @route   POST /api/mobile/refresh-token
+// @access  Public
+router.post('/refresh-token', [
+  body('refreshToken', 'Refresh token is required').notEmpty()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        errors: errors.array()
+      });
+    }
+
+    const { refreshToken } = req.body;
+
+    // Verify refresh token
+    const tokenData = await RefreshTokenService.verifyRefreshToken(refreshToken);
+    
+    if (!tokenData) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid or expired refresh token'
+      });
+    }
+
+    // Generate new access token
+    const accessToken = RefreshTokenService.generateAccessToken(tokenData.member);
+
+    res.status(200).json({
+      success: true,
+      message: 'Token refreshed successfully',
+      accessToken,
+      expiresIn: 15 * 60, // 15 minutes
+      member: {
+        id: tokenData.member.id,
+        name: tokenData.member.name,
+        businessName: tokenData.member.businessName,
+        businessType: tokenData.member.businessType,
+        phone: tokenData.member.phone,
+        city: tokenData.member.city,
+        associationName: tokenData.member.association?.name || 'Unknown Association',
+        isActive: tokenData.member.isActive
+      }
+    });
+
+  } catch (error) {
+    console.error('Refresh token error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while refreshing token'
+    });
+  }
+});
+
 // @desc    Logout user
 // @route   POST /api/mobile/logout
 // @access  Private
-router.post('/logout', (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: 'Logged out successfully'
-  });
+router.post('/logout', protectMobile, async (req, res) => {
+  try {
+    const refreshToken = req.body.refreshToken;
+
+    if (refreshToken) {
+      // Revoke the specific refresh token
+      await RefreshTokenService.revokeRefreshToken(refreshToken);
+    } else {
+      // Revoke all refresh tokens for this member
+      await RefreshTokenService.revokeAllRefreshTokensForMember(req.user.id);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Logged out successfully'
+    });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while logging out'
+    });
+  }
+});
+
+// @desc    Get active sessions
+// @route   GET /api/mobile/sessions
+// @access  Private
+router.get('/sessions', protectMobile, async (req, res) => {
+  try {
+    const activeTokens = await RefreshTokenService.getActiveRefreshTokens(req.user.id);
+    
+    res.status(200).json({
+      success: true,
+      sessions: activeTokens.map(token => ({
+        id: token.id,
+        deviceInfo: token.deviceInfo,
+        ipAddress: token.ipAddress,
+        lastUsedAt: token.lastUsedAt,
+        createdAt: token.created_at
+      }))
+    });
+  } catch (error) {
+    console.error('Get sessions error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching sessions'
+    });
+  }
+});
+
+// @desc    Revoke all sessions
+// @route   POST /api/mobile/revoke-all-sessions
+// @access  Private
+router.post('/revoke-all-sessions', protectMobile, async (req, res) => {
+  try {
+    const revokedCount = await RefreshTokenService.revokeAllRefreshTokensForMember(req.user.id);
+    
+    res.status(200).json({
+      success: true,
+      message: `Revoked ${revokedCount} active sessions`,
+      revokedCount
+    });
+  } catch (error) {
+    console.error('Revoke sessions error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while revoking sessions'
+    });
+  }
 });
 
 module.exports = router;

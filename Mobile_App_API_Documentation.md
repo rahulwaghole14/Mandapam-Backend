@@ -11,12 +11,15 @@
 ### **OTP-Based Login Flow**
 1. User enters mobile number → Send OTP
 2. User receives OTP → Verify OTP
-3. Server returns JWT token → Store securely
-4. Use token for all protected API calls
+3. Server returns access + refresh tokens → Store securely
+4. Use access token for API calls (15 minutes)
+5. Auto-refresh access token using refresh token (30 days)
 
-### **Default OTP for Development**
+### **Token System**
+- **Access Token**: 15 minutes (for API calls)
+- **Refresh Token**: 30 days (for token renewal)
 - **OTP**: `123456` (for all mobile numbers)
-- **Expiry**: 5 minutes
+- **OTP Expiry**: 10 minutes
 - **Rate Limit**: 3 requests per 15 minutes
 
 ## 📋 **API Endpoints**
@@ -58,24 +61,94 @@ Content-Type: application/json
 {
   "success": true,
   "message": "Login successful",
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refreshToken": "2cdef780c851706524096d9d158fb0c67b3eff26897d29d535...",
+  "expiresIn": 900,
+  "refreshExpiresIn": 2592000,
   "member": {
-    "_id": "member_id",
+    "id": 217,
     "name": "John Doe",
     "businessName": "Doe's Sound Systems",
     "businessType": "sound",
     "phone": "9876543210",
     "city": "Mumbai",
-    "state": "Maharashtra",
-    "pincode": "400001",
     "associationName": "Mumbai Mandap Association",
-    "profileImage": "profile-image-url",
-    "email": "john@example.com",
-    "birthDate": "1990-05-15T00:00:00.000Z",
-    "isMobileVerified": true,
-    "paymentStatus": "Paid",
     "isActive": true
   }
+}
+```
+
+#### **Refresh Access Token**
+```http
+POST /api/mobile/refresh-token
+Content-Type: application/json
+
+{
+  "refreshToken": "2cdef780c851706524096d9d158fb0c67b3eff26897d29d535..."
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Token refreshed successfully",
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "expiresIn": 900,
+  "member": {
+    "id": 217,
+    "name": "John Doe",
+    "businessName": "Doe's Sound Systems",
+    "businessType": "sound",
+    "phone": "9876543210",
+    "city": "Mumbai",
+    "associationName": "Mumbai Mandap Association",
+    "isActive": true
+  }
+}
+```
+
+#### **Get Active Sessions**
+```http
+GET /api/mobile/sessions
+Authorization: Bearer <access_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "sessions": [
+    {
+      "id": 1,
+      "deviceInfo": {
+        "platform": "ios",
+        "appVersion": "1.0.0"
+      },
+      "ipAddress": "127.0.0.1",
+      "lastUsedAt": "2025-09-19T08:13:22.619Z",
+      "createdAt": "2025-09-19T08:12:36.237Z"
+    }
+  ]
+}
+```
+
+#### **Logout**
+```http
+POST /api/mobile/logout
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{
+  "refreshToken": "2cdef780c851706524096d9d158fb0c67b3eff26897d29d535..."
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Logged out successfully"
 }
 ```
 

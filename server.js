@@ -12,6 +12,9 @@ dotenv.config();
 // Import database configuration
 const { sequelize, testConnection, syncDatabase } = require('./config/database');
 
+// Import scheduler service
+const schedulerService = require('./services/schedulerService');
+
 // Import routes
 const authRoutes = require('./routes/authRoutes');
 const vendorRoutes = require('./routes/vendorRoutes');
@@ -34,6 +37,7 @@ const mobileAppUpdateRoutes = require('./routes/mobileAppUpdateRoutes');
 const mobileNotificationRoutes = require('./routes/mobileNotificationRoutes');
 const mobileGalleryRoutes = require('./routes/mobileGalleryRoutes');
 const adminNotificationRoutes = require('./routes/adminNotificationRoutes');
+const birthdayRoutes = require('./routes/birthdayRoutes');
 
 // Import middleware
 const { errorHandler } = require('./middleware/errorMiddleware');
@@ -461,6 +465,9 @@ app.use('/api/mobile', mobileAppUpdateRoutes);
 app.use('/api/mobile/notifications', mobileNotificationRoutes);
 app.use('/api/mobile/gallery', mobileGalleryRoutes);
 
+// Birthday notification routes
+app.use('/api/birthday', birthdayRoutes);
+
 // 404 handler
 app.use('*', (req, res) => {
   res.status(404).json({
@@ -499,6 +506,9 @@ const startServer = async () => {
       console.log(`📊 Environment: ${process.env.NODE_ENV}`);
       console.log(`🔗 Health check: http://localhost:${PORT}/health`);
       console.log(`📚 API Documentation: http://localhost:${PORT}/api`);
+      
+      // Start scheduler service
+      schedulerService.start();
     });
   } catch (error) {
     console.error('Failed to start server:', error);
@@ -510,7 +520,21 @@ const startServer = async () => {
 process.on('unhandledRejection', (err, promise) => {
   console.log(`Error: ${err.message}`);
   // Close server & exit process
+  schedulerService.stop();
   process.exit(1);
+});
+
+// Handle graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('🛑 SIGTERM received, shutting down gracefully...');
+  schedulerService.stop();
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('🛑 SIGINT received, shutting down gracefully...');
+  schedulerService.stop();
+  process.exit(0);
 });
 
 startServer();

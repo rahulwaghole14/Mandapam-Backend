@@ -13,6 +13,7 @@ const Gallery = require('./Gallery');
 const FCMToken = require('./FCMToken');
 const NotificationLog = require('./NotificationLog');
 const EventRegistration = require('./EventRegistration');
+const RefreshToken = require('./RefreshToken');
 
 // Define associations
 const defineAssociations = () => {
@@ -263,6 +264,16 @@ const defineAssociations = () => {
     foreignKey: 'memberId',
     as: 'member'
   });
+
+  // Refresh Token associations
+  Member.hasMany(RefreshToken, {
+    foreignKey: 'memberId',
+    as: 'refreshTokens'
+  });
+  RefreshToken.belongsTo(Member, {
+    foreignKey: 'memberId',
+    as: 'member'
+  });
 };
 
 // Initialize associations
@@ -282,5 +293,6 @@ module.exports = {
   Gallery,
   FCMToken,
   NotificationLog,
-  EventRegistration
+  EventRegistration,
+  RefreshToken
 };
