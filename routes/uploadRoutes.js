@@ -52,7 +52,44 @@ router.post('/profile-image', protect, profileImageUpload.single('image'), handl
   }
 });
 
-// @desc    Upload business images
+// @desc    Upload single business image
+// @route   POST /api/upload/business-image
+// @access  Private
+router.post('/business-image', protect, businessImagesUpload.single('image'), handleMulterError, async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No image file provided'
+      });
+    }
+
+    const baseUrl = req.protocol + '://' + req.get('host');
+    const fileUrl = getFileUrl(req.file.filename, baseUrl);
+
+    res.status(200).json({
+      success: true,
+      message: 'Business image uploaded successfully',
+      file: {
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        size: req.file.size,
+        mimetype: req.file.mimetype,
+        url: fileUrl,
+        localUrl: `/uploads/${req.file.filename}`
+      }
+    });
+
+  } catch (error) {
+    console.error('Business image upload error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while uploading business image'
+    });
+  }
+});
+
+// @desc    Upload multiple business images
 // @route   POST /api/upload/business-images
 // @access  Private
 router.post('/business-images', protect, businessImagesUpload.array('images', 10), handleMulterError, async (req, res) => {
@@ -126,7 +163,44 @@ router.post('/gallery-images', protect, galleryImagesUpload.array('images', 20),
   }
 });
 
-// @desc    Upload event images
+// @desc    Upload single event image
+// @route   POST /api/upload/event-image
+// @access  Private
+router.post('/event-image', protect, eventImagesUpload.single('image'), handleMulterError, async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No image file provided'
+      });
+    }
+
+    const baseUrl = req.protocol + '://' + req.get('host');
+    const fileUrl = getFileUrl(req.file.filename, baseUrl);
+
+    res.status(200).json({
+      success: true,
+      message: 'Event image uploaded successfully',
+      file: {
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        size: req.file.size,
+        mimetype: req.file.mimetype,
+        url: fileUrl,
+        localUrl: `/uploads/${req.file.filename}`
+      }
+    });
+
+  } catch (error) {
+    console.error('Event image upload error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while uploading event image'
+    });
+  }
+});
+
+// @desc    Upload multiple event images
 // @route   POST /api/upload/event-images
 // @access  Private
 router.post('/event-images', protect, eventImagesUpload.array('images', 15), handleMulterError, async (req, res) => {
