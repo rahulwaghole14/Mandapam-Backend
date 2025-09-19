@@ -5,11 +5,11 @@ const fs = require('fs');
 // Determine the base upload directory (for Render persistent disk)
 const UPLOADS_BASE_DIR = path.join(process.cwd(), 'uploads');
 
-// Configure multer for Render disk storage
-const storage = multer.diskStorage({
+// Helper function to create storage for different upload types
+const createStorage = (subDir) => multer.diskStorage({
   destination: function (req, file, cb) {
-    // Use Render's persistent disk storage
-    const uploadDir = path.join(process.cwd(), 'uploads');
+    // Use Render's persistent disk storage with subdirectories
+    const uploadDir = path.join(UPLOADS_BASE_DIR, subDir);
     
     // Create uploads directory if it doesn't exist
     if (!fs.existsSync(uploadDir)) {
@@ -31,6 +31,12 @@ const storage = multer.diskStorage({
     cb(null, filename);
   }
 });
+
+// Create base uploads directory
+if (!fs.existsSync(UPLOADS_BASE_DIR)) {
+  fs.mkdirSync(UPLOADS_BASE_DIR, { recursive: true });
+  console.log('📁 Created base uploads directory:', UPLOADS_BASE_DIR);
+}
 
 // File filter for images
 const imageFilter = (req, file, cb) => {
@@ -70,7 +76,7 @@ const allFilesFilter = (req, file, cb) => {
 
 // Multer configurations for different use cases
 const imageUpload = multer({
-  storage: storage,
+  storage: createStorage('images'),
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit for images
     files: 10 // Maximum 10 files
@@ -79,7 +85,7 @@ const imageUpload = multer({
 });
 
 const documentUpload = multer({
-  storage: storage,
+  storage: createStorage('documents'),
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB limit for documents
     files: 5 // Maximum 5 files
@@ -88,7 +94,7 @@ const documentUpload = multer({
 });
 
 const generalUpload = multer({
-  storage: storage,
+  storage: createStorage('general'),
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
     files: 1 // Single file
@@ -98,7 +104,7 @@ const generalUpload = multer({
 
 // Profile image upload (single image, 5MB)
 const profileImageUpload = multer({
-  storage: storage,
+  storage: createStorage('profile-images'),
   limits: {
     fileSize: 5 * 1024 * 1024 // 5MB limit
   },
@@ -107,7 +113,7 @@ const profileImageUpload = multer({
 
 // Business images upload (multiple images, 5MB each)
 const businessImagesUpload = multer({
-  storage: storage,
+  storage: createStorage('business-images'),
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB per file
     files: 10 // Maximum 10 business images
@@ -117,7 +123,7 @@ const businessImagesUpload = multer({
 
 // Gallery images upload (multiple images, 10MB each)
 const galleryImagesUpload = multer({
-  storage: storage,
+  storage: createStorage('gallery-images'),
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB per file
     files: 20 // Maximum 20 gallery images
@@ -127,7 +133,7 @@ const galleryImagesUpload = multer({
 
 // Event images upload (multiple images, 10MB each)
 const eventImagesUpload = multer({
-  storage: storage,
+  storage: createStorage('event-images'),
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB per file
     files: 15 // Maximum 15 event images
@@ -187,7 +193,7 @@ const getFileUrl = (filename, baseUrl = '') => {
   // Determine the subdirectory based on filename or context
   // For simplicity, we'll assume a flat structure or rely on the filename prefix
   // A more robust solution would involve storing the subdirectory in the DB
-  const subDirs = ['profile-images', 'business-images', 'gallery-images', 'event-images', 'documents'];
+  const subDirs = ['profile-images', 'business-images', 'gallery-images', 'event-images', 'documents', 'images', 'general'];
   
   // Check if file exists in any subdirectory
   for (const subDir of subDirs) {
@@ -204,7 +210,7 @@ const getFileUrl = (filename, baseUrl = '') => {
 // Utility function to delete file
 const deleteFile = (filename) => {
   return new Promise((resolve, reject) => {
-    const subDirs = ['profile-images', 'business-images', 'gallery-images', 'event-images', 'documents'];
+    const subDirs = ['profile-images', 'business-images', 'gallery-images', 'event-images', 'documents', 'images', 'general'];
     
     // Try to find and delete the file in any subdirectory
     for (const subDir of subDirs) {
@@ -239,7 +245,7 @@ const deleteFile = (filename) => {
 
 // Utility function to check if file exists
 const fileExists = (filename) => {
-  const subDirs = ['profile-images', 'business-images', 'gallery-images', 'event-images', 'documents'];
+  const subDirs = ['profile-images', 'business-images', 'gallery-images', 'event-images', 'documents', 'images', 'general'];
   
   // Check if file exists in any subdirectory
   for (const subDir of subDirs) {
@@ -256,7 +262,7 @@ const fileExists = (filename) => {
 
 // Utility function to get file info
 const getFileInfo = (filename) => {
-  const subDirs = ['profile-images', 'business-images', 'gallery-images', 'event-images', 'documents'];
+  const subDirs = ['profile-images', 'business-images', 'gallery-images', 'event-images', 'documents', 'images', 'general'];
   
   // Check if file exists in any subdirectory
   for (const subDir of subDirs) {
@@ -310,8 +316,5 @@ module.exports = {
   
   // File filters
   imageFileFilter: imageFilter,
-  documentFileFilter: documentFilter,
-  
-  // Storage configuration
-  storage
+  documentFileFilter: documentFilter
 };
