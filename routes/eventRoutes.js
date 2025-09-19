@@ -5,6 +5,13 @@ const Event = require('../models/Event');
 const User = require('../models/User');
 const { protect, authorize, authorizeDistrict } = require('../middleware/authMiddleware');
 const fcmService = require('../services/fcmService');
+const { 
+  eventImagesUpload,
+  handleMulterError,
+  getFileUrl,
+  deleteFile,
+  getFileInfo
+} = require('../config/multerConfig');
 
 const router = express.Router();
 
@@ -239,7 +246,7 @@ router.post('/', [
   body('isPublic').optional().isBoolean(),
   body('image').optional().trim(),
   body('imageURL').optional().trim()
-], authorizeDistrict, async (req, res) => {
+], authorizeDistrict, eventImagesUpload.single('image'), handleMulterError, async (req, res) => {
   try {
     // Check for validation errors
     const errors = validationResult(req);
@@ -302,6 +309,11 @@ router.post('/', [
       maxAttendees = parseInt(maxAttendees);
     }
 
+    // Handle uploaded event image
+    const baseUrl = req.protocol + '://' + req.get('host');
+    if (req.file) {
+      console.log('Event image uploaded:', req.file.filename);
+    }
 
     // Prepare event data
     const eventData = {
@@ -323,7 +335,7 @@ router.post('/', [
       registrationFee: req.body.registrationFee,
       isActive: req.body.isActive !== undefined ? req.body.isActive : true,
       isPublic: req.body.isPublic !== undefined ? req.body.isPublic : true,
-      image: req.body.image || req.body.imageURL || req.body.url,
+      image: req.file ? req.file.filename : (req.body.image || req.body.imageURL || req.body.url),
       createdBy: req.user.id,
       updatedBy: req.user.id,
       status: 'Upcoming',
@@ -341,8 +353,9 @@ router.post('/', [
     });
 
     // Transform image field to include full URL if image exists
-    if (eventWithDetails.image) {
-      eventWithDetails.imageURL = `/uploads/${eventWithDetails.image}`;
+    const eventResponse = eventWithDetails.toJSON();
+    if (eventResponse.image) {
+      eventResponse.imageURL = getFileUrl(eventResponse.image, baseUrl);
     }
 
     // Send notification for new event
@@ -369,7 +382,14 @@ router.post('/', [
 
     res.status(201).json({
       success: true,
-      event: eventWithDetails
+      message: 'Event created successfully',
+      event: eventResponse,
+      uploadedFiles: {
+        image: req.file ? {
+          filename: req.file.filename,
+          url: getFileUrl(req.file.filename, baseUrl)
+        } : null
+      }
     });
 
   } catch (error) {
@@ -405,7 +425,7 @@ router.put('/:id', [
   body('isActive').optional().isBoolean(),
   body('isPublic').optional().isBoolean(),
   body('image').optional().trim(),
-], authorizeDistrict, async (req, res) => {
+], authorizeDistrict, eventImagesUpload.single('image'), handleMulterError, async (req, res) => {
   try {
     // Check for validation errors
     const errors = validationResult(req);
@@ -445,11 +465,30 @@ router.put('/:id', [
       }
     }
 
+    // Handle uploaded event image
+    const baseUrl = req.protocol + '://' + req.get('host');
+    if (req.file) {
+      // Delete old event image if exists
+      if (existingEvent.image) {
+        try {
+          await deleteFile(existingEvent.image);
+        } catch (error) {
+          console.log('Could not delete old event image:', error.message);
+        }
+      }
+      console.log('Event image updated:', req.file.filename);
+    }
+
     // Prepare update data
     const updateData = {
       ...req.body,
       updatedBy: req.user.id
     };
+
+    // Handle image field
+    if (req.file) {
+      updateData.image = req.file.filename;
+    }
 
     // Convert dates if provided
     if (req.body.startDate) {
@@ -471,8 +510,9 @@ router.put('/:id', [
     });
 
     // Transform image field to include full URL if image exists
-    if (event.image) {
-      event.imageURL = `/uploads/${event.image}`;
+    const eventResponse = event.toJSON();
+    if (eventResponse.image) {
+      eventResponse.imageURL = getFileUrl(eventResponse.image, baseUrl);
     }
 
     // Send notification for event update
@@ -499,7 +539,14 @@ router.put('/:id', [
 
     res.status(200).json({
       success: true,
-      event
+      message: 'Event updated successfully',
+      event: eventResponse,
+      uploadedFiles: {
+        image: req.file ? {
+          filename: req.file.filename,
+          url: getFileUrl(req.file.filename, baseUrl)
+        } : null
+      }
     });
 
   } catch (error) {

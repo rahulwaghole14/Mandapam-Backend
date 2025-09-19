@@ -4,6 +4,14 @@ const { Op } = require('sequelize');
 const Member = require('../models/Member');
 const User = require('../models/User');
 const { protect, authorize } = require('../middleware/authMiddleware');
+const { 
+  profileImageUpload, 
+  businessImagesUpload,
+  handleMulterError,
+  getFileUrl,
+  deleteFile,
+  getFileInfo
+} = require('../config/multerConfig');
 
 const router = express.Router();
 
@@ -215,9 +223,10 @@ router.post('/', [
     if (!value || value === null || value === undefined) return true; // Allow empty values
     return Array.isArray(value);
   }).withMessage('Business images must be an array')
-], authorize('admin'), async (req, res) => {
+], authorize('admin'), profileImageUpload.single('profileImage'), businessImagesUpload.array('businessImages', 10), handleMulterError, async (req, res) => {
   try {
     console.log('Member POST request received:', req.body);
+    console.log('Uploaded files:', req.files);
     console.log('User:', req.user);
     
     // Check for validation errors
@@ -273,15 +282,50 @@ router.post('/', [
       req.body.updatedBy = req.user.id;
     }
 
+    // Handle uploaded files
+    const baseUrl = req.protocol + '://' + req.get('host');
+    
+    // Handle profile image upload
+    if (req.file) {
+      req.body.profileImage = req.file.filename;
+      console.log('Profile image uploaded:', req.file.filename);
+    }
+    
+    // Handle business images upload
+    if (req.files && req.files.length > 0) {
+      req.body.businessImages = req.files.map(file => file.filename);
+      console.log('Business images uploaded:', req.files.map(f => f.filename));
+    }
+
     // Create member
     const member = await Member.create(req.body);
 
     // Get member with populated fields
     const memberWithDetails = await Member.findByPk(member.id);
+    
+    // Add image URLs to response
+    const memberData = memberWithDetails.toJSON();
+    if (memberData.profileImage) {
+      memberData.profileImageURL = getFileUrl(memberData.profileImage, baseUrl);
+    }
+    if (memberData.businessImages && memberData.businessImages.length > 0) {
+      memberData.businessImageURLs = memberData.businessImages.map(filename => getFileUrl(filename, baseUrl));
+    }
 
     res.status(201).json({
       success: true,
-      member: memberWithDetails
+      message: 'Member created successfully',
+      member: memberData,
+      uploadedFiles: {
+        profileImage: req.file ? {
+          filename: req.file.filename,
+          url: getFileUrl(req.file.filename, baseUrl)
+        } : null,
+        businessImages: req.files ? req.files.map(file => ({
+          filename: file.filename,
+          url: getFileUrl(file.filename, baseUrl)
+        })) : []
+      }
     });
 
   } catch (error) {
@@ -363,7 +407,7 @@ router.put('/:id', [
     if (!value || value === null || value === undefined) return true; // Allow empty values
     return Array.isArray(value);
   }).withMessage('Business images must be an array')
-], authorize('admin'), async (req, res) => {
+], authorize('admin'), profileImageUpload.single('profileImage'), businessImagesUpload.array('businessImages', 10), handleMulterError, async (req, res) => {
   try {
     // Check for validation errors
     const errors = validationResult(req);
@@ -403,6 +447,39 @@ router.put('/:id', [
     // Add updatedBy
     req.body.updatedBy = req.user.id;
 
+    // Handle uploaded files
+    const baseUrl = req.protocol + '://' + req.get('host');
+    
+    // Handle profile image upload
+    if (req.file) {
+      // Delete old profile image if exists
+      if (existingMember.profileImage) {
+        try {
+          await deleteFile(existingMember.profileImage);
+        } catch (error) {
+          console.log('Could not delete old profile image:', error.message);
+        }
+      }
+      req.body.profileImage = req.file.filename;
+      console.log('Profile image updated:', req.file.filename);
+    }
+    
+    // Handle business images upload
+    if (req.files && req.files.length > 0) {
+      // Delete old business images if exist
+      if (existingMember.businessImages && existingMember.businessImages.length > 0) {
+        for (const oldImage of existingMember.businessImages) {
+          try {
+            await deleteFile(oldImage);
+          } catch (error) {
+            console.log('Could not delete old business image:', error.message);
+          }
+        }
+      }
+      req.body.businessImages = req.files.map(file => file.filename);
+      console.log('Business images updated:', req.files.map(f => f.filename));
+    }
+
     // Update member
     await existingMember.update(req.body);
 
@@ -414,9 +491,29 @@ router.put('/:id', [
       ]
     });
 
+    // Add image URLs to response
+    const memberData = member.toJSON();
+    if (memberData.profileImage) {
+      memberData.profileImageURL = getFileUrl(memberData.profileImage, baseUrl);
+    }
+    if (memberData.businessImages && memberData.businessImages.length > 0) {
+      memberData.businessImageURLs = memberData.businessImages.map(filename => getFileUrl(filename, baseUrl));
+    }
+
     res.status(200).json({
       success: true,
-      member
+      message: 'Member updated successfully',
+      member: memberData,
+      uploadedFiles: {
+        profileImage: req.file ? {
+          filename: req.file.filename,
+          url: getFileUrl(req.file.filename, baseUrl)
+        } : null,
+        businessImages: req.files ? req.files.map(file => ({
+          filename: file.filename,
+          url: getFileUrl(file.filename, baseUrl)
+        })) : []
+      }
     });
 
   } catch (error) {

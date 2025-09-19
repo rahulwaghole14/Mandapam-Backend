@@ -244,6 +244,10 @@ module.exports = {
   fileExists,
   getFileInfo,
   
+  // File filters
+  imageFileFilter: imageFilter,
+  documentFileFilter: documentFilter,
+  
   // Storage configuration
   storage
 };

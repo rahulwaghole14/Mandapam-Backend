@@ -6,6 +6,13 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 const Association = require('../models/Association');
 const Member = require('../models/Member');
 const User = require('../models/User');
+const { 
+  profileImageUpload, 
+  handleMulterError,
+  getFileUrl,
+  deleteFile,
+  getFileInfo
+} = require('../config/multerConfig');
 
 // Validation middleware
 const validateAssociation = [
@@ -91,7 +98,7 @@ const validateAssociation = [
 // @desc    Create new association
 // @route   POST /api/associations
 // @access  Private (Admin, Sub-Admin)
-router.post('/', protect, authorize(['admin', 'sub-admin']), validateAssociation, async (req, res) => {
+router.post('/', protect, authorize(['admin', 'sub-admin']), validateAssociation, profileImageUpload.single('logo'), handleMulterError, async (req, res) => {
   try {
     console.log('Association POST request received:', req.body);
     
@@ -114,6 +121,12 @@ router.post('/', protect, authorize(['admin', 'sub-admin']), validateAssociation
       });
     }
 
+    // Handle uploaded logo file
+    const baseUrl = req.protocol + '://' + req.get('host');
+    if (req.file) {
+      console.log('Logo uploaded:', req.file.filename);
+    }
+
     const associationData = {
       name: req.body.name,
       address: req.body.address || '',
@@ -131,15 +144,27 @@ router.post('/', protect, authorize(['admin', 'sub-admin']), validateAssociation
         twitter: req.body.socialLinks?.twitter || undefined,
         facebook: req.body.socialLinks?.facebook || undefined
       },
-      logo: req.body.logo || undefined
+      logo: req.file ? req.file.filename : (req.body.logo || undefined)
     };
 
     const association = await Association.create(associationData);
 
+    // Add logo URL to response
+    const associationResponse = association.toJSON();
+    if (associationResponse.logo) {
+      associationResponse.logoURL = getFileUrl(associationResponse.logo, baseUrl);
+    }
+
     res.status(201).json({
       success: true,
       message: 'Association created successfully',
-      association
+      association: associationResponse,
+      uploadedFiles: {
+        logo: req.file ? {
+          filename: req.file.filename,
+          url: getFileUrl(req.file.filename, baseUrl)
+        } : null
+      }
     });
   } catch (error) {
     console.error('Error creating association:', error);
@@ -402,7 +427,7 @@ router.get('/:id/members', [
 // @desc    Update association
 // @route   PUT /api/associations/:id
 // @access  Private (Admin, Sub-Admin)
-router.put('/:id', protect, authorize(['admin', 'sub-admin']), validateAssociation, async (req, res) => {
+router.put('/:id', protect, authorize(['admin', 'sub-admin']), validateAssociation, profileImageUpload.single('logo'), handleMulterError, async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -422,6 +447,20 @@ router.put('/:id', protect, authorize(['admin', 'sub-admin']), validateAssociati
       });
     }
 
+    // Handle uploaded logo file
+    const baseUrl = req.protocol + '://' + req.get('host');
+    if (req.file) {
+      // Delete old logo if exists
+      if (association.logo) {
+        try {
+          await deleteFile(association.logo);
+        } catch (error) {
+          console.log('Could not delete old logo:', error.message);
+        }
+      }
+      console.log('Logo updated:', req.file.filename);
+    }
+
     const updateData = {
       name: req.body.name,
       address: req.body.address || '',
@@ -439,16 +478,28 @@ router.put('/:id', protect, authorize(['admin', 'sub-admin']), validateAssociati
         twitter: req.body.socialLinks?.twitter || undefined,
         facebook: req.body.socialLinks?.facebook || undefined
       },
-      logo: req.body.logo || undefined
+      logo: req.file ? req.file.filename : (req.body.logo || undefined)
     };
 
     await association.update(updateData);
     const updatedAssociation = await Association.findByPk(req.params.id);
 
+    // Add logo URL to response
+    const associationResponse = updatedAssociation.toJSON();
+    if (associationResponse.logo) {
+      associationResponse.logoURL = getFileUrl(associationResponse.logo, baseUrl);
+    }
+
     res.json({
       success: true,
       message: 'Association updated successfully',
-      association: updatedAssociation
+      association: associationResponse,
+      uploadedFiles: {
+        logo: req.file ? {
+          filename: req.file.filename,
+          url: getFileUrl(req.file.filename, baseUrl)
+        } : null
+      }
     });
   } catch (error) {
     console.error('Error updating association:', error);
