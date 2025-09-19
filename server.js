@@ -119,7 +119,8 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Static file serving for uploads with CORS headers
-const uploadsPath = path.join(__dirname, 'uploads');
+// Use Render's persistent disk storage
+const uploadsPath = path.join(process.cwd(), 'uploads');
 
 // Ensure uploads directory exists
 if (!fs.existsSync(uploadsPath)) {

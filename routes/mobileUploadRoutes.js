@@ -1,50 +1,21 @@
 const express = require('express');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 const { protectMobile } = require('../middleware/mobileAuthMiddleware');
+const { 
+  profileImageUpload, 
+  businessImagesUpload, 
+  galleryImagesUpload,
+  handleMulterError,
+  getFileUrl,
+  deleteFile,
+  getFileInfo
+} = require('../config/multerConfig');
 
 const router = express.Router();
-
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadDir = path.join(__dirname, '../uploads');
-    // Create uploads directory if it doesn't exist
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    // Generate unique filename with timestamp
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'mobile-' + file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-// File filter for images
-const fileFilter = (req, file, cb) => {
-  // Accept only image files
-  if (file.mimetype.startsWith('image/')) {
-    cb(null, true);
-  } else {
-    cb(new Error('Only image files are allowed!'), false);
-  }
-};
-
-const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB limit
-  },
-  fileFilter: fileFilter
-});
 
 // @desc    Upload profile image
 // @route   POST /api/mobile/upload/profile-image
 // @access  Private
-router.post('/upload/profile-image', protectMobile, upload.single('image'), async (req, res) => {
+router.post('/upload/profile-image', protectMobile, profileImageUpload.single('image'), handleMulterError, async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -52,6 +23,10 @@ router.post('/upload/profile-image', protectMobile, upload.single('image'), asyn
         message: 'No image file provided'
       });
     }
+
+    // Get the base URL for the file
+    const baseUrl = req.protocol + '://' + req.get('host');
+    const fileUrl = getFileUrl(req.file.filename, baseUrl);
 
     // Return the file information for storage in database
     res.status(200).json({
@@ -62,7 +37,8 @@ router.post('/upload/profile-image', protectMobile, upload.single('image'), asyn
         originalName: req.file.originalname,
         size: req.file.size,
         mimetype: req.file.mimetype,
-        url: `/uploads/${req.file.filename}`
+        url: fileUrl,
+        localUrl: `/uploads/${req.file.filename}`
       }
     });
 
@@ -75,10 +51,10 @@ router.post('/upload/profile-image', protectMobile, upload.single('image'), asyn
   }
 });
 
-// @desc    Upload multiple images
-// @route   POST /api/mobile/upload/images
+// @desc    Upload business images
+// @route   POST /api/mobile/upload/business-images
 // @access  Private
-router.post('/upload/images', protectMobile, upload.array('images', 5), async (req, res) => {
+router.post('/upload/business-images', protectMobile, businessImagesUpload.array('images', 10), handleMulterError, async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({
@@ -87,25 +63,64 @@ router.post('/upload/images', protectMobile, upload.array('images', 5), async (r
       });
     }
 
+    const baseUrl = req.protocol + '://' + req.get('host');
     const uploadedFiles = req.files.map(file => ({
       filename: file.filename,
       originalName: file.originalname,
       size: file.size,
       mimetype: file.mimetype,
-      url: `/uploads/${file.filename}`
+      url: getFileUrl(file.filename, baseUrl),
+      localUrl: `/uploads/${file.filename}`
     }));
 
     res.status(200).json({
       success: true,
-      message: `${req.files.length} image(s) uploaded successfully`,
+      message: `${req.files.length} business image(s) uploaded successfully`,
       files: uploadedFiles
     });
 
   } catch (error) {
-    console.error('Multiple images upload error:', error);
+    console.error('Business images upload error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error while uploading images'
+      message: 'Server error while uploading business images'
+    });
+  }
+});
+
+// @desc    Upload gallery images
+// @route   POST /api/mobile/upload/gallery-images
+// @access  Private
+router.post('/upload/gallery-images', protectMobile, galleryImagesUpload.array('images', 20), handleMulterError, async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No image files provided'
+      });
+    }
+
+    const baseUrl = req.protocol + '://' + req.get('host');
+    const uploadedFiles = req.files.map(file => ({
+      filename: file.filename,
+      originalName: file.originalname,
+      size: file.size,
+      mimetype: file.mimetype,
+      url: getFileUrl(file.filename, baseUrl),
+      localUrl: `/uploads/${file.filename}`
+    }));
+
+    res.status(200).json({
+      success: true,
+      message: `${req.files.length} gallery image(s) uploaded successfully`,
+      files: uploadedFiles
+    });
+
+  } catch (error) {
+    console.error('Gallery images upload error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while uploading gallery images'
     });
   }
 });
@@ -115,23 +130,30 @@ router.post('/upload/images', protectMobile, upload.array('images', 5), async (r
 // @access  Private
 router.delete('/upload/:filename', protectMobile, async (req, res) => {
   try {
-    const filename = req.params.filename;
-    const filepath = path.join(__dirname, '../uploads', filename);
+    const { filename } = req.params;
+
+    if (!filename) {
+      return res.status(400).json({
+        success: false,
+        message: 'Filename is required'
+      });
+    }
 
     // Check if file exists
-    if (!fs.existsSync(filepath)) {
+    if (!getFileInfo(filename)) {
       return res.status(404).json({
         success: false,
         message: 'File not found'
       });
     }
 
-    // Delete file
-    fs.unlinkSync(filepath);
+    // Delete the file
+    await deleteFile(filename);
 
     res.status(200).json({
       success: true,
-      message: 'File deleted successfully'
+      message: 'File deleted successfully',
+      filename: filename
     });
 
   } catch (error) {
@@ -143,31 +165,28 @@ router.delete('/upload/:filename', protectMobile, async (req, res) => {
   }
 });
 
-// @desc    Get file info
-// @route   GET /api/mobile/upload/:filename
+// @desc    Get file information
+// @route   GET /api/mobile/upload/info/:filename
 // @access  Private
-router.get('/upload/:filename', protectMobile, async (req, res) => {
+router.get('/upload/info/:filename', protectMobile, async (req, res) => {
   try {
-    const filename = req.params.filename;
-    const filepath = path.join(__dirname, '../uploads', filename);
+    const { filename } = req.params;
 
-    // Check if file exists
-    if (!fs.existsSync(filepath)) {
+    if (!filename) {
+      return res.status(400).json({
+        success: false,
+        message: 'Filename is required'
+      });
+    }
+
+    const fileInfo = getFileInfo(filename);
+
+    if (!fileInfo) {
       return res.status(404).json({
         success: false,
         message: 'File not found'
       });
     }
-
-    // Get file stats
-    const stats = fs.statSync(filepath);
-    const fileInfo = {
-      filename: filename,
-      size: stats.size,
-      created: stats.birthtime,
-      modified: stats.mtime,
-      url: `/uploads/${filename}`
-    };
 
     res.status(200).json({
       success: true,
@@ -178,29 +197,9 @@ router.get('/upload/:filename', protectMobile, async (req, res) => {
     console.error('Get file info error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error while getting file info'
+      message: 'Server error while getting file information'
     });
   }
-});
-
-// @desc    Get upload info
-// @route   GET /api/mobile/upload
-// @access  Private
-router.get('/upload', protectMobile, (req, res) => {
-  res.json({ 
-    message: 'Mobile Upload API is working!',
-    endpoints: {
-      'POST /profile-image': 'Upload profile image (multipart/form-data with "image" field)',
-      'POST /images': 'Upload multiple images (multipart/form-data with "images" field)',
-      'GET /:filename': 'Get file information',
-      'DELETE /:filename': 'Delete uploaded file'
-    },
-    limits: {
-      maxFileSize: '5MB',
-      allowedTypes: 'Images only (jpg, png, gif, webp)',
-      maxFiles: '5 files per request'
-    }
-  });
 });
 
 module.exports = router;
