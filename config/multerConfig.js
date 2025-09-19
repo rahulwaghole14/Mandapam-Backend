@@ -2,6 +2,9 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
+// Determine the base upload directory (for Render persistent disk)
+const UPLOADS_BASE_DIR = path.join(process.cwd(), 'uploads');
+
 // Configure multer for Render disk storage
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -181,14 +184,47 @@ const handleMulterError = (error, req, res, next) => {
 
 // Utility function to get file URL
 const getFileUrl = (filename, baseUrl = '') => {
+  // Determine the subdirectory based on filename or context
+  // For simplicity, we'll assume a flat structure or rely on the filename prefix
+  // A more robust solution would involve storing the subdirectory in the DB
+  const subDirs = ['profile-images', 'business-images', 'gallery-images', 'event-images', 'documents'];
+  
+  // Check if file exists in any subdirectory
+  for (const subDir of subDirs) {
+    const filePath = path.join(UPLOADS_BASE_DIR, subDir, filename);
+    if (fs.existsSync(filePath)) {
+      return `${baseUrl}/uploads/${subDir}/${filename}`;
+    }
+  }
+  
+  // Fallback to flat structure
   return `${baseUrl}/uploads/${filename}`;
 };
 
 // Utility function to delete file
 const deleteFile = (filename) => {
   return new Promise((resolve, reject) => {
-    const filePath = path.join(process.cwd(), 'uploads', filename);
+    const subDirs = ['profile-images', 'business-images', 'gallery-images', 'event-images', 'documents'];
     
+    // Try to find and delete the file in any subdirectory
+    for (const subDir of subDirs) {
+      const filePath = path.join(UPLOADS_BASE_DIR, subDir, filename);
+      if (fs.existsSync(filePath)) {
+        fs.unlink(filePath, (error) => {
+          if (error) {
+            console.error('Error deleting file:', error);
+            reject(error);
+          } else {
+            console.log('File deleted successfully:', filename);
+            resolve(true);
+          }
+        });
+        return;
+      }
+    }
+    
+    // Fallback to flat structure
+    const filePath = path.join(UPLOADS_BASE_DIR, filename);
     fs.unlink(filePath, (error) => {
       if (error) {
         console.error('Error deleting file:', error);
@@ -203,26 +239,54 @@ const deleteFile = (filename) => {
 
 // Utility function to check if file exists
 const fileExists = (filename) => {
-  const filePath = path.join(process.cwd(), 'uploads', filename);
+  const subDirs = ['profile-images', 'business-images', 'gallery-images', 'event-images', 'documents'];
+  
+  // Check if file exists in any subdirectory
+  for (const subDir of subDirs) {
+    const filePath = path.join(UPLOADS_BASE_DIR, subDir, filename);
+    if (fs.existsSync(filePath)) {
+      return true;
+    }
+  }
+  
+  // Fallback to flat structure
+  const filePath = path.join(UPLOADS_BASE_DIR, filename);
   return fs.existsSync(filePath);
 };
 
 // Utility function to get file info
 const getFileInfo = (filename) => {
-  const filePath = path.join(process.cwd(), 'uploads', filename);
+  const subDirs = ['profile-images', 'business-images', 'gallery-images', 'event-images', 'documents'];
   
-  if (!fs.existsSync(filePath)) {
-    return null;
+  // Check if file exists in any subdirectory
+  for (const subDir of subDirs) {
+    const filePath = path.join(UPLOADS_BASE_DIR, subDir, filename);
+    if (fs.existsSync(filePath)) {
+      const stats = fs.statSync(filePath);
+      return {
+        filename: filename,
+        size: stats.size,
+        created: stats.birthtime,
+        modified: stats.mtime,
+        url: getFileUrl(filename)
+      };
+    }
   }
   
-  const stats = fs.statSync(filePath);
-  return {
-    filename: filename,
-    size: stats.size,
-    created: stats.birthtime,
-    modified: stats.mtime,
-    url: getFileUrl(filename)
-  };
+  // Fallback to flat structure
+  const filePath = path.join(UPLOADS_BASE_DIR, filename);
+  if (fs.existsSync(filePath)) {
+    const stats = fs.statSync(filePath);
+    return {
+      filename: filename,
+      size: stats.size,
+      created: stats.birthtime,
+      modified: stats.mtime,
+      url: getFileUrl(filename)
+    };
+  }
+  
+  return null;
 };
 
 module.exports = {

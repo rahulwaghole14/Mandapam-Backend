@@ -139,9 +139,10 @@ router.get('/', [
     const hasPrevPage = page > 1;
 
     // Transform image field to include full URL for all events
+    const baseUrl = req.protocol + '://' + req.get('host');
     events.forEach(event => {
       if (event.image) {
-        event.imageURL = `/uploads/${event.image}`;
+        event.imageURL = getFileUrl(event.image, baseUrl);
       }
     });
 
@@ -193,8 +194,9 @@ router.get('/:id', async (req, res) => {
     }
 
     // Transform image field to include full URL if image exists
+    const baseUrl = req.protocol + '://' + req.get('host');
     if (event.image) {
-      event.imageURL = `/uploads/${event.image}`;
+      event.imageURL = getFileUrl(event.image, baseUrl);
     }
 
     res.status(200).json({
@@ -623,9 +625,10 @@ router.get('/upcoming', async (req, res) => {
     });
 
     // Transform image field to include full URL for all events
+    const baseUrl = req.protocol + '://' + req.get('host');
     upcomingEvents.forEach(event => {
       if (event.image) {
-        event.imageURL = `/uploads/${event.image}`;
+        event.imageURL = getFileUrl(event.image, baseUrl);
       }
     });
 
