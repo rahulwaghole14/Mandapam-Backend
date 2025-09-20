@@ -7,8 +7,8 @@ const protectMobile = async (req, res, next) => {
 
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     try {
-      // Get token from header
-      token = req.headers.authorization.split(' ')[1];
+      // Get token from header and trim whitespace
+      token = req.headers.authorization.split(' ')[1].trim();
 
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -41,9 +41,21 @@ const protectMobile = async (req, res, next) => {
       next();
     } catch (error) {
       console.error('Mobile token verification error:', error);
+      
+      // Provide more specific error messages
+      let errorMessage = 'Not authorized, token failed';
+      if (error.name === 'JsonWebTokenError') {
+        errorMessage = 'Invalid token format';
+      } else if (error.name === 'TokenExpiredError') {
+        errorMessage = 'Token has expired';
+      } else if (error.name === 'NotBeforeError') {
+        errorMessage = 'Token not active yet';
+      }
+      
       return res.status(401).json({
         success: false,
-        message: 'Not authorized, token failed'
+        message: errorMessage,
+        error: error.name
       });
     }
   }
@@ -62,7 +74,7 @@ const optionalMobileAuth = async (req, res, next) => {
 
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     try {
-      token = req.headers.authorization.split(' ')[1];
+      token = req.headers.authorization.split(' ')[1].trim();
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
       if (decoded.userType === 'member') {
