@@ -30,7 +30,7 @@ class RefreshTokenService {
     };
     
     return jwt.sign(tokenData, process.env.JWT_SECRET, {
-      expiresIn: process.env.JWT_EXPIRE || '15m' // Short-lived access token (15 minutes)
+      expiresIn: process.env.JWT_EXPIRE || '24h' // Access token (24 hours)
     });
   }
 
