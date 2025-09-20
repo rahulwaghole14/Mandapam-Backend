@@ -139,10 +139,9 @@ router.get('/', [
     const hasPrevPage = page > 1;
 
     // Transform image field to include full URL for all events
-    const baseUrl = req.protocol + '://' + req.get('host');
     events.forEach(event => {
       if (event.image) {
-        event.imageURL = getFileUrl(event.image, baseUrl);
+        event.imageURL = `/uploads/${event.image}`;
       }
     });
 
@@ -194,9 +193,8 @@ router.get('/:id', async (req, res) => {
     }
 
     // Transform image field to include full URL if image exists
-    const baseUrl = req.protocol + '://' + req.get('host');
     if (event.image) {
-      event.imageURL = getFileUrl(event.image, baseUrl);
+      event.imageURL = `/uploads/${event.image}`;
     }
 
     res.status(200).json({
@@ -357,7 +355,7 @@ router.post('/', [
     // Transform image field to include full URL if image exists
     const eventResponse = eventWithDetails.toJSON();
     if (eventResponse.image) {
-      eventResponse.imageURL = getFileUrl(eventResponse.image, baseUrl);
+      eventResponse.imageURL = `/uploads/${eventResponse.image}`;
     }
 
     // Send notification for new event
@@ -514,7 +512,7 @@ router.put('/:id', [
     // Transform image field to include full URL if image exists
     const eventResponse = event.toJSON();
     if (eventResponse.image) {
-      eventResponse.imageURL = getFileUrl(eventResponse.image, baseUrl);
+      eventResponse.imageURL = `/uploads/${eventResponse.image}`;
     }
 
     // Send notification for event update
@@ -625,10 +623,9 @@ router.get('/upcoming', async (req, res) => {
     });
 
     // Transform image field to include full URL for all events
-    const baseUrl = req.protocol + '://' + req.get('host');
     upcomingEvents.forEach(event => {
       if (event.image) {
-        event.imageURL = getFileUrl(event.image, baseUrl);
+        event.imageURL = `/uploads/${event.image}`;
       }
     });
 
