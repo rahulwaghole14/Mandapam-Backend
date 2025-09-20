@@ -38,6 +38,7 @@ const mobileNotificationRoutes = require('./routes/mobileNotificationRoutes');
 const mobileGalleryRoutes = require('./routes/mobileGalleryRoutes');
 const adminNotificationRoutes = require('./routes/adminNotificationRoutes');
 const birthdayRoutes = require('./routes/birthdayRoutes');
+const whatsappRoutes = require('./routes/whatsappRoutes');
 
 // Import middleware
 const { errorHandler } = require('./middleware/errorMiddleware');
@@ -469,6 +470,9 @@ app.use('/api/mobile/gallery', mobileGalleryRoutes);
 // Birthday notification routes
 app.use('/api/birthday', birthdayRoutes);
 
+// WhatsApp configuration routes
+app.use('/api/whatsapp', whatsappRoutes);
+
 // 404 handler
 app.use('*', (req, res) => {
   res.status(404).json({
@@ -510,6 +514,10 @@ const startServer = async () => {
       
       // Start scheduler service
       schedulerService.start();
+      
+      // Initialize WhatsApp service
+      const whatsappService = require('./services/whatsappService');
+      whatsappService.initialize();
     });
   } catch (error) {
     console.error('Failed to start server:', error);

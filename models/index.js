@@ -14,6 +14,7 @@ const FCMToken = require('./FCMToken');
 const NotificationLog = require('./NotificationLog');
 const EventRegistration = require('./EventRegistration');
 const RefreshToken = require('./RefreshToken');
+const WhatsAppConfig = require('./WhatsAppConfig');
 
 // Define associations
 const defineAssociations = () => {
@@ -294,5 +295,6 @@ module.exports = {
   FCMToken,
   NotificationLog,
   EventRegistration,
-  RefreshToken
+  RefreshToken,
+  WhatsAppConfig
 };

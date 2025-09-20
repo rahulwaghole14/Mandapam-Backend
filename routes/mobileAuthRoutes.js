@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const { Member, Association, OTP } = require('../models');
 const { Op } = require('sequelize');
 const RefreshTokenService = require('../services/refreshTokenService');
+const whatsappService = require('../services/whatsappService');
 const { protectMobile } = require('../middleware/mobileAuthMiddleware');
 
 const router = express.Router();
@@ -36,12 +37,19 @@ const generateOTP = () => {
   // return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-// Send OTP via SMS/WhatsApp (Mock implementation)
+// Send OTP via WhatsApp or fallback to console
 const sendOTP = async (mobileNumber, otp) => {
-  // TODO: Integrate with SMS/WhatsApp service (Twilio, etc.)
-  console.log(`📱 OTP for ${mobileNumber}: ${otp}`);
-  console.log(`🔗 SMS Service: OTP sent successfully to ${mobileNumber}`);
-  return true;
+  try {
+    // Try to send via WhatsApp first
+    await whatsappService.sendOTP(mobileNumber, otp);
+    console.log(`✅ WhatsApp OTP sent successfully to ${mobileNumber}`);
+    return { success: true, method: 'whatsapp' };
+  } catch (whatsappError) {
+    console.log(`⚠️ WhatsApp OTP failed for ${mobileNumber}:`, whatsappError.message);
+    console.log(`📱 Fallback: OTP for ${mobileNumber}: ${otp}`);
+    console.log(`🔗 Console OTP: OTP sent successfully to ${mobileNumber}`);
+    return { success: true, method: 'console', error: whatsappError.message };
+  }
 };
 
 // @desc    Send OTP for mobile login
@@ -108,12 +116,14 @@ router.post('/send-otp', [
     });
 
     // Send OTP
-    await sendOTP(mobileNumber, otp);
+    const otpResult = await sendOTP(mobileNumber, otp);
 
     res.status(200).json({
       success: true,
       message: 'OTP sent successfully to your mobile number',
-      otp: otp // Include OTP in response for development testing
+      otp: otp, // Include OTP in response for development testing
+      deliveryMethod: otpResult.method,
+      whatsappEnabled: otpResult.method === 'whatsapp'
     });
 
   } catch (error) {
