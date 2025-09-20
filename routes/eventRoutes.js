@@ -165,6 +165,63 @@ router.get('/', [
   }
 });
 
+// @desc    Get upcoming events
+// @route   GET /api/events/upcoming
+// @access  Private
+router.get('/upcoming', async (req, res) => {
+  try {
+    const { limit = 5 } = req.query;
+
+    // Build filter for district-based access
+    const where = {
+      startDate: { [Op.gte]: new Date() },
+      status: { [Op.in]: ['Upcoming', 'Ongoing'] }
+    };
+
+    // Apply district-based filtering
+    if (req.user.role === 'admin') {
+      // Admin can see all events
+    } else if (req.user.role === 'district_admin') {
+      where.district = req.user.district;
+    } else {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Insufficient permissions.'
+      });
+    }
+
+    const upcomingEvents = await Event.findAll({
+      where,
+      include: [
+        { model: User, as: 'createdByUser', attributes: ['name', 'email'] },
+        { model: User, as: 'updatedByUser', attributes: ['name', 'email'] }
+      ],
+      order: [['startDate', 'ASC']],
+      limit: parseInt(limit)
+    });
+
+    // Transform image field to include full URL for all events
+    upcomingEvents.forEach(event => {
+      if (event.image) {
+        event.imageURL = `/uploads/event-images/${event.image}`;
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      count: upcomingEvents.length,
+      events: upcomingEvents
+    });
+
+  } catch (error) {
+    console.error('Get upcoming events error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching upcoming events'
+    });
+  }
+});
+
 // @desc    Get single event
 // @route   GET /api/events/:id
 // @access  Private
@@ -592,54 +649,6 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error while deleting event'
-    });
-  }
-});
-
-// @desc    Get upcoming events
-// @route   GET /api/events/upcoming
-// @access  Private
-router.get('/upcoming', async (req, res) => {
-  try {
-    const { limit = 5 } = req.query;
-
-    // Build filter for district-based access
-    const where = {
-      startDate: { [Op.gte]: new Date() },
-      status: { [Op.in]: ['Upcoming', 'Ongoing'] }
-    };
-
-    if (req.user.role === 'sub-admin') {
-      where.district = req.user.district;
-    }
-
-    const upcomingEvents = await Event.findAll({
-      where,
-      include: [
-        { model: User, as: 'createdByUser', attributes: ['name', 'email'] }
-      ],
-      order: [['startDate', 'ASC']],
-      limit: parseInt(limit)
-    });
-
-    // Transform image field to include full URL for all events
-    upcomingEvents.forEach(event => {
-      if (event.image) {
-        event.imageURL = `/uploads/event-images/${event.image}`;
-      }
-    });
-
-    res.status(200).json({
-      success: true,
-      count: upcomingEvents.length,
-      events: upcomingEvents
-    });
-
-  } catch (error) {
-    console.error('Get upcoming events error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while fetching upcoming events'
     });
   }
 });
