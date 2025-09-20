@@ -141,7 +141,7 @@ router.get('/', [
     // Transform image field to include full URL for all events
     events.forEach(event => {
       if (event.image) {
-        event.imageURL = `/uploads/${event.image}`;
+        event.imageURL = `/uploads/event-images/${event.image}`;
       }
     });
 
@@ -194,7 +194,7 @@ router.get('/:id', async (req, res) => {
 
     // Transform image field to include full URL if image exists
     if (event.image) {
-      event.imageURL = `/uploads/${event.image}`;
+      event.imageURL = `/uploads/event-images/${event.image}`;
     }
 
     res.status(200).json({
@@ -355,7 +355,7 @@ router.post('/', [
     // Transform image field to include full URL if image exists
     const eventResponse = eventWithDetails.toJSON();
     if (eventResponse.image) {
-      eventResponse.imageURL = `/uploads/${eventResponse.image}`;
+      eventResponse.imageURL = `/uploads/event-images/${eventResponse.image}`;
     }
 
     // Send notification for new event
@@ -512,7 +512,7 @@ router.put('/:id', [
     // Transform image field to include full URL if image exists
     const eventResponse = event.toJSON();
     if (eventResponse.image) {
-      eventResponse.imageURL = `/uploads/${eventResponse.image}`;
+      eventResponse.imageURL = `/uploads/event-images/${eventResponse.image}`;
     }
 
     // Send notification for event update
@@ -625,7 +625,7 @@ router.get('/upcoming', async (req, res) => {
     // Transform image field to include full URL for all events
     upcomingEvents.forEach(event => {
       if (event.image) {
-        event.imageURL = `/uploads/${event.image}`;
+        event.imageURL = `/uploads/event-images/${event.image}`;
       }
     });
 
