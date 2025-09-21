@@ -1,5 +1,6 @@
 const { Member, FCMToken } = require('../models');
 const fcmService = require('./fcmService');
+const whatsappService = require('./whatsappService');
 const { Op } = require('sequelize');
 
 class BirthdayNotificationService {
@@ -48,6 +49,28 @@ class BirthdayNotificationService {
   }
 
   /**
+   * Generate birthday WhatsApp message
+   * @param {Object} member - Member object
+   * @returns {string} - Birthday message
+   */
+  static generateBirthdayMessage(member) {
+    const messages = [
+      `🎂 Happy Birthday, ${member.name}! 🎉\n\nWishing you a year filled with joy, success, and prosperity! May your business ${member.businessName} continue to flourish.\n\nBest wishes from Mandapam Association! 🎊`,
+      
+      `🎈 Happy Birthday, ${member.name}! 🎂\n\nAnother year of amazing achievements! We're grateful to have you as part of our Mandapam Association family.\n\nMay this special day bring you happiness and success! 🌟`,
+      
+      `🎉 Happy Birthday, ${member.name}! 🎊\n\nCelebrating you today! Your dedication to ${member.businessName} inspires us all.\n\nHere's to another year of growth and success! 🚀\n\nBest regards,\nMandapam Association`,
+      
+      `🎂 Wishing you a very Happy Birthday, ${member.name}! 🎈\n\nMay this new year of life bring you endless opportunities and joy. Your contribution to our association is truly valued.\n\nHappy Birthday from all of us at Mandapam Association! 🎊`,
+      
+      `🌟 Happy Birthday, ${member.name}! 🌟\n\nAnother year, another milestone! We're proud to have you in our Mandapam Association community.\n\nMay your special day be filled with love, laughter, and success! 🎉\n\nBest wishes!`
+    ];
+    
+    // Return a random message for variety
+    return messages[Math.floor(Math.random() * messages.length)];
+  }
+
+  /**
    * Send birthday notification to a specific member
    * @param {Object} member - Member object
    * @returns {Promise<Object>} - Notification result
@@ -66,12 +89,27 @@ class BirthdayNotificationService {
         }
       };
 
-      // Send notification to the specific member
-      const result = await fcmService.sendNotificationToUser(
+      // Send push notification to the specific member
+      const pushResult = await fcmService.sendNotificationToUser(
         member.id,
         notification,
         'member'
       );
+
+      // Send WhatsApp message if phone number is available
+      let whatsappResult = null;
+      if (member.phone) {
+        try {
+          const birthdayMessage = this.generateBirthdayMessage(member);
+          whatsappResult = await whatsappService.sendMessage(member.phone, birthdayMessage);
+          console.log(`✅ Birthday WhatsApp message sent to ${member.name} (${member.phone})`);
+        } catch (whatsappError) {
+          console.log(`⚠️ Birthday WhatsApp message failed for ${member.name}:`, whatsappError.message);
+          // Don't fail the entire process if WhatsApp fails
+        }
+      } else {
+        console.log(`⚠️ No phone number available for ${member.name}, skipping WhatsApp message`);
+      }
 
       console.log(`✅ Birthday notification sent to ${member.name} (ID: ${member.id})`);
       
@@ -79,7 +117,10 @@ class BirthdayNotificationService {
         success: true,
         memberId: member.id,
         memberName: member.name,
-        notificationSent: result.success,
+        phone: member.phone,
+        pushNotificationSent: pushResult.success,
+        whatsappMessageSent: whatsappResult ? whatsappResult.success : false,
+        whatsappError: whatsappResult ? null : 'No phone number or WhatsApp failed',
         message: `Birthday notification sent to ${member.name}`
       };
     } catch (error) {
@@ -119,19 +160,27 @@ class BirthdayNotificationService {
       const results = [];
       let successCount = 0;
       let failureCount = 0;
+      let pushNotificationCount = 0;
+      let whatsappMessageCount = 0;
+      let whatsappFailureCount = 0;
 
       for (const member of birthdayMembers) {
         const result = await this.sendBirthdayNotification(member);
         results.push(result);
         
-        if (result.success && result.notificationSent) {
+        if (result.success) {
           successCount++;
+          if (result.pushNotificationSent) pushNotificationCount++;
+          if (result.whatsappMessageSent) whatsappMessageCount++;
+          if (result.whatsappError && result.whatsappError !== 'No phone number or WhatsApp failed') {
+            whatsappFailureCount++;
+          }
         } else {
           failureCount++;
         }
         
         // Add small delay between notifications to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 200));
       }
 
       const summary = {
@@ -140,6 +189,9 @@ class BirthdayNotificationService {
         totalMembers: birthdayMembers.length,
         notificationsSent: successCount,
         notificationsFailed: failureCount,
+        pushNotificationsSent: pushNotificationCount,
+        whatsappMessagesSent: whatsappMessageCount,
+        whatsappMessagesFailed: whatsappFailureCount,
         results: results
       };
 
@@ -147,6 +199,9 @@ class BirthdayNotificationService {
       console.log(`   - Total members: ${summary.totalMembers}`);
       console.log(`   - Notifications sent: ${summary.notificationsSent}`);
       console.log(`   - Notifications failed: ${summary.notificationsFailed}`);
+      console.log(`   - Push notifications sent: ${summary.pushNotificationsSent}`);
+      console.log(`   - WhatsApp messages sent: ${summary.whatsappMessagesSent}`);
+      console.log(`   - WhatsApp messages failed: ${summary.whatsappMessagesFailed}`);
 
       return summary;
     } catch (error) {
@@ -246,6 +301,55 @@ class BirthdayNotificationService {
       };
     } catch (error) {
       console.error('❌ Error testing birthday notification:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Test WhatsApp birthday message for a specific member (for testing purposes)
+   * @param {number} memberId - Member ID to test
+   * @returns {Promise<Object>} - Test result
+   */
+  static async testWhatsAppBirthdayMessage(memberId) {
+    try {
+      const member = await Member.findByPk(memberId, {
+        where: { isActive: true },
+        attributes: ['id', 'name', 'businessName', 'phone']
+      });
+      
+      if (!member) {
+        return {
+          success: false,
+          error: 'Member not found or inactive'
+        };
+      }
+
+      if (!member.phone) {
+        return {
+          success: false,
+          error: 'Member has no phone number'
+        };
+      }
+      
+      console.log(`🧪 Testing WhatsApp birthday message for: ${member.name} (${member.phone})`);
+      
+      const birthdayMessage = this.generateBirthdayMessage(member);
+      const result = await whatsappService.sendMessage(member.phone, birthdayMessage);
+      
+      return {
+        success: true,
+        memberId: member.id,
+        memberName: member.name,
+        phone: member.phone,
+        message: birthdayMessage,
+        whatsappResult: result,
+        testMessage: `Test WhatsApp birthday message sent to ${member.name}`
+      };
+    } catch (error) {
+      console.error('❌ Error testing WhatsApp birthday message:', error);
       return {
         success: false,
         error: error.message

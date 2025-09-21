@@ -107,6 +107,36 @@ router.post('/test/:memberId', async (req, res) => {
   }
 });
 
+// @desc    Test WhatsApp birthday message for specific member
+// @route   POST /api/birthday/test-whatsapp/:memberId
+// @access  Private (Admin only)
+router.post('/test-whatsapp/:memberId', async (req, res) => {
+  try {
+    const { memberId } = req.params;
+    
+    if (!memberId || isNaN(memberId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid member ID'
+      });
+    }
+    
+    const result = await BirthdayNotificationService.testWhatsAppBirthdayMessage(parseInt(memberId));
+    
+    res.status(200).json({
+      success: true,
+      message: 'Test WhatsApp birthday message completed',
+      result
+    });
+  } catch (error) {
+    console.error('Test WhatsApp birthday message error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while testing WhatsApp birthday message'
+    });
+  }
+});
+
 // @desc    Get scheduler status
 // @route   GET /api/birthday/scheduler/status
 // @access  Private (Admin only)
