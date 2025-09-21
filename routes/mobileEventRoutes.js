@@ -68,7 +68,6 @@ router.get('/events', async (req, res) => {
       
       // Only show RSVP status if user is authenticated
       if (req.user && req.user.id) {
-        console.log(`Event ${eventData.id} - registrations:`, eventData.registrations);
         const isRegistered = eventData.registrations && eventData.registrations.length > 0;
         const registration = isRegistered ? eventData.registrations[0] : null;
         

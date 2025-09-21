@@ -192,7 +192,7 @@ router.get('/:entityType/:entityId', [
 // @desc    Upload gallery images (mobile version)
 // @route   POST /api/mobile/gallery/:entityType/:entityId
 // @access  Private (Mobile)
-router.post('/:entityType/:entityId', [
+router.post('/:entityType/:entityId', protectMobile, [
   body('captions').optional().isArray().withMessage('Captions must be an array'),
   body('altTexts').optional().isArray().withMessage('Alt texts must be an array')
 ], upload.array('images', 10), async (req, res) => {

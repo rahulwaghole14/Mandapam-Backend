@@ -193,7 +193,7 @@ router.get('/:entityType/:entityId', [
 // @desc    Upload gallery images
 // @route   POST /api/gallery/:entityType/:entityId
 // @access  Private
-router.post('/:entityType/:entityId', [
+router.post('/:entityType/:entityId', protect, [
   body('captions').optional().isArray().withMessage('Captions must be an array'),
   body('altTexts').optional().isArray().withMessage('Alt texts must be an array')
 ], upload.array('images', 10), async (req, res) => {
@@ -466,7 +466,7 @@ router.post('/:entityType/:entityId', [
 // @desc    Update gallery image
 // @route   PUT /api/gallery/:id
 // @access  Private
-router.put('/:id', [
+router.put('/:id', protect, [
   body('caption').optional().isLength({ max: 1000 }).withMessage('Caption cannot exceed 1000 characters'),
   body('altText').optional().isLength({ max: 255 }).withMessage('Alt text cannot exceed 255 characters'),
   body('displayOrder').optional().isInt({ min: 0 }).withMessage('Display order must be a non-negative integer'),
@@ -566,7 +566,7 @@ router.put('/:id', [
 // @desc    Delete gallery image
 // @route   DELETE /api/gallery/:id
 // @access  Private
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', protect, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -606,7 +606,7 @@ router.delete('/:id', async (req, res) => {
 // @desc    Reorder gallery images
 // @route   PUT /api/gallery/:entityType/:entityId/reorder
 // @access  Private
-router.put('/:entityType/:entityId/reorder', [
+router.put('/:entityType/:entityId/reorder', protect, [
   body('imageIds').isArray({ min: 1 }).withMessage('imageIds must be a non-empty array'),
   body('imageIds.*').isInt({ min: 1 }).withMessage('Each image ID must be a positive integer')
 ], async (req, res) => {
