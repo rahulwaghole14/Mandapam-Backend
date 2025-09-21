@@ -54,16 +54,18 @@ class BirthdayNotificationService {
    * @returns {string} - Birthday message
    */
   static generateBirthdayMessage(member) {
+    const playStoreLink = 'https://play.google.com/store/apps/details?id=com.mandapam.expo';
+    
     const messages = [
-      `🎂 Happy Birthday, ${member.name}! 🎉\n\nWishing you a year filled with joy, success, and prosperity! May your business ${member.businessName} continue to flourish.\n\nBest wishes from Mandapam Association! 🎊`,
+      `🎂 Happy Birthday, ${member.name}! 🎉\n\nWishing you a year filled with joy, success, and prosperity! May your business ${member.businessName} continue to flourish.\n\nBest wishes from Mandapam Association! 🎊\n\n📱 Download our app: ${playStoreLink}`,
       
-      `🎈 Happy Birthday, ${member.name}! 🎂\n\nAnother year of amazing achievements! We're grateful to have you as part of our Mandapam Association family.\n\nMay this special day bring you happiness and success! 🌟`,
+      `🎈 Happy Birthday, ${member.name}! 🎂\n\nAnother year of amazing achievements! We're grateful to have you as part of our Mandapam Association family.\n\nMay this special day bring you happiness and success! 🌟\n\n📱 Get the Mandapam app: ${playStoreLink}`,
       
-      `🎉 Happy Birthday, ${member.name}! 🎊\n\nCelebrating you today! Your dedication to ${member.businessName} inspires us all.\n\nHere's to another year of growth and success! 🚀\n\nBest regards,\nMandapam Association`,
+      `🎉 Happy Birthday, ${member.name}! 🎊\n\nCelebrating you today! Your dedication to ${member.businessName} inspires us all.\n\nHere's to another year of growth and success! 🚀\n\nBest regards,\nMandapam Association\n\n📱 Download app: ${playStoreLink}`,
       
-      `🎂 Wishing you a very Happy Birthday, ${member.name}! 🎈\n\nMay this new year of life bring you endless opportunities and joy. Your contribution to our association is truly valued.\n\nHappy Birthday from all of us at Mandapam Association! 🎊`,
+      `🎂 Wishing you a very Happy Birthday, ${member.name}! 🎈\n\nMay this new year of life bring you endless opportunities and joy. Your contribution to our association is truly valued.\n\nHappy Birthday from all of us at Mandapam Association! 🎊\n\n📱 Install our app: ${playStoreLink}`,
       
-      `🌟 Happy Birthday, ${member.name}! 🌟\n\nAnother year, another milestone! We're proud to have you in our Mandapam Association community.\n\nMay your special day be filled with love, laughter, and success! 🎉\n\nBest wishes!`
+      `🌟 Happy Birthday, ${member.name}! 🌟\n\nAnother year, another milestone! We're proud to have you in our Mandapam Association community.\n\nMay your special day be filled with love, laughter, and success! 🎉\n\nBest wishes!\n\n📱 Download Mandapam app: ${playStoreLink}`
     ];
     
     // Return a random message for variety
