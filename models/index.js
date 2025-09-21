@@ -14,7 +14,7 @@ const FCMToken = require('./FCMToken');
 const NotificationLog = require('./NotificationLog');
 const EventRegistration = require('./EventRegistration');
 const RefreshToken = require('./RefreshToken');
-const WhatsAppConfig = require('./WhatsAppConfig');
+const WhatsAppConfigModel = require('./WhatsAppConfig');
 
 // Define associations
 const defineAssociations = () => {
@@ -275,7 +275,20 @@ const defineAssociations = () => {
     foreignKey: 'memberId',
     as: 'member'
   });
+
+  // WhatsAppConfig associations
+  User.hasMany(WhatsAppConfig, {
+    foreignKey: 'createdBy',
+    as: 'whatsappConfigs'
+  });
+  WhatsAppConfig.belongsTo(User, {
+    foreignKey: 'createdBy',
+    as: 'creator'
+  });
 };
+
+// Initialize models
+const WhatsAppConfig = WhatsAppConfigModel(sequelize);
 
 // Initialize associations
 defineAssociations();
