@@ -26,10 +26,8 @@ router.get('/', async (req, res) => {
       where: { isActive: true },
       order: [['createdAt', 'DESC']],
       offset,
-      limit,
-      include: [
-        { model: Member, as: 'uploadedByMember', attributes: ['name', 'businessName'] }
-      ]
+      limit
+      // Removed include as association is not defined
     });
 
     res.status(200).json({
