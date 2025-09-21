@@ -139,6 +139,9 @@ router.get('/', [
     events.forEach(event => {
       if (event.image) {
         event.imageURL = `/uploads/event-images/${event.image}`;
+        console.log(`Event ${event.id} - image: ${event.image}, imageURL: ${event.imageURL}`);
+      } else {
+        console.log(`Event ${event.id} - no image field`);
       }
     });
 
@@ -721,6 +724,67 @@ router.get('/stats/overview', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error while fetching event statistics'
+    });
+  }
+});
+
+// @desc    Update event image only
+// @route   PUT /api/events/:id/image
+// @access  Private
+router.put('/:id/image', protect, [
+  body('image', 'Image filename is required').notEmpty().trim()
+], async (req, res) => {
+  try {
+    // Check for validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const event = await Event.findByPk(req.params.id);
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found'
+      });
+    }
+
+    // Delete old image if exists
+    if (event.image) {
+      try {
+        await deleteFile(event.image);
+      } catch (error) {
+        console.log('Could not delete old event image:', error.message);
+      }
+    }
+
+    // Update image field
+    await event.update({
+      image: req.body.image,
+      updatedBy: req.user.id
+    });
+
+    // Transform image field to include full URL
+    const eventResponse = event.toJSON();
+    if (eventResponse.image) {
+      eventResponse.imageURL = `/uploads/event-images/${eventResponse.image}`;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Event image updated successfully',
+      event: eventResponse
+    });
+
+  } catch (error) {
+    console.error('Update event image error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while updating event image'
     });
   }
 });
