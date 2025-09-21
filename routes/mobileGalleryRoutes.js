@@ -13,6 +13,43 @@ const router = express.Router();
 // Note: Public routes don't need authentication
 // Authentication is applied individually to protected routes
 
+// @desc    Get all gallery images (mobile version)
+// @route   GET /api/mobile/gallery
+// @access  Public
+router.get('/', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const offset = (page - 1) * limit;
+
+    const gallery = await Gallery.findAndCountAll({
+      where: { isActive: true },
+      order: [['createdAt', 'DESC']],
+      offset,
+      limit,
+      include: [
+        { model: Member, as: 'uploadedByMember', attributes: ['name', 'businessName'] }
+      ]
+    });
+
+    res.status(200).json({
+      success: true,
+      count: gallery.rows.length,
+      total: gallery.count,
+      page,
+      pages: Math.ceil(gallery.count / limit),
+      gallery: gallery.rows
+    });
+
+  } catch (error) {
+    console.error('Get mobile gallery error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching gallery'
+    });
+  }
+});
+
 // Configure multer for multiple image uploads
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {

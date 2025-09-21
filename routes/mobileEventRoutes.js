@@ -41,40 +41,58 @@ router.get('/events', async (req, res) => {
       ];
     }
 
+    // Build include array - only include registrations if user is authenticated
+    const includeArray = [];
+    if (req.user && req.user.id) {
+      includeArray.push({
+        model: EventRegistration,
+        as: 'registrations',
+        where: { memberId: req.user.id },
+        required: false,
+        attributes: ['id', 'status', 'registeredAt']
+      });
+    }
+
     const events = await Event.findAndCountAll({
       where: whereClause,
       attributes: { exclude: ['createdBy', 'updatedBy'] },
       order: [['startDate', 'ASC']], // Sort by start date ascending
       offset,
       limit,
-      include: [
-        {
-          model: EventRegistration,
-          as: 'registrations',
-          where: { memberId: req.user.id },
-          required: false,
-          attributes: ['id', 'status', 'registeredAt']
-        }
-      ]
+      include: includeArray
     });
 
     // Transform events to include RSVP status
     const eventsWithRSVP = events.rows.map(event => {
       const eventData = event.toJSON();
-      const isRegistered = eventData.registrations && eventData.registrations.length > 0;
-      const registration = isRegistered ? eventData.registrations[0] : null;
       
-      // Remove registrations array from response (we only need the status)
-      delete eventData.registrations;
-      
-      return {
-        ...eventData,
-        isRegistered,
-        registrationStatus: registration ? registration.status : null,
-        registeredAt: registration ? registration.registeredAt : null,
-        canRegister: RSVPService.isEventUpcoming(event) && 
-                     (!event.maxAttendees || event.currentAttendees < event.maxAttendees)
-      };
+      // Only show RSVP status if user is authenticated
+      if (req.user && req.user.id) {
+        const isRegistered = eventData.registrations && eventData.registrations.length > 0;
+        const registration = isRegistered ? eventData.registrations[0] : null;
+        
+        // Remove registrations array from response (we only need the status)
+        delete eventData.registrations;
+        
+        return {
+          ...eventData,
+          isRegistered,
+          registrationStatus: registration ? registration.status : null,
+          registeredAt: registration ? registration.registeredAt : null,
+          canRegister: RSVPService.isEventUpcoming(event) && 
+                       (!event.maxAttendees || event.currentAttendees < event.maxAttendees)
+        };
+      } else {
+        // No user authentication - return basic event data
+        delete eventData.registrations;
+        return {
+          ...eventData,
+          isRegistered: false,
+          registrationStatus: null,
+          registeredAt: null,
+          canRegister: false // Can't register without authentication
+        };
+      }
     });
 
     res.status(200).json({
