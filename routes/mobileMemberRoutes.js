@@ -93,8 +93,8 @@ router.put('/profile', protectMobile, [
 
 // @desc    Get all members with pagination and filtering
 // @route   GET /api/mobile/members
-// @access  Private
-router.get('/members', protectMobile, async (req, res) => {
+// @access  Public
+router.get('/members', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 50;

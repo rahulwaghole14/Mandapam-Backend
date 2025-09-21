@@ -8,8 +8,8 @@ const router = express.Router();
 
 // @desc    Get all events with pagination and filtering
 // @route   GET /api/mobile/events
-// @access  Private
-router.get('/events', protectMobile, async (req, res) => {
+// @access  Public
+router.get('/events', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;

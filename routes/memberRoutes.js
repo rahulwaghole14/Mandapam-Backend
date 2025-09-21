@@ -15,12 +15,12 @@ const {
 
 const router = express.Router();
 
-// Apply protection to all routes
-router.use(protect);
+// Note: Public routes don't need authentication
+// Authentication is applied individually to protected routes
 
 // @desc    Get all members with filtering and pagination
 // @route   GET /api/members
-// @access  Private
+// @access  Public
 router.get('/', [
   query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
   query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100'),
@@ -187,7 +187,7 @@ router.get('/:id', async (req, res) => {
 // @desc    Create new member
 // @route   POST /api/members
 // @access  Private (Admin only)
-router.post('/', [
+router.post('/', protect, [
   body('name', 'Member name is required').notEmpty().trim(),
   body('businessName', 'Business name is required').notEmpty().trim(),
   body('phone', 'Phone number is required').matches(/^[0-9]{10}$/).withMessage('Phone number must be exactly 10 digits'),
@@ -371,7 +371,7 @@ router.post('/', [
 // @desc    Update member
 // @route   PUT /api/members/:id
 // @access  Private (Admin only)
-router.put('/:id', [
+router.put('/:id', protect, [
   body('name').optional().notEmpty().trim().withMessage('Name cannot be empty'),
   body('businessName').optional().notEmpty().trim().withMessage('Business name cannot be empty'),
   body('phone').optional().matches(/^[0-9]{10}$/).withMessage('Invalid phone number'),
@@ -554,7 +554,7 @@ router.put('/:id', [
 // @desc    Delete member
 // @route   DELETE /api/members/:id
 // @access  Private (Admin only)
-router.delete('/:id', authorize('admin'), async (req, res) => {
+router.delete('/:id', protect, authorize('admin'), async (req, res) => {
   try {
     const member = await Member.findByPk(req.params.id);
 

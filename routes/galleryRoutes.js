@@ -10,8 +10,8 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
-// Apply protection to all routes
-router.use(protect);
+// Note: Public routes don't need authentication
+// Authentication is applied individually to protected routes
 
 // Configure multer for multiple image uploads
 const storage = multer.diskStorage({
@@ -47,7 +47,7 @@ const upload = multer({
 
 // @desc    Get gallery images for an entity
 // @route   GET /api/gallery/:entityType/:entityId
-// @access  Private
+// @access  Public
 router.get('/:entityType/:entityId', [
   query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
   query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100'),

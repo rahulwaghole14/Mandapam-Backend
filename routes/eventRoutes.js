@@ -15,12 +15,12 @@ const {
 
 const router = express.Router();
 
-// Apply protection to all routes
-router.use(protect);
+// Note: Public routes don't need authentication
+// Authentication is applied individually to protected routes
 
 // @desc    Get all events with filtering and pagination
 // @route   GET /api/events
-// @access  Private
+// @access  Public
 router.get('/', [
   query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
   query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100'),
@@ -63,10 +63,7 @@ router.get('/', [
     // Build filter object
     const where = {};
 
-    // District-based filtering for sub-admins
-    if (req.user.role === 'sub-admin') {
-      where.district = req.user.district;
-    }
+    // Note: Public route - no user-based filtering
 
     // Apply search filters
     if (search) {
@@ -167,28 +164,18 @@ router.get('/', [
 
 // @desc    Get upcoming events
 // @route   GET /api/events/upcoming
-// @access  Private
+// @access  Public
 router.get('/upcoming', async (req, res) => {
   try {
     const { limit = 5 } = req.query;
 
-    // Build filter for district-based access
+    // Build filter for upcoming events
     const where = {
       startDate: { [Op.gte]: new Date() },
-      status: { [Op.in]: ['Upcoming', 'Ongoing'] }
+      status: { [Op.in]: ['Upcoming', 'Ongoing'] },
+      isPublic: true,
+      isActive: true
     };
-
-    // Apply district-based filtering
-    if (req.user.role === 'admin') {
-      // Admin can see all events
-    } else if (req.user.role === 'district_admin') {
-      where.district = req.user.district;
-    } else {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied. Insufficient permissions.'
-      });
-    }
 
     const upcomingEvents = await Event.findAll({
       where,
@@ -224,10 +211,14 @@ router.get('/upcoming', async (req, res) => {
 
 // @desc    Get single event
 // @route   GET /api/events/:id
-// @access  Private
+// @access  Public
 router.get('/:id', async (req, res) => {
   try {
     const event = await Event.findByPk(req.params.id, {
+      where: {
+        isPublic: true,
+        isActive: true
+      },
       include: [
         { model: User, as: 'createdByUser', attributes: ['name', 'email'] },
         { model: User, as: 'updatedByUser', attributes: ['name', 'email'] }
@@ -238,14 +229,6 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Event not found'
-      });
-    }
-
-    // Check district access for sub-admins
-    if (req.user.role === 'sub-admin' && event.district !== req.user.district) {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied to event in different district'
       });
     }
 
@@ -271,7 +254,7 @@ router.get('/:id', async (req, res) => {
 // @desc    Create new event
 // @route   POST /api/events
 // @access  Private
-router.post('/', [
+router.post('/', protect, [
   body('title', 'Event title is required').notEmpty().trim(),
   body('description').optional().trim(),
   body('type', 'Event type is required').isIn([
@@ -461,7 +444,7 @@ router.post('/', [
 // @desc    Update event
 // @route   PUT /api/events/:id
 // @access  Private
-router.put('/:id', [
+router.put('/:id', protect, [
   body('title').optional().notEmpty().trim().withMessage('Title cannot be empty'),
   body('description').optional().trim(),
   body('type').optional().isIn([
@@ -618,7 +601,7 @@ router.put('/:id', [
 // @desc    Delete event
 // @route   DELETE /api/events/:id
 // @access  Private
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', protect, async (req, res) => {
   try {
     const event = await Event.findByPk(req.params.id);
 
@@ -745,7 +728,7 @@ router.get('/stats/overview', async (req, res) => {
 // @desc    Update event status
 // @route   PUT /api/events/:id/status
 // @access  Private
-router.put('/:id/status', [
+router.put('/:id/status', protect, [
   body('status', 'Status is required').isIn(['Upcoming', 'Ongoing', 'Completed', 'Cancelled', 'Postponed'])
 ], async (req, res) => {
   try {
