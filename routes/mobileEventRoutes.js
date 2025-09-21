@@ -115,8 +115,8 @@ router.get('/events', async (req, res) => {
 
 // @desc    Get upcoming events
 // @route   GET /api/mobile/events/upcoming
-// @access  Private
-router.get('/events/upcoming', protectMobile, async (req, res) => {
+// @access  Public
+router.get('/events/upcoming', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
@@ -352,8 +352,8 @@ router.get('/events/stats', protectMobile, async (req, res) => {
 
 // @desc    Get specific event details
 // @route   GET /api/mobile/events/:id
-// @access  Private
-router.get('/events/:id', protectMobile, async (req, res) => {
+// @access  Public
+router.get('/events/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -366,6 +366,10 @@ router.get('/events/:id', protectMobile, async (req, res) => {
     }
 
     const event = await Event.findByPk(id, {
+      where: {
+        isPublic: true,
+        isActive: true
+      },
       attributes: { exclude: ['createdBy', 'updatedBy'] },
       // Removed Association include as Event model doesn't have this association
     });
