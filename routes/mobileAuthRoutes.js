@@ -28,10 +28,13 @@ const generateMemberToken = (member) => {
   });
 };
 
-// Generate OTP - Random 6-digit OTP
+// Generate OTP (Default: "123456" for compatibility with existing app)
 const generateOTP = () => {
-  // Generate random 6-digit OTP
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  // For compatibility with existing app: Always return "123456"
+  return "123456";
+  
+  // For future: Generate random 6-digit OTP when app is updated
+  // return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
 // Send OTP via WhatsApp or fallback to console
@@ -118,6 +121,7 @@ router.post('/send-otp', [
     res.status(200).json({
       success: true,
       message: 'OTP sent successfully to your mobile number',
+      otp: otp, // Include OTP in response for development/testing
       deliveryMethod: otpResult.method,
       whatsappEnabled: otpResult.method === 'whatsapp'
     });
