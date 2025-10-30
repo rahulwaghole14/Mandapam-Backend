@@ -32,11 +32,37 @@ const EventRegistration = sequelize.define('EventRegistration', {
     allowNull: false,
     defaultValue: 'registered'
   },
+  paymentStatus: {
+    type: DataTypes.ENUM('pending', 'paid', 'failed', 'refunded'),
+    allowNull: false,
+    defaultValue: 'pending',
+    field: 'payment_status'
+  },
+  amountPaid: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    field: 'amount_paid'
+  },
+  paymentOrderId: {
+    type: DataTypes.STRING(100),
+    allowNull: true,
+    field: 'payment_order_id'
+  },
+  paymentId: {
+    type: DataTypes.STRING(100),
+    allowNull: true,
+    field: 'payment_id'
+  },
   registeredAt: {
     type: DataTypes.DATE,
     allowNull: false,
     defaultValue: DataTypes.NOW,
     field: 'registered_at'
+  },
+  attendedAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    field: 'attended_at'
   },
   notes: {
     type: DataTypes.TEXT,
@@ -52,7 +78,9 @@ const EventRegistration = sequelize.define('EventRegistration', {
       unique: true,
       fields: ['event_id', 'member_id'],
       name: 'unique_event_member_registration'
-    }
+    },
+    { fields: ['payment_status'] },
+    { fields: ['status'] }
   ],
   validate: {
     // Custom validation to ensure only one active registration per member per event

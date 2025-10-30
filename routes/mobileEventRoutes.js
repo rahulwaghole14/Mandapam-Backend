@@ -1,5 +1,8 @@
 const express = require('express');
 const { Event, EventRegistration } = require('../models');
+const EventExhibitor = require('../models/EventExhibitor');
+const paymentService = require('../services/paymentService');
+const qrService = require('../services/qrService');
 const { Op, sequelize } = require('sequelize');
 const { protectMobile } = require('../middleware/mobileAuthMiddleware');
 const RSVPService = require('../services/rsvpService');
@@ -371,7 +374,7 @@ router.get('/events/:id', async (req, res) => {
         isActive: true
       },
       attributes: { exclude: ['createdBy', 'updatedBy'] },
-      // Removed Association include as Event model doesn't have this association
+      include: [{ model: EventExhibitor, as: 'exhibitors' }]
     });
 
     if (!event) {
@@ -392,6 +395,118 @@ router.get('/events/:id', async (req, res) => {
       success: false,
       message: 'Server error while fetching event'
     });
+  }
+});
+
+// Payments and Registration flow
+// @desc    Create Razorpay order for event registration
+// @route   POST /api/mobile/events/:id/register-payment
+// @access  Private
+router.post('/events/:id/register-payment', protectMobile, async (req, res) => {
+  try {
+    const eventId = parseInt(req.params.id, 10);
+    const memberId = req.user.id;
+    const event = await Event.findByPk(eventId);
+    if (!event) return res.status(404).json({ success: false, message: 'Event not found' });
+    const fee = Number(event.registrationFee || 0);
+    if (!(fee > 0)) return res.status(400).json({ success: false, message: 'This event does not require payment' });
+
+    const order = await paymentService.createOrder(fee, `evt_${eventId}_mem_${memberId}_${Date.now()}`);
+    return res.status(201).json({ success: true, order, keyId: process.env.RAZORPAY_KEY_ID });
+  } catch (error) {
+    console.error('Create order error:', error);
+    res.status(500).json({ success: false, message: 'Server error while creating order' });
+  }
+});
+
+// @desc    Confirm payment and create registration
+// @route   POST /api/mobile/events/:id/confirm-payment
+// @access  Private
+router.post('/events/:id/confirm-payment', protectMobile, async (req, res) => {
+  try {
+    const eventId = parseInt(req.params.id, 10);
+    const memberId = req.user.id;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, notes } = req.body;
+
+    if (!paymentService.verifySignature({ razorpay_order_id, razorpay_payment_id, razorpay_signature })) {
+      return res.status(400).json({ success: false, message: 'Invalid payment signature' });
+    }
+
+    // Upsert registration with paid status
+    let registration = await EventRegistration.findOne({ where: { eventId, memberId } });
+    if (registration) {
+      await registration.update({
+        paymentStatus: 'paid',
+        amountPaid: null,
+        paymentOrderId: razorpay_order_id,
+        paymentId: razorpay_payment_id,
+        status: 'registered',
+        notes: notes || registration.notes
+      });
+    } else {
+      registration = await EventRegistration.create({
+        eventId,
+        memberId,
+        status: 'registered',
+        paymentStatus: 'paid',
+        amountPaid: null,
+        paymentOrderId: razorpay_order_id,
+        paymentId: razorpay_payment_id,
+        notes: notes || null
+      });
+    }
+
+    // Generate QR on the fly
+    const qrDataURL = await qrService.generateQrDataURL(registration);
+    res.status(201).json({ success: true, message: 'Registration confirmed', registrationId: registration.id, qrDataURL });
+  } catch (error) {
+    console.error('Confirm payment error:', error);
+    res.status(500).json({ success: false, message: 'Server error while confirming payment' });
+  }
+});
+
+// @desc    Get my registrations with QR codes
+// @route   GET /api/mobile/my/events
+// @access  Private
+router.get('/my/events', protectMobile, async (req, res) => {
+  try {
+    const memberId = req.user.id;
+    const regs = await EventRegistration.findAll({
+      where: { memberId },
+      include: [{ model: Event, as: 'event', include: [{ model: EventExhibitor, as: 'exhibitors' }] }],
+      order: [['registeredAt', 'DESC']]
+    });
+
+    const items = await Promise.all(regs.map(async r => ({
+      id: r.id,
+      event: r.event,
+      status: r.status,
+      paymentStatus: r.paymentStatus,
+      registeredAt: r.registeredAt,
+      attendedAt: r.attendedAt,
+      qrDataURL: await qrService.generateQrDataURL(r)
+    })));
+
+    res.json({ success: true, registrations: items });
+  } catch (error) {
+    console.error('My events error:', error);
+    res.status(500).json({ success: false, message: 'Server error while fetching my events' });
+  }
+});
+
+// @desc    Get QR code for a registration
+// @route   GET /api/mobile/registrations/:id/qr
+// @access  Private
+router.get('/registrations/:id/qr', protectMobile, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const reg = await EventRegistration.findByPk(id);
+    if (!reg || reg.memberId !== req.user.id) return res.status(404).json({ success: false, message: 'Registration not found' });
+    const dataUrl = await qrService.generateQrDataURL(reg);
+    res.json({ success: true, qrDataURL: dataUrl });
+  } catch (error) {
+    console.error('Get QR error:', error);
+    res.status(500).json({ success: false, message: 'Server error while generating QR' });
   }
 });
 

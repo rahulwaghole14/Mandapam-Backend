@@ -2,6 +2,10 @@ const express = require('express');
 const { body, validationResult, query } = require('express-validator');
 const { Op } = require('sequelize');
 const Event = require('../models/Event');
+const Member = require('../models/Member');
+const EventRegistration = require('../models/EventRegistration');
+const EventExhibitor = require('../models/EventExhibitor');
+const qrService = require('../services/qrService');
 const User = require('../models/User');
 const { protect, authorize, authorizeDistrict } = require('../middleware/authMiddleware');
 const fcmService = require('../services/fcmService');
@@ -777,6 +781,159 @@ router.put('/:id/status', protect, [
       success: false,
       message: 'Server error while updating event status'
     });
+  }
+});
+
+// @desc    Get registrations for an event
+// @route   GET /api/events/:id/registrations
+// @access  Private (admin)
+router.get('/:id/registrations', protect, async (req, res) => {
+  try {
+    const eventId = req.params.id;
+    const event = await Event.findByPk(eventId);
+    if (!event) {
+      return res.status(404).json({ success: false, message: 'Event not found' });
+    }
+
+    const regs = await EventRegistration.findAll({
+      where: { eventId },
+      include: [{ model: Member, as: 'member', attributes: ['id', 'name', 'phone'] }],
+      order: [['registeredAt', 'DESC']]
+    });
+
+    const list = regs.map(r => ({
+      memberId: r.memberId,
+      name: r.member?.name,
+      phone: r.member?.phone,
+      amountPaid: r.amountPaid,
+      paymentStatus: r.paymentStatus,
+      status: r.status,
+      registeredAt: r.registeredAt,
+      attendedAt: r.attendedAt
+    }));
+
+    res.json({ success: true, registrations: list });
+  } catch (error) {
+    console.error('Get registrations error:', error);
+    res.status(500).json({ success: false, message: 'Server error while fetching registrations' });
+  }
+});
+
+// @desc    Check-in attendee by QR
+// @route   POST /api/events/checkin
+// @access  Private (admin)
+router.post('/checkin', protect, [
+  body('qrToken', 'qrToken is required').notEmpty()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
+
+    const { qrToken } = req.body;
+    const parsed = JSON.parse(Buffer.from(qrToken.replace(/^EVT:/, ''), 'base64url').toString('utf8'));
+    const isValid = qrService.verifyToken(parsed);
+    if (!isValid) {
+      return res.status(400).json({ success: false, message: 'Invalid QR token' });
+    }
+
+    const { r: registrationId, e: eventId, m: memberId } = parsed.data;
+
+    const registration = await EventRegistration.findOne({ where: { id: registrationId, eventId, memberId } });
+    if (!registration) {
+      return res.status(404).json({ success: false, message: 'Registration not found' });
+    }
+
+    if (registration.status === 'attended') {
+      return res.json({ success: true, message: 'Already checked-in', attendedAt: registration.attendedAt });
+    }
+
+    await registration.update({ status: 'attended', attendedAt: new Date() });
+    return res.json({ success: true, message: 'Check-in successful', attendedAt: registration.attendedAt });
+  } catch (error) {
+    console.error('Check-in error:', error);
+    res.status(500).json({ success: false, message: 'Server error during check-in' });
+  }
+});
+
+// Exhibitors CRUD
+// @desc    Add exhibitor to event
+// @route   POST /api/events/:eventId/exhibitors
+// @access  Private (admin)
+router.post('/:eventId/exhibitors', protect, [
+  body('name', 'Name is required').notEmpty().trim(),
+  body('logo').optional().trim(),
+  body('description').optional().trim(),
+  body('phone').optional().trim()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
+    const { eventId } = req.params;
+    const event = await Event.findByPk(eventId);
+    if (!event) return res.status(404).json({ success: false, message: 'Event not found' });
+
+    const exhibitor = await EventExhibitor.create({
+      eventId: Number(eventId),
+      name: req.body.name,
+      logo: req.body.logo || null,
+      description: req.body.description || null,
+      phone: req.body.phone || null
+    });
+
+    res.status(201).json({ success: true, exhibitor });
+  } catch (error) {
+    console.error('Create exhibitor error:', error);
+    res.status(500).json({ success: false, message: 'Server error while creating exhibitor' });
+  }
+});
+
+// @desc    List exhibitors
+// @route   GET /api/events/:eventId/exhibitors
+// @access  Public
+router.get('/:eventId/exhibitors', async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const exhibitors = await EventExhibitor.findAll({ where: { eventId } });
+    res.json({ success: true, exhibitors });
+  } catch (error) {
+    console.error('List exhibitors error:', error);
+    res.status(500).json({ success: false, message: 'Server error while fetching exhibitors' });
+  }
+});
+
+// @desc    Update exhibitor
+// @route   PUT /api/events/:eventId/exhibitors/:exhibitorId
+// @access  Private (admin)
+router.put('/:eventId/exhibitors/:exhibitorId', protect, async (req, res) => {
+  try {
+    const { eventId, exhibitorId } = req.params;
+    const exhibitor = await EventExhibitor.findOne({ where: { id: exhibitorId, eventId } });
+    if (!exhibitor) return res.status(404).json({ success: false, message: 'Exhibitor not found' });
+    await exhibitor.update({ name: req.body.name ?? exhibitor.name, logo: req.body.logo ?? exhibitor.logo, description: req.body.description ?? exhibitor.description, phone: req.body.phone ?? exhibitor.phone });
+    res.json({ success: true, exhibitor });
+  } catch (error) {
+    console.error('Update exhibitor error:', error);
+    res.status(500).json({ success: false, message: 'Server error while updating exhibitor' });
+  }
+});
+
+// @desc    Delete exhibitor
+// @route   DELETE /api/events/:eventId/exhibitors/:exhibitorId
+// @access  Private (admin)
+router.delete('/:eventId/exhibitors/:exhibitorId', protect, async (req, res) => {
+  try {
+    const { eventId, exhibitorId } = req.params;
+    const exhibitor = await EventExhibitor.findOne({ where: { id: exhibitorId, eventId } });
+    if (!exhibitor) return res.status(404).json({ success: false, message: 'Exhibitor not found' });
+    await exhibitor.destroy();
+    res.json({ success: true, message: 'Exhibitor deleted' });
+  } catch (error) {
+    console.error('Delete exhibitor error:', error);
+    res.status(500).json({ success: false, message: 'Server error while deleting exhibitor' });
   }
 });
 

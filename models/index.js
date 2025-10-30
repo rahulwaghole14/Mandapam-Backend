@@ -13,6 +13,7 @@ const Gallery = require('./Gallery');
 const FCMToken = require('./FCMToken');
 const NotificationLog = require('./NotificationLog');
 const EventRegistration = require('./EventRegistration');
+const EventExhibitor = require('./EventExhibitor');
 const RefreshToken = require('./RefreshToken');
 const WhatsAppConfigModel = require('./WhatsAppConfig');
 
@@ -276,6 +277,16 @@ const defineAssociations = () => {
     as: 'member'
   });
 
+  // Event Exhibitors associations
+  Event.hasMany(EventExhibitor, {
+    foreignKey: 'eventId',
+    as: 'exhibitors'
+  });
+  EventExhibitor.belongsTo(Event, {
+    foreignKey: 'eventId',
+    as: 'event'
+  });
+
   // WhatsAppConfig associations
   User.hasMany(WhatsAppConfig, {
     foreignKey: 'createdBy',
@@ -308,6 +319,7 @@ module.exports = {
   FCMToken,
   NotificationLog,
   EventRegistration,
+  EventExhibitor,
   RefreshToken,
   WhatsAppConfig
 };
