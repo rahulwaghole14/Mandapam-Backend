@@ -13,6 +13,17 @@ async function createOrder(amountInRupees, receipt) {
     throw new Error('Razorpay is not configured. Please set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET environment variables.');
   }
   
+  // Validate key format
+  if (!key_id.startsWith('rzp_test_') && !key_id.startsWith('rzp_live_')) {
+    console.error(`Invalid RAZORPAY_KEY_ID format. Key should start with 'rzp_test_' or 'rzp_live_'. Got: ${key_id.substring(0, 15)}...`);
+    throw new Error('Invalid Razorpay key format. Key ID must start with rzp_test_ or rzp_live_');
+  }
+  
+  if (key_secret.length < 20) {
+    console.error(`Invalid RAZORPAY_KEY_SECRET length. Expected at least 20 characters. Got: ${key_secret.length}`);
+    throw new Error('Invalid Razorpay secret format. Secret key appears to be too short.');
+  }
+  
   const amount = Math.round(Number(amountInRupees) * 100);
   if (isNaN(amount) || amount <= 0) {
     throw new Error(`Invalid amount: ${amountInRupees}. Amount must be a positive number.`);
@@ -25,7 +36,17 @@ async function createOrder(amountInRupees, receipt) {
       receipt: receipt || `receipt_${Date.now()}` 
     });
   } catch (error) {
-    console.error('Razorpay order creation failed:', error);
+    console.error('Razorpay order creation failed:', {
+      statusCode: error.statusCode,
+      error: error.error,
+      keyIdPrefix: key_id.substring(0, 15) + '...',
+      keySecretLength: key_secret.length
+    });
+    
+    if (error.statusCode === 401) {
+      throw new Error(`Razorpay authentication failed. Please verify that RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are correct and match each other (both test or both live keys).`);
+    }
+    
     if (error.error && error.error.description) {
       throw new Error(`Razorpay error: ${error.error.description}`);
     }
