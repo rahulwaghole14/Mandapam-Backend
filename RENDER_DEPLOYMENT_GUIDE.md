@@ -44,7 +44,12 @@
    DATABASE_URL=postgresql://mandap_user:password@host:port/mandap_db
    JWT_SECRET=your-super-secret-jwt-key-here
    PORT=10000
+   RAZORPAY_KEY_ID=your-razorpay-key-id
+   RAZORPAY_KEY_SECRET=your-razorpay-key-secret
+   QR_SECRET=your-random-secret-for-qr-token-signing
    ```
+   
+   **Note**: For Razorpay, use test keys during development and live keys for production.
 
 ## 🔧 **Step 3: Update Package.json (if needed)**
 
