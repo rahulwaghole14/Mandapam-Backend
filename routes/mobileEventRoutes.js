@@ -408,14 +408,38 @@ router.post('/events/:id/register-payment', protectMobile, async (req, res) => {
     const memberId = req.user.id;
     const event = await Event.findByPk(eventId);
     if (!event) return res.status(404).json({ success: false, message: 'Event not found' });
+    
     const fee = Number(event.registrationFee || 0);
-    if (!(fee > 0)) return res.status(400).json({ success: false, message: 'This event does not require payment' });
+    if (!(fee > 0)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'This event does not require payment' 
+      });
+    }
+
+    // Check if Razorpay is configured
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+      console.error('Razorpay not configured: Missing RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET');
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Payment gateway is not configured. Please contact administrator.' 
+      });
+    }
 
     const order = await paymentService.createOrder(fee, `evt_${eventId}_mem_${memberId}_${Date.now()}`);
-    return res.status(201).json({ success: true, order, keyId: process.env.RAZORPAY_KEY_ID });
+    return res.status(201).json({ 
+      success: true, 
+      order, 
+      keyId: process.env.RAZORPAY_KEY_ID 
+    });
   } catch (error) {
     console.error('Create order error:', error);
-    res.status(500).json({ success: false, message: 'Server error while creating order' });
+    const errorMessage = error.message || 'Server error while creating order';
+    res.status(500).json({ 
+      success: false, 
+      message: errorMessage,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
