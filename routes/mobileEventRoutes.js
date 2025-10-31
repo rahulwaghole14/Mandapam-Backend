@@ -406,14 +406,35 @@ router.post('/events/:id/register-payment', protectMobile, async (req, res) => {
   try {
     const eventId = parseInt(req.params.id, 10);
     const memberId = req.user.id;
-    const event = await Event.findByPk(eventId);
-    if (!event) return res.status(404).json({ success: false, message: 'Event not found' });
     
-    const fee = Number(event.registrationFee || 0);
-    if (!(fee > 0)) {
+    if (isNaN(eventId)) {
       return res.status(400).json({ 
         success: false, 
-        message: 'This event does not require payment' 
+        message: 'Invalid event ID' 
+      });
+    }
+    
+    const event = await Event.findByPk(eventId);
+    if (!event) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Event not found' 
+      });
+    }
+    
+    const fee = Number(event.registrationFee || 0);
+    
+    // If event is free, return success without payment
+    if (!(fee > 0)) {
+      return res.status(200).json({ 
+        success: true, 
+        isFree: true,
+        message: 'This event is free. Please use the RSVP endpoint to register.',
+        event: {
+          id: event.id,
+          title: event.title,
+          registrationFee: 0
+        }
       });
     }
 
@@ -429,6 +450,7 @@ router.post('/events/:id/register-payment', protectMobile, async (req, res) => {
     const order = await paymentService.createOrder(fee, `evt_${eventId}_mem_${memberId}_${Date.now()}`);
     return res.status(201).json({ 
       success: true, 
+      isFree: false,
       order, 
       keyId: process.env.RAZORPAY_KEY_ID 
     });
@@ -450,32 +472,78 @@ router.post('/events/:id/confirm-payment', protectMobile, async (req, res) => {
   try {
     const eventId = parseInt(req.params.id, 10);
     const memberId = req.user.id;
+    
+    if (isNaN(eventId)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid event ID' 
+      });
+    }
+    
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, notes } = req.body;
 
-    if (!paymentService.verifySignature({ razorpay_order_id, razorpay_payment_id, razorpay_signature })) {
-      return res.status(400).json({ success: false, message: 'Invalid payment signature' });
-    }
-
-    // Get event to get the registration fee
+    // Get event first to check if it exists and if it requires payment
     const event = await Event.findByPk(eventId);
     if (!event) {
-      return res.status(404).json({ success: false, message: 'Event not found' });
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Event not found' 
+      });
     }
 
-    const amountPaid = Number(event.registrationFee || 0);
+    const fee = Number(event.registrationFee || 0);
+    
+    // If event is free, use RSVP flow instead
+    if (!(fee > 0)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'This event is free. Please use the RSVP endpoint to register.',
+        useRSVP: true
+      });
+    }
+
+    // Validate payment fields for paid events
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Payment details are required' 
+      });
+    }
+
+    if (!paymentService.verifySignature({ razorpay_order_id, razorpay_payment_id, razorpay_signature })) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid payment signature' 
+      });
+    }
+
+    const amountPaid = fee;
 
     // Upsert registration with paid status
     let registration = await EventRegistration.findOne({ where: { eventId, memberId } });
+    const isNewRegistration = !registration;
+    
     if (registration) {
+      // Update existing registration
+      const wasPaid = registration.paymentStatus === 'paid';
       await registration.update({
         paymentStatus: 'paid',
         amountPaid: amountPaid,
         paymentOrderId: razorpay_order_id,
         paymentId: razorpay_payment_id,
         status: 'registered',
-        notes: notes || registration.notes
+        notes: notes || registration.notes,
+        registeredAt: registration.registeredAt || new Date()
       });
+      
+      // Only increment attendee count if this was not previously paid
+      if (!wasPaid) {
+        await Event.increment('currentAttendees', {
+          where: { id: eventId }
+        });
+      }
     } else {
+      // Create new registration
       registration = await EventRegistration.create({
         eventId,
         memberId,
@@ -484,16 +552,40 @@ router.post('/events/:id/confirm-payment', protectMobile, async (req, res) => {
         amountPaid: amountPaid,
         paymentOrderId: razorpay_order_id,
         paymentId: razorpay_payment_id,
-        notes: notes || null
+        notes: notes || null,
+        registeredAt: new Date()
+      });
+      
+      // Update event attendee count for new registration
+      await Event.increment('currentAttendees', {
+        where: { id: eventId }
       });
     }
 
     // Generate QR on the fly
     const qrDataURL = await qrService.generateQrDataURL(registration);
-    res.status(201).json({ success: true, message: 'Registration confirmed', registrationId: registration.id, qrDataURL });
+    res.status(201).json({ 
+      success: true, 
+      message: 'Registration confirmed', 
+      registrationId: registration.id, 
+      qrDataURL,
+      registration: {
+        id: registration.id,
+        eventId: registration.eventId,
+        memberId: registration.memberId,
+        status: registration.status,
+        paymentStatus: registration.paymentStatus,
+        amountPaid: registration.amountPaid
+      }
+    });
   } catch (error) {
     console.error('Confirm payment error:', error);
-    res.status(500).json({ success: false, message: 'Server error while confirming payment' });
+    const errorMessage = error.message || 'Server error while confirming payment';
+    res.status(500).json({ 
+      success: false, 
+      message: errorMessage,
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
