@@ -456,12 +456,20 @@ router.post('/events/:id/confirm-payment', protectMobile, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid payment signature' });
     }
 
+    // Get event to get the registration fee
+    const event = await Event.findByPk(eventId);
+    if (!event) {
+      return res.status(404).json({ success: false, message: 'Event not found' });
+    }
+
+    const amountPaid = Number(event.registrationFee || 0);
+
     // Upsert registration with paid status
     let registration = await EventRegistration.findOne({ where: { eventId, memberId } });
     if (registration) {
       await registration.update({
         paymentStatus: 'paid',
-        amountPaid: null,
+        amountPaid: amountPaid,
         paymentOrderId: razorpay_order_id,
         paymentId: razorpay_payment_id,
         status: 'registered',
@@ -473,7 +481,7 @@ router.post('/events/:id/confirm-payment', protectMobile, async (req, res) => {
         memberId,
         status: 'registered',
         paymentStatus: 'paid',
-        amountPaid: null,
+        amountPaid: amountPaid,
         paymentOrderId: razorpay_order_id,
         paymentId: razorpay_payment_id,
         notes: notes || null
