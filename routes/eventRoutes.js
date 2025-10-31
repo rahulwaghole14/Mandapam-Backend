@@ -259,18 +259,12 @@ router.get('/:id', async (req, res) => {
 // @route   POST /api/events
 // @access  Private
 router.post('/', protect, [
-  body('title').custom((value, { req }) => {
-    // Either title or name must be provided
-    if (!value && !req.body.name) {
-      throw new Error('Event title is required (provide title or name)');
-    }
-    return true;
-  }).optional().trim(),
+  body('title').optional().trim(),
+  body('name').optional().trim(), // Accept 'name' as alias for 'title'
   body('description').optional().trim(),
   body('type').optional().isIn([
     'Meeting', 'Workshop', 'Seminar', 'Celebration', 'Other'
   ]),
-  body('name').optional().trim(), // Accept 'name' as alias for 'title'
   body('fee').optional().isFloat({ min: 0 }), // Accept 'fee' as alias for 'registrationFee'
   body('startDateTime').optional().custom((value) => {
     // Accept ISO8601 or formats like "2025-11-01T12:52"
@@ -286,13 +280,7 @@ router.post('/', protect, [
     }
     throw new Error('Invalid endDateTime format');
   }), // Accept combined date-time
-  body('startDate').custom((value, { req }) => {
-    // Either startDate or startDateTime must be provided
-    if (!value && !req.body.startDateTime) {
-      throw new Error('Event start date is required (provide startDate or startDateTime)');
-    }
-    return true;
-  }),
+  body('startDate').optional(),
   body('endDate').optional(),
   body('startTime').optional().matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/),
   body('endTime').optional().matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/),
@@ -320,6 +308,31 @@ router.post('/', protect, [
   body('imageURL').optional().trim()
 ], authorizeDistrict, eventImagesUpload.single('image'), handleMulterError, async (req, res) => {
   try {
+    // Check for validation errors first
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        errors: errors.array()
+      });
+    }
+
+    // Validate required fields after normalization
+    const title = (req.body.title || req.body.name || '').trim();
+    if (!title || title.length < 2) {
+      return res.status(400).json({
+        success: false,
+        errors: [{ msg: 'Event title is required and must be at least 2 characters (provide title or name)', param: 'title' }]
+      });
+    }
+
+    if (!req.body.startDate && !req.body.startDateTime) {
+      return res.status(400).json({
+        success: false,
+        errors: [{ msg: 'Event start date is required (provide startDate or startDateTime)', param: 'startDate' }]
+      });
+    }
+
     // Normalize frontend field names to backend format
     if (req.body.name && !req.body.title) {
       req.body.title = req.body.name;
@@ -365,15 +378,6 @@ router.post('/', protect, [
     // Set default type if missing
     if (!req.body.type) {
       req.body.type = 'Other';
-    }
-
-    // Check for validation errors
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        errors: errors.array()
-      });
     }
 
     // Handle date and time conversion
