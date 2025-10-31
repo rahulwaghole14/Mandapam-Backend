@@ -1,8 +1,8 @@
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 
-const key_id = process.env.RAZORPAY_KEY_ID || '';
-const key_secret = process.env.RAZORPAY_KEY_SECRET || '';
+const key_id = (process.env.RAZORPAY_KEY_ID || '').trim();
+const key_secret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
 
 const razorpay = (key_id && key_secret)
   ? new Razorpay({ key_id, key_secret })
