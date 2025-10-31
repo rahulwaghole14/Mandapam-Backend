@@ -259,12 +259,40 @@ router.get('/:id', async (req, res) => {
 // @route   POST /api/events
 // @access  Private
 router.post('/', protect, [
-  body('title', 'Event title is required').notEmpty().trim(),
+  body('title').custom((value, { req }) => {
+    // Either title or name must be provided
+    if (!value && !req.body.name) {
+      throw new Error('Event title is required (provide title or name)');
+    }
+    return true;
+  }).optional().trim(),
   body('description').optional().trim(),
-  body('type', 'Event type is required').isIn([
+  body('type').optional().isIn([
     'Meeting', 'Workshop', 'Seminar', 'Celebration', 'Other'
   ]),
-  body('startDate', 'Event start date is required').notEmpty(),
+  body('name').optional().trim(), // Accept 'name' as alias for 'title'
+  body('fee').optional().isFloat({ min: 0 }), // Accept 'fee' as alias for 'registrationFee'
+  body('startDateTime').optional().custom((value) => {
+    // Accept ISO8601 or formats like "2025-11-01T12:52"
+    if (typeof value === 'string' && (value.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/) || !isNaN(Date.parse(value)))) {
+      return true;
+    }
+    throw new Error('Invalid startDateTime format');
+  }), // Accept combined date-time
+  body('endDateTime').optional().custom((value) => {
+    // Accept ISO8601 or formats like "2025-11-01T12:52"
+    if (typeof value === 'string' && (value.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/) || !isNaN(Date.parse(value)))) {
+      return true;
+    }
+    throw new Error('Invalid endDateTime format');
+  }), // Accept combined date-time
+  body('startDate').custom((value, { req }) => {
+    // Either startDate or startDateTime must be provided
+    if (!value && !req.body.startDateTime) {
+      throw new Error('Event start date is required (provide startDate or startDateTime)');
+    }
+    return true;
+  }),
   body('endDate').optional(),
   body('startTime').optional().matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/),
   body('endTime').optional().matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/),
@@ -292,6 +320,53 @@ router.post('/', protect, [
   body('imageURL').optional().trim()
 ], authorizeDistrict, eventImagesUpload.single('image'), handleMulterError, async (req, res) => {
   try {
+    // Normalize frontend field names to backend format
+    if (req.body.name && !req.body.title) {
+      req.body.title = req.body.name;
+    }
+    if (req.body.fee !== undefined && req.body.registrationFee === undefined) {
+      req.body.registrationFee = req.body.fee;
+    }
+    
+    // Handle startDateTime/endDateTime format from frontend
+    if (req.body.startDateTime && !req.body.startDate) {
+      // Handle formats like "2025-11-01T12:52" or full ISO
+      let dtStr = req.body.startDateTime;
+      if (dtStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)) {
+        // Format: YYYY-MM-DDTHH:MM - add seconds
+        dtStr = dtStr + ':00';
+      }
+      const dt = new Date(dtStr);
+      if (!isNaN(dt.getTime())) {
+        req.body.startDate = dt.toISOString().split('T')[0];
+        const timeStr = dt.toTimeString().split(' ')[0].slice(0, 5); // HH:MM
+        if (timeStr !== '00:00') {
+          req.body.startTime = timeStr;
+        }
+      }
+    }
+    if (req.body.endDateTime && !req.body.endDate) {
+      // Handle formats like "2025-11-01T12:52" or full ISO
+      let dtStr = req.body.endDateTime;
+      if (dtStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)) {
+        // Format: YYYY-MM-DDTHH:MM - add seconds
+        dtStr = dtStr + ':00';
+      }
+      const dt = new Date(dtStr);
+      if (!isNaN(dt.getTime())) {
+        req.body.endDate = dt.toISOString().split('T')[0];
+        const timeStr = dt.toTimeString().split(' ')[0].slice(0, 5); // HH:MM
+        if (timeStr !== '00:00') {
+          req.body.endTime = timeStr;
+        }
+      }
+    }
+
+    // Set default type if missing
+    if (!req.body.type) {
+      req.body.type = 'Other';
+    }
+
     // Check for validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
