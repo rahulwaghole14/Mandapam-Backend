@@ -32,6 +32,12 @@ const EventExhibitor = sequelize.define('EventExhibitor', {
   phone: {
     type: DataTypes.STRING(20),
     allowNull: true
+  },
+  businessCategory: {
+    type: DataTypes.ENUM('Flower Decoration', 'Tent', 'Lighting', 'Sound', 'Furniture', 'Other'),
+    allowNull: true,
+    defaultValue: 'Other',
+    field: 'business_category'
   }
 }, {
   tableName: 'event_exhibitors',

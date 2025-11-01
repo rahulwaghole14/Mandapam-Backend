@@ -944,7 +944,8 @@ router.post('/:eventId/exhibitors', protect, [
   body('name', 'Name is required').notEmpty().trim(),
   body('logo').optional().trim(),
   body('description').optional().trim(),
-  body('phone').optional().trim()
+  body('phone').optional().trim(),
+  body('businessCategory').optional().isIn(['Flower Decoration', 'Tent', 'Lighting', 'Sound', 'Furniture', 'Other']).withMessage('Invalid business category')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -960,7 +961,8 @@ router.post('/:eventId/exhibitors', protect, [
       name: req.body.name,
       logo: req.body.logo || null,
       description: req.body.description || null,
-      phone: req.body.phone || null
+      phone: req.body.phone || null,
+      businessCategory: req.body.businessCategory || 'Other'
     });
 
     res.status(201).json({ success: true, exhibitor });
@@ -987,12 +989,31 @@ router.get('/:eventId/exhibitors', async (req, res) => {
 // @desc    Update exhibitor
 // @route   PUT /api/events/:eventId/exhibitors/:exhibitorId
 // @access  Private (admin)
-router.put('/:eventId/exhibitors/:exhibitorId', protect, async (req, res) => {
+router.put('/:eventId/exhibitors/:exhibitorId', protect, [
+  body('name').optional().trim(),
+  body('logo').optional().trim(),
+  body('description').optional().trim(),
+  body('phone').optional().trim(),
+  body('businessCategory').optional().isIn(['Flower Decoration', 'Tent', 'Lighting', 'Sound', 'Furniture', 'Other']).withMessage('Invalid business category')
+], async (req, res) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
     const { eventId, exhibitorId } = req.params;
     const exhibitor = await EventExhibitor.findOne({ where: { id: exhibitorId, eventId } });
     if (!exhibitor) return res.status(404).json({ success: false, message: 'Exhibitor not found' });
-    await exhibitor.update({ name: req.body.name ?? exhibitor.name, logo: req.body.logo ?? exhibitor.logo, description: req.body.description ?? exhibitor.description, phone: req.body.phone ?? exhibitor.phone });
+    
+    const updateData = {
+      name: req.body.name ?? exhibitor.name,
+      logo: req.body.logo ?? exhibitor.logo,
+      description: req.body.description ?? exhibitor.description,
+      phone: req.body.phone ?? exhibitor.phone,
+      businessCategory: req.body.businessCategory ?? exhibitor.businessCategory
+    };
+    
+    await exhibitor.update(updateData);
     res.json({ success: true, exhibitor });
   } catch (error) {
     console.error('Update exhibitor error:', error);
