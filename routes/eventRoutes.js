@@ -215,14 +215,18 @@ router.get('/upcoming', async (req, res) => {
 
 // @desc    Get single event
 // @route   GET /api/events/:id
-// @access  Public
+// @access  Public (admins can see all, public users see only active/public)
 router.get('/:id', async (req, res) => {
   try {
-    const event = await Event.findByPk(req.params.id, {
-      where: {
-        isPublic: true,
-        isActive: true
-      },
+    // Build where clause - admins can see all events, public users see only active/public
+    const whereClause = { id: req.params.id };
+    if (!req.user || req.user.role !== 'admin') {
+      whereClause.isPublic = true;
+      whereClause.isActive = true;
+    }
+
+    const event = await Event.findOne({
+      where: whereClause,
       include: [
         { model: User, as: 'createdByUser', attributes: ['name', 'email'] },
         { model: User, as: 'updatedByUser', attributes: ['name', 'email'] }
@@ -232,7 +236,7 @@ router.get('/:id', async (req, res) => {
     if (!event) {
       return res.status(404).json({
         success: false,
-        message: 'Event not found'
+        message: 'Event not found or not accessible'
       });
     }
 

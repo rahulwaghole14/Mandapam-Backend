@@ -368,8 +368,9 @@ router.get('/events/:id', async (req, res) => {
       });
     }
 
-    const event = await Event.findByPk(id, {
+    const event = await Event.findOne({
       where: {
+        id: id,
         isPublic: true,
         isActive: true
       },
