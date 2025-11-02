@@ -1,5 +1,5 @@
 const express = require('express');
-const { Event, EventRegistration } = require('../models');
+const { Event, EventRegistration, Member } = require('../models');
 const EventExhibitor = require('../models/EventExhibitor');
 const paymentService = require('../services/paymentService');
 const qrService = require('../services/qrService');
@@ -447,12 +447,41 @@ router.post('/events/:id/register-payment', protectMobile, async (req, res) => {
       });
     }
 
+    // Get member details for prefill
+    const member = await Member.findByPk(memberId);
+    
     const order = await paymentService.createOrder(fee, `evt_${eventId}_mem_${memberId}_${Date.now()}`);
+    
+    // Prepare payment options for frontend (Razorpay Checkout)
+    const paymentOptions = {
+      key: process.env.RAZORPAY_KEY_ID,
+      amount: order.amount, // Already in paise
+      currency: 'INR',
+      name: event.title || 'Event Registration',
+      description: `Event Registration Fee - ${event.title || 'Event'}`,
+      order_id: order.id,
+      prefill: {
+        name: member?.name || '',
+        email: member?.email || '',
+        contact: member?.phone || ''
+      },
+      theme: {
+        color: '#2563eb' // Blue theme
+      },
+      // Note: handler and modal.ondismiss should be set on frontend
+      notes: {
+        eventId: eventId.toString(),
+        memberId: memberId.toString(),
+        eventName: event.title
+      }
+    };
+    
     return res.status(201).json({ 
       success: true, 
       isFree: false,
       order, 
-      keyId: process.env.RAZORPAY_KEY_ID 
+      keyId: process.env.RAZORPAY_KEY_ID,
+      paymentOptions // Provide pre-configured options
     });
   } catch (error) {
     console.error('Create order error:', error);
