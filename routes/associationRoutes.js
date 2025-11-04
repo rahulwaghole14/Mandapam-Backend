@@ -98,7 +98,7 @@ const validateAssociation = [
 // @desc    Create new association
 // @route   POST /api/associations
 // @access  Private (Admin, Sub-Admin)
-router.post('/', protect, authorize(['admin', 'sub-admin']), validateAssociation, profileImageUpload.single('logo'), handleMulterError, async (req, res) => {
+router.post('/', protect, authorize(['admin', 'sub-admin']), validateAssociation, async (req, res) => {
   try {
     console.log('Association POST request received:', req.body);
     
@@ -121,10 +121,15 @@ router.post('/', protect, authorize(['admin', 'sub-admin']), validateAssociation
       });
     }
 
-    // Handle uploaded logo file
+    // Handle logo URL (Cloudinary)
     const baseUrl = req.protocol + '://' + req.get('host');
-    if (req.file) {
-      console.log('Logo uploaded:', req.file.filename);
+    let logoUrl = null;
+    if (req.body.logo) {
+      logoUrl = req.body.logo.trim();
+      console.log('Logo URL received:', logoUrl);
+    } else if (req.body.logoURL) {
+      logoUrl = req.body.logoURL.trim();
+      console.log('Logo URL received:', logoUrl);
     }
 
     const associationData = {
@@ -144,7 +149,7 @@ router.post('/', protect, authorize(['admin', 'sub-admin']), validateAssociation
         twitter: req.body.socialLinks?.twitter || undefined,
         facebook: req.body.socialLinks?.facebook || undefined
       },
-      logo: req.file ? req.file.filename : (req.body.logo || undefined)
+      logo: logoUrl !== null ? logoUrl : (req.body.logo === undefined ? undefined : null)
     };
 
     const association = await Association.create(associationData);
@@ -152,7 +157,13 @@ router.post('/', protect, authorize(['admin', 'sub-admin']), validateAssociation
     // Add logo URL to response
     const associationResponse = association.toJSON();
     if (associationResponse.logo) {
-      associationResponse.logoURL = getFileUrl(associationResponse.logo, baseUrl);
+      // Check if it's already a Cloudinary URL
+      if (associationResponse.logo.startsWith('http://') || associationResponse.logo.startsWith('https://')) {
+        associationResponse.logoURL = associationResponse.logo;
+      } else {
+        // Legacy local file - generate URL
+        associationResponse.logoURL = getFileUrl(associationResponse.logo, baseUrl, 'profile-images');
+      }
     }
 
     res.status(201).json({
@@ -160,9 +171,8 @@ router.post('/', protect, authorize(['admin', 'sub-admin']), validateAssociation
       message: 'Association created successfully',
       association: associationResponse,
       uploadedFiles: {
-        logo: req.file ? {
-          filename: req.file.filename,
-          url: getFileUrl(req.file.filename, baseUrl)
+        logo: logoUrl ? {
+          url: logoUrl
         } : null
       }
     });
@@ -427,7 +437,7 @@ router.get('/:id/members', [
 // @desc    Update association
 // @route   PUT /api/associations/:id
 // @access  Private (Admin, Sub-Admin)
-router.put('/:id', protect, authorize(['admin', 'sub-admin']), validateAssociation, profileImageUpload.single('logo'), handleMulterError, async (req, res) => {
+router.put('/:id', protect, authorize(['admin', 'sub-admin']), validateAssociation, async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -447,18 +457,27 @@ router.put('/:id', protect, authorize(['admin', 'sub-admin']), validateAssociati
       });
     }
 
-    // Handle uploaded logo file
+    // Handle logo URL (Cloudinary)
     const baseUrl = req.protocol + '://' + req.get('host');
-    if (req.file) {
-      // Delete old logo if exists
-      if (association.logo) {
-        try {
-          await deleteFile(association.logo);
-        } catch (error) {
-          console.log('Could not delete old logo:', error.message);
-        }
+    let logoUrl = null;
+    if (req.body.logo !== undefined) {
+      logoUrl = req.body.logo ? req.body.logo.trim() : null;
+      if (logoUrl) {
+        console.log('Logo URL received:', logoUrl);
       }
-      console.log('Logo updated:', req.file.filename);
+    } else if (req.body.logoURL) {
+      logoUrl = req.body.logoURL.trim();
+      console.log('Logo URL received:', logoUrl);
+    }
+    
+    // If old logo is a local file (not Cloudinary URL), delete it
+    if (logoUrl && association.logo && !association.logo.includes('cloudinary.com') && !association.logo.includes('http')) {
+      try {
+        await deleteFile(association.logo);
+        console.log('✅ Old local logo deleted');
+      } catch (error) {
+        console.log('⚠️ Could not delete old logo:', error.message);
+      }
     }
 
     const updateData = {
@@ -478,7 +497,7 @@ router.put('/:id', protect, authorize(['admin', 'sub-admin']), validateAssociati
         twitter: req.body.socialLinks?.twitter || undefined,
         facebook: req.body.socialLinks?.facebook || undefined
       },
-      logo: req.file ? req.file.filename : (req.body.logo || undefined)
+      logo: logoUrl !== null ? logoUrl : (req.body.logo === undefined ? undefined : null)
     };
 
     await association.update(updateData);
@@ -487,7 +506,13 @@ router.put('/:id', protect, authorize(['admin', 'sub-admin']), validateAssociati
     // Add logo URL to response
     const associationResponse = updatedAssociation.toJSON();
     if (associationResponse.logo) {
-      associationResponse.logoURL = getFileUrl(associationResponse.logo, baseUrl);
+      // Check if it's already a Cloudinary URL
+      if (associationResponse.logo.startsWith('http://') || associationResponse.logo.startsWith('https://')) {
+        associationResponse.logoURL = associationResponse.logo;
+      } else {
+        // Legacy local file - generate URL
+        associationResponse.logoURL = getFileUrl(associationResponse.logo, baseUrl, 'profile-images');
+      }
     }
 
     res.json({
@@ -495,9 +520,8 @@ router.put('/:id', protect, authorize(['admin', 'sub-admin']), validateAssociati
       message: 'Association updated successfully',
       association: associationResponse,
       uploadedFiles: {
-        logo: req.file ? {
-          filename: req.file.filename,
-          url: getFileUrl(req.file.filename, baseUrl)
+        logo: logoUrl ? {
+          url: logoUrl
         } : null
       }
     });

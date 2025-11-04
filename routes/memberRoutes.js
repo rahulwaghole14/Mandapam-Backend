@@ -217,13 +217,27 @@ router.post('/', protect, [
   }).withMessage('Experience must be between 0 and 100 years'),
   body('profileImage').optional().custom((value) => {
     if (!value || value === '' || value === null || value === undefined) return true; // Allow empty values
-    return value.length <= 255;
-  }).withMessage('Profile image URL cannot exceed 255 characters'),
+    // Accept both URL (Cloudinary) and filename (legacy)
+    if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
+      return value.length <= 500; // URL can be longer
+    }
+    return value.length <= 255; // Legacy filename
+  }).withMessage('Profile image must be a valid URL or filename'),
   body('businessImages').optional().custom((value) => {
     if (!value || value === null || value === undefined) return true; // Allow empty values
-    return Array.isArray(value);
-  }).withMessage('Business images must be an array')
-], authorize('admin'), profileImageUpload.single('profileImage'), businessImagesUpload.array('businessImages', 10), handleMulterError, async (req, res) => {
+    if (!Array.isArray(value)) return false;
+    // Validate each image URL/filename
+    return value.every(img => {
+      if (typeof img === 'string') {
+        if (img.startsWith('http://') || img.startsWith('https://')) {
+          return img.length <= 500; // URL
+        }
+        return img.length <= 255; // Legacy filename
+      }
+      return false;
+    });
+  }).withMessage('Business images must be an array of URLs or filenames')
+], authorize('admin'), async (req, res) => {
   try {
     console.log('Member POST request received:', req.body);
     console.log('Uploaded files:', req.files);
@@ -282,19 +296,24 @@ router.post('/', protect, [
       req.body.updatedBy = req.user.id;
     }
 
-    // Handle uploaded files
+    // Handle image URLs (Cloudinary or legacy files)
     const baseUrl = req.protocol + '://' + req.get('host');
     
-    // Handle profile image upload
-    if (req.file) {
-      req.body.profileImage = req.file.filename;
-      console.log('Profile image uploaded:', req.file.filename);
+    // Handle profile image - accept Cloudinary URL or legacy file
+    if (req.body.profileImage) {
+      // If it's a Cloudinary URL, use it directly
+      if (req.body.profileImage.startsWith('http://') || req.body.profileImage.startsWith('https://')) {
+        console.log('Profile image URL received:', req.body.profileImage);
+      } else {
+        // Legacy filename - keep as is
+        console.log('Profile image filename received:', req.body.profileImage);
+      }
     }
     
-    // Handle business images upload
-    if (req.files && req.files.length > 0) {
-      req.body.businessImages = req.files.map(file => file.filename);
-      console.log('Business images uploaded:', req.files.map(f => f.filename));
+    // Handle business images - accept Cloudinary URLs or legacy files
+    if (req.body.businessImages && Array.isArray(req.body.businessImages)) {
+      console.log('Business images received:', req.body.businessImages.length);
+      // URLs are already in array format, just validate
     }
 
     // Create member
@@ -306,10 +325,23 @@ router.post('/', protect, [
     // Add image URLs to response
     const memberData = memberWithDetails.toJSON();
     if (memberData.profileImage) {
-      memberData.profileImageURL = getFileUrl(memberData.profileImage, baseUrl, 'profile-images');
+      // Check if it's already a Cloudinary URL
+      if (memberData.profileImage.startsWith('http://') || memberData.profileImage.startsWith('https://')) {
+        memberData.profileImageURL = memberData.profileImage;
+      } else {
+        // Legacy local file - generate URL
+        memberData.profileImageURL = getFileUrl(memberData.profileImage, baseUrl, 'profile-images');
+      }
     }
     if (memberData.businessImages && memberData.businessImages.length > 0) {
-      memberData.businessImageURLs = memberData.businessImages.map(filename => getFileUrl(filename, baseUrl));
+      memberData.businessImageURLs = memberData.businessImages.map(img => {
+        // Check if it's already a Cloudinary URL
+        if (typeof img === 'string' && (img.startsWith('http://') || img.startsWith('https://'))) {
+          return img;
+        }
+        // Legacy local file - generate URL
+        return getFileUrl(img, baseUrl, 'business-images');
+      });
     }
 
     res.status(201).json({
@@ -317,14 +349,11 @@ router.post('/', protect, [
       message: 'Member created successfully',
       member: memberData,
       uploadedFiles: {
-        profileImage: req.file ? {
-          filename: req.file.filename,
-          url: getFileUrl(req.file.filename, baseUrl)
+        profileImage: req.body.profileImage ? {
+          url: memberData.profileImageURL
         } : null,
-        businessImages: req.files ? req.files.map(file => ({
-          filename: file.filename,
-          url: getFileUrl(file.filename, baseUrl)
-        })) : []
+        businessImages: req.body.businessImages && Array.isArray(req.body.businessImages) ? 
+          memberData.businessImageURLs || [] : []
       }
     });
 
@@ -401,13 +430,27 @@ router.put('/:id', protect, [
   }).withMessage('Experience must be between 0 and 100 years'),
   body('profileImage').optional().custom((value) => {
     if (!value || value === '' || value === null || value === undefined) return true; // Allow empty values
-    return value.length <= 255;
-  }).withMessage('Profile image URL cannot exceed 255 characters'),
+    // Accept both URL (Cloudinary) and filename (legacy)
+    if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
+      return value.length <= 500; // URL can be longer
+    }
+    return value.length <= 255; // Legacy filename
+  }).withMessage('Profile image must be a valid URL or filename'),
   body('businessImages').optional().custom((value) => {
     if (!value || value === null || value === undefined) return true; // Allow empty values
-    return Array.isArray(value);
-  }).withMessage('Business images must be an array')
-], authorize('admin'), profileImageUpload.single('profileImage'), businessImagesUpload.array('businessImages', 10), handleMulterError, async (req, res) => {
+    if (!Array.isArray(value)) return false;
+    // Validate each image URL/filename
+    return value.every(img => {
+      if (typeof img === 'string') {
+        if (img.startsWith('http://') || img.startsWith('https://')) {
+          return img.length <= 500; // URL
+        }
+        return img.length <= 255; // Legacy filename
+      }
+      return false;
+    });
+  }).withMessage('Business images must be an array of URLs or filenames')
+], authorize('admin'), async (req, res) => {
   try {
     // Check for validation errors
     const errors = validationResult(req);
@@ -447,37 +490,43 @@ router.put('/:id', protect, [
     // Add updatedBy
     req.body.updatedBy = req.user.id;
 
-    // Handle uploaded files
+    // Handle image URLs (Cloudinary or legacy files)
     const baseUrl = req.protocol + '://' + req.get('host');
     
-    // Handle profile image upload
-    if (req.file) {
-      // Delete old profile image if exists
-      if (existingMember.profileImage) {
+    // Handle profile image - accept Cloudinary URL or legacy file
+    if (req.body.profileImage !== undefined) {
+      // If old image is a local file (not Cloudinary URL), delete it
+      if (existingMember.profileImage && !existingMember.profileImage.includes('cloudinary.com') && !existingMember.profileImage.includes('http')) {
         try {
           await deleteFile(existingMember.profileImage);
+          console.log('✅ Old local profile image deleted');
         } catch (error) {
-          console.log('Could not delete old profile image:', error.message);
+          console.log('⚠️ Could not delete old profile image:', error.message);
         }
       }
-      req.body.profileImage = req.file.filename;
-      console.log('Profile image updated:', req.file.filename);
+      
+      if (req.body.profileImage && (req.body.profileImage.startsWith('http://') || req.body.profileImage.startsWith('https://'))) {
+        console.log('Profile image URL received:', req.body.profileImage);
+      } else if (req.body.profileImage) {
+        console.log('Profile image filename received:', req.body.profileImage);
+      }
     }
     
-    // Handle business images upload
-    if (req.files && req.files.length > 0) {
-      // Delete old business images if exist
+    // Handle business images - accept Cloudinary URLs or legacy files
+    if (req.body.businessImages !== undefined && Array.isArray(req.body.businessImages)) {
+      // Delete old local business images if they exist
       if (existingMember.businessImages && existingMember.businessImages.length > 0) {
         for (const oldImage of existingMember.businessImages) {
-          try {
-            await deleteFile(oldImage);
-          } catch (error) {
-            console.log('Could not delete old business image:', error.message);
+          if (!oldImage.includes('cloudinary.com') && !oldImage.includes('http')) {
+            try {
+              await deleteFile(oldImage);
+            } catch (error) {
+              console.log('⚠️ Could not delete old business image:', error.message);
+            }
           }
         }
       }
-      req.body.businessImages = req.files.map(file => file.filename);
-      console.log('Business images updated:', req.files.map(f => f.filename));
+      console.log('Business images received:', req.body.businessImages.length);
     }
 
     // Update member
@@ -494,10 +543,23 @@ router.put('/:id', protect, [
     // Add image URLs to response
     const memberData = member.toJSON();
     if (memberData.profileImage) {
-      memberData.profileImageURL = getFileUrl(memberData.profileImage, baseUrl, 'profile-images');
+      // Check if it's already a Cloudinary URL
+      if (memberData.profileImage.startsWith('http://') || memberData.profileImage.startsWith('https://')) {
+        memberData.profileImageURL = memberData.profileImage;
+      } else {
+        // Legacy local file - generate URL
+        memberData.profileImageURL = getFileUrl(memberData.profileImage, baseUrl, 'profile-images');
+      }
     }
     if (memberData.businessImages && memberData.businessImages.length > 0) {
-      memberData.businessImageURLs = memberData.businessImages.map(filename => getFileUrl(filename, baseUrl));
+      memberData.businessImageURLs = memberData.businessImages.map(img => {
+        // Check if it's already a Cloudinary URL
+        if (typeof img === 'string' && (img.startsWith('http://') || img.startsWith('https://'))) {
+          return img;
+        }
+        // Legacy local file - generate URL
+        return getFileUrl(img, baseUrl, 'business-images');
+      });
     }
 
     res.status(200).json({
@@ -505,14 +567,11 @@ router.put('/:id', protect, [
       message: 'Member updated successfully',
       member: memberData,
       uploadedFiles: {
-        profileImage: req.file ? {
-          filename: req.file.filename,
-          url: getFileUrl(req.file.filename, baseUrl)
+        profileImage: req.body.profileImage !== undefined ? {
+          url: memberData.profileImageURL
         } : null,
-        businessImages: req.files ? req.files.map(file => ({
-          filename: file.filename,
-          url: getFileUrl(file.filename, baseUrl)
-        })) : []
+        businessImages: req.body.businessImages !== undefined && Array.isArray(req.body.businessImages) ? 
+          memberData.businessImageURLs || [] : []
       }
     });
 
@@ -670,3 +729,4 @@ router.get('/stats/overview', async (req, res) => {
 
 
 module.exports = router;
+

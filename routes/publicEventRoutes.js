@@ -241,8 +241,6 @@ router.get('/events/:id/check-registration', [
 // @route   POST /api/public/events/:id/register-payment
 // @access  Public
 router.post('/events/:id/register-payment', 
-  profileImageUpload.single('photo'), // Accept photo upload
-  handleMulterError,
   [
     body('name', 'Name is required').notEmpty().trim(),
     body('phone', 'Phone number is required').notEmpty().matches(/^[0-9]{10}$/).withMessage('Phone must be 10 digits'),
@@ -250,7 +248,15 @@ router.post('/events/:id/register-payment',
     body('businessName', 'Business name is required').notEmpty().trim(),
     body('businessType', 'Business type is required').isIn(['catering', 'sound', 'mandap', 'madap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
     body('city', 'City is required').notEmpty().trim(),
-    body('associationId', 'Association ID is required').isInt({ min: 1 })
+    body('associationId', 'Association ID is required').isInt({ min: 1 }),
+    body('photo').optional().custom((value) => {
+      if (!value || value === '' || value === null || value === undefined) return true;
+      // Accept Cloudinary URL
+      if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
+        return value.length <= 500;
+      }
+      return false;
+    }).withMessage('Photo must be a valid Cloudinary URL')
   ], 
   async (req, res) => {
   try {
@@ -303,9 +309,11 @@ router.post('/events/:id/register-payment',
     let profileImageURL = null;
     const baseUrl = req.protocol + '://' + req.get('host');
     
-    if (req.file) {
-      profileImageFilename = req.file.filename;
-      profileImageURL = getFileUrl(profileImageFilename, baseUrl, 'profile-images');
+    // Handle profile photo URL (Cloudinary)
+    if (req.body.photo) {
+      profileImageURL = req.body.photo.trim();
+      profileImageFilename = profileImageURL; // Store URL directly
+      console.log('Profile photo URL received:', profileImageURL);
     }
 
     // Find or create member
@@ -332,7 +340,13 @@ router.post('/events/:id/register-payment',
     
     // Get profile image URL if available (use existing if member already had one)
     if (!profileImageURL && member.profileImage) {
-      profileImageURL = getFileUrl(member.profileImage, baseUrl, 'profile-images');
+      // Check if it's already a Cloudinary URL
+      if (member.profileImage.startsWith('http://') || member.profileImage.startsWith('https://')) {
+        profileImageURL = member.profileImage;
+      } else {
+        // Legacy local file - generate URL
+        profileImageURL = getFileUrl(member.profileImage, baseUrl, 'profile-images');
+      }
     }
 
     // Check if already registered for this event
