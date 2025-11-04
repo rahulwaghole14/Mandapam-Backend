@@ -144,7 +144,13 @@ router.get('/', [
     events.forEach(event => {
       if (event.image) {
         const baseUrl = req.protocol + '://' + req.get('host');
-        event.imageURL = getFileUrl(event.image, baseUrl);
+        // Check if image is already a full URL (Cloudinary or other external URL)
+        if (event.image.startsWith('http://') || event.image.startsWith('https://')) {
+          event.imageURL = event.image;
+        } else {
+          // Legacy local file - generate URL
+          event.imageURL = getFileUrl(event.image, baseUrl, 'event-images');
+        }
       }
     });
 
@@ -197,7 +203,13 @@ router.get('/upcoming', async (req, res) => {
     upcomingEvents.forEach(event => {
       if (event.image) {
         const baseUrl = req.protocol + '://' + req.get('host');
-        event.imageURL = getFileUrl(event.image, baseUrl);
+        // Check if image is already a full URL (Cloudinary or other external URL)
+        if (event.image.startsWith('http://') || event.image.startsWith('https://')) {
+          event.imageURL = event.image;
+        } else {
+          // Legacy local file - generate URL
+          event.imageURL = getFileUrl(event.image, baseUrl, 'event-images');
+        }
       }
     });
 
@@ -246,7 +258,13 @@ router.get('/:id', async (req, res) => {
     // Transform image field to include full URL if image exists
     if (event.image) {
       const baseUrl = req.protocol + '://' + req.get('host');
-      event.imageURL = getFileUrl(event.image, baseUrl);
+      // Check if image is already a full URL (Cloudinary or other external URL)
+      if (event.image.startsWith('http://') || event.image.startsWith('https://')) {
+        event.imageURL = event.image;
+      } else {
+        // Legacy local file - generate URL
+        event.imageURL = getFileUrl(event.image, baseUrl, 'event-images');
+      }
     }
 
     res.status(200).json({
@@ -312,9 +330,9 @@ router.post('/', protect, [
   body('registrationFee').optional().isFloat({ min: 0 }),
   body('isActive').optional().isBoolean(),
   body('isPublic').optional().isBoolean(),
-  body('image').optional().trim(),
-  body('imageURL').optional().trim()
-], authorizeDistrict, eventImagesUpload.single('image'), handleMulterError, async (req, res) => {
+  body('image').optional().isURL().withMessage('Image must be a valid URL'), // Accept Cloudinary URL
+  body('imageURL').optional().isURL().withMessage('Image URL must be a valid URL'), // Accept Cloudinary URL as imageURL
+], authorizeDistrict, async (req, res) => {
   try {
     // Check for validation errors first
     const errors = validationResult(req);
@@ -440,10 +458,18 @@ router.post('/', protect, [
       maxAttendees = parseInt(maxAttendees);
     }
 
-    // Handle uploaded event image
+    // Handle event image URL (Cloudinary)
+    // Accept both 'image' and 'imageURL' fields, prioritize 'imageURL'
+    let imageUrl = null;
+    if (req.body.imageURL) {
+      imageUrl = req.body.imageURL.trim();
+    } else if (req.body.image) {
+      imageUrl = req.body.image.trim();
+    }
+
     const baseUrl = req.protocol + '://' + req.get('host');
-    if (req.file) {
-      console.log('Event image uploaded:', req.file.filename);
+    if (imageUrl) {
+      console.log('Event image URL received:', imageUrl);
     }
 
     // Prepare event data
@@ -466,7 +492,7 @@ router.post('/', protect, [
       registrationFee: req.body.registrationFee,
       isActive: req.body.isActive !== undefined ? req.body.isActive : true,
       isPublic: req.body.isPublic !== undefined ? req.body.isPublic : true,
-      image: req.file ? req.file.filename : (req.body.image || req.body.imageURL || req.body.url),
+      image: imageUrl || null,
       createdBy: req.user.id,
       updatedBy: req.user.id,
       status: 'Upcoming',
@@ -483,11 +509,17 @@ router.post('/', protect, [
       ]
     });
 
-    // Transform image field to include full URL if image exists
+    // Transform image field - if it's a Cloudinary URL, use it directly
+    // Otherwise, generate URL using getFileUrl helper (for backward compatibility)
     const eventResponse = eventWithDetails.toJSON();
     if (eventResponse.image) {
-      const baseUrl = req.protocol + '://' + req.get('host');
-      eventResponse.imageURL = getFileUrl(eventResponse.image, baseUrl);
+      // Check if image is already a full URL (Cloudinary or other external URL)
+      if (eventResponse.image.startsWith('http://') || eventResponse.image.startsWith('https://')) {
+        eventResponse.imageURL = eventResponse.image;
+      } else {
+        // Legacy local file - generate URL
+        eventResponse.imageURL = getFileUrl(eventResponse.image, baseUrl, 'event-images');
+      }
     }
 
     // Send notification for new event
@@ -517,9 +549,8 @@ router.post('/', protect, [
       message: 'Event created successfully',
       event: eventResponse,
       uploadedFiles: {
-        image: req.file ? {
-          filename: req.file.filename,
-          url: getFileUrl(req.file.filename, baseUrl)
+        image: imageUrl ? {
+          url: imageUrl
         } : null
       }
     });
@@ -574,8 +605,9 @@ router.put('/:id', protect, [
   body('registrationFee').optional().isFloat({ min: 0 }).withMessage('Registration fee must be non-negative'),
   body('isActive').optional().isBoolean(),
   body('isPublic').optional().isBoolean(),
-  body('image').optional().trim(),
-], authorizeDistrict, eventImagesUpload.single('image'), handleMulterError, async (req, res) => {
+  body('image').optional().isURL().withMessage('Image must be a valid URL'), // Accept Cloudinary URL
+  body('imageURL').optional().isURL().withMessage('Image URL must be a valid URL'), // Accept Cloudinary URL as imageURL
+], authorizeDistrict, async (req, res) => {
   try {
     // Check for validation errors
     const errors = validationResult(req);
@@ -609,6 +641,15 @@ router.put('/:id', protect, [
     }
     if (req.body.fee !== undefined && req.body.registrationFee === undefined) {
       req.body.registrationFee = req.body.fee;
+    }
+    
+    // Handle image URL from Cloudinary
+    // Accept both 'image' and 'imageURL' fields, prioritize 'imageURL'
+    let imageUrl = null;
+    if (req.body.imageURL) {
+      imageUrl = req.body.imageURL.trim();
+    } else if (req.body.image) {
+      imageUrl = req.body.image.trim();
     }
 
     // Handle startDateTime/endDateTime format from frontend
@@ -710,17 +751,18 @@ router.put('/:id', protect, [
       });
     }
 
-    // Handle uploaded event image
+    // Handle event image URL (Cloudinary)
     const baseUrl = req.protocol + '://' + req.get('host');
-    if (req.file) {
-      console.log('📸 New image uploaded:', req.file.filename);
-      console.log('📸 Old image filename:', existingEvent.image);
+    if (imageUrl) {
+      console.log('📸 New image URL received:', imageUrl);
+      console.log('📸 Old image URL:', existingEvent.image);
       
-      // Delete old event image if exists
-      if (existingEvent.image) {
+      // If old image is a local file (not Cloudinary URL), delete it
+      // Cloudinary URLs typically contain 'cloudinary.com' or 'res.cloudinary.com'
+      if (existingEvent.image && !existingEvent.image.includes('cloudinary.com') && !existingEvent.image.includes('http')) {
         try {
           await deleteFile(existingEvent.image);
-          console.log('✅ Old image deleted successfully');
+          console.log('✅ Old local image deleted successfully');
         } catch (error) {
           console.log('⚠️ Could not delete old event image:', error.message);
         }
@@ -752,9 +794,9 @@ router.put('/:id', protect, [
     if (req.body.isActive !== undefined) updateData.isActive = req.body.isActive;
     if (req.body.isPublic !== undefined) updateData.isPublic = req.body.isPublic;
 
-    // Handle image field - only update if new file is uploaded
-    if (req.file) {
-      updateData.image = req.file.filename;
+    // Handle image field - accept Cloudinary URL
+    if (imageUrl !== null) {
+      updateData.image = imageUrl;
     }
 
     // Update event
@@ -768,10 +810,17 @@ router.put('/:id', protect, [
       ]
     });
 
-    // Transform image field to include full URL if image exists
+    // Transform image field - if it's a Cloudinary URL, use it directly
+    // Otherwise, generate URL using getFileUrl helper (for backward compatibility)
     const eventResponse = event.toJSON();
     if (eventResponse.image) {
-      eventResponse.imageURL = getFileUrl(eventResponse.image, baseUrl, 'event-images');
+      // Check if image is already a full URL (Cloudinary or other external URL)
+      if (eventResponse.image.startsWith('http://') || eventResponse.image.startsWith('https://')) {
+        eventResponse.imageURL = eventResponse.image;
+      } else {
+        // Legacy local file - generate URL
+        eventResponse.imageURL = getFileUrl(eventResponse.image, baseUrl, 'event-images');
+      }
       console.log('📸 Generated image URL:', eventResponse.imageURL);
     }
 
@@ -802,9 +851,8 @@ router.put('/:id', protect, [
       message: 'Event updated successfully',
       event: eventResponse,
       uploadedFiles: {
-        image: req.file ? {
-          filename: req.file.filename,
-          url: getFileUrl(req.file.filename, baseUrl, 'event-images')
+        image: imageUrl ? {
+          url: imageUrl
         } : null
       }
     });
