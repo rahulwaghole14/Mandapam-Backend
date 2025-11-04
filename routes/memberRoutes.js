@@ -130,6 +130,28 @@ router.get('/', [
     const hasNextPage = page < totalPages;
     const hasPrevPage = page > 1;
 
+    // Add image URLs to response
+    const baseUrl = req.protocol + '://' + req.get('host');
+    const membersWithImageURLs = members.map(member => {
+      const memberData = member.toJSON();
+      if (memberData.profileImage) {
+        if (memberData.profileImage.startsWith('http://') || memberData.profileImage.startsWith('https://')) {
+          memberData.profileImageURL = memberData.profileImage;
+        } else {
+          memberData.profileImageURL = getFileUrl(memberData.profileImage, baseUrl, 'profile-images');
+        }
+      }
+      if (memberData.businessImages && memberData.businessImages.length > 0) {
+        memberData.businessImageURLs = memberData.businessImages.map(img => {
+          if (typeof img === 'string' && (img.startsWith('http://') || img.startsWith('https://'))) {
+            return img;
+          }
+          return getFileUrl(img, baseUrl, 'business-images');
+        });
+      }
+      return memberData;
+    });
+
     res.status(200).json({
       success: true,
       count: members.length,
@@ -139,7 +161,7 @@ router.get('/', [
       totalPages,
       hasNextPage,
       hasPrevPage,
-      members
+      members: membersWithImageURLs
     });
 
   } catch (error) {
@@ -170,9 +192,29 @@ router.get('/:id', async (req, res) => {
       });
     }
 
+    const baseUrl = req.protocol + '://' + req.get('host');
+    const memberData = member.toJSON();
+    
+    // Add image URLs to response
+    if (memberData.profileImage) {
+      if (memberData.profileImage.startsWith('http://') || memberData.profileImage.startsWith('https://')) {
+        memberData.profileImageURL = memberData.profileImage;
+      } else {
+        memberData.profileImageURL = getFileUrl(memberData.profileImage, baseUrl, 'profile-images');
+      }
+    }
+    if (memberData.businessImages && memberData.businessImages.length > 0) {
+      memberData.businessImageURLs = memberData.businessImages.map(img => {
+        if (typeof img === 'string' && (img.startsWith('http://') || img.startsWith('https://'))) {
+          return img;
+        }
+        return getFileUrl(img, baseUrl, 'business-images');
+      });
+    }
+
     res.status(200).json({
       success: true,
-      member
+      member: memberData
     });
 
   } catch (error) {

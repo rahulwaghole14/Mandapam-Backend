@@ -250,14 +250,25 @@ router.get('/', protect, async (req, res) => {
     });
 
     // Calculate actual member count for each association
+    const baseUrl = req.protocol + '://' + req.get('host');
     const associationsWithMemberCount = await Promise.all(
       associations.map(async (association) => {
         const actualMemberCount = await Member.count({
           where: { associationName: association.name }
         });
         
+        const associationData = association.toJSON();
+        // Add logo URL if exists
+        if (associationData.logo) {
+          if (associationData.logo.startsWith('http://') || associationData.logo.startsWith('https://')) {
+            associationData.logoURL = associationData.logo;
+          } else {
+            associationData.logoURL = getFileUrl(associationData.logo, baseUrl, 'profile-images');
+          }
+        }
+        
         return {
-          ...association.toJSON(),
+          ...associationData,
           totalMembers: actualMemberCount
         };
       })
@@ -300,9 +311,21 @@ router.get('/:id', protect, async (req, res) => {
       });
     }
 
+    const baseUrl = req.protocol + '://' + req.get('host');
+    const associationResponse = association.toJSON();
+    
+    // Add logo URL if exists
+    if (associationResponse.logo) {
+      if (associationResponse.logo.startsWith('http://') || associationResponse.logo.startsWith('https://')) {
+        associationResponse.logoURL = associationResponse.logo;
+      } else {
+        associationResponse.logoURL = getFileUrl(associationResponse.logo, baseUrl, 'profile-images');
+      }
+    }
+    
     res.json({
       success: true,
-      association
+      association: associationResponse
     });
   } catch (error) {
     console.error('Error fetching association:', error);

@@ -1,12 +1,10 @@
 const express = require('express');
 const { body, validationResult, query } = require('express-validator');
 const { Op } = require('sequelize');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 const Gallery = require('../models/Gallery');
 const Member = require('../models/Member');
 const { protectMobile } = require('../middleware/mobileAuthMiddleware');
+const { getFileUrl } = require('../config/multerConfig');
 
 const router = express.Router();
 
@@ -30,13 +28,26 @@ router.get('/', async (req, res) => {
       // Removed include as association is not defined
     });
 
+    const baseUrl = req.protocol + '://' + req.get('host');
+    
     res.status(200).json({
       success: true,
       count: gallery.rows.length,
       total: gallery.count,
       page,
       pages: Math.ceil(gallery.count / limit),
-      gallery: gallery.rows
+      gallery: gallery.rows.map(image => {
+        // Check if filename is already a Cloudinary URL
+        let imageURL = image.filename;
+        if (!image.filename.startsWith('http://') && !image.filename.startsWith('https://')) {
+          // Legacy local file - generate URL
+          imageURL = getFileUrl(image.filename, baseUrl, 'gallery-images');
+        }
+        return {
+          ...image.toJSON(),
+          imageURL: imageURL
+        };
+      })
     });
 
   } catch (error) {
@@ -48,37 +59,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Configure multer for multiple image uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadDir = path.join(__dirname, '../uploads');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'gallery-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-const fileFilter = (req, file, cb) => {
-  if (file.mimetype.startsWith('image/')) {
-    cb(null, true);
-  } else {
-    cb(new Error('Only image files are allowed!'), false);
-  }
-};
-
-const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit per file
-    files: 10 // Maximum 10 files at once
-  },
-  fileFilter: fileFilter
-});
 
 // @desc    Get gallery images for an entity (mobile version)
 // @route   GET /api/mobile/gallery/:entityType/:entityId
@@ -150,27 +130,38 @@ router.get('/:entityType/:entityId', [
     const hasNext = page < totalPages;
     const hasPrev = page > 1;
 
+    const baseUrl = req.protocol + '://' + req.get('host');
+    
     res.status(200).json({
       success: true,
-      images: images.map(image => ({
-        id: image.id,
-        entityType: image.entityType,
-        entityId: image.entityId,
-        filename: image.filename,
-        originalName: image.originalName,
-        caption: image.caption,
-        altText: image.altText,
-        displayOrder: image.displayOrder,
-        isActive: image.isActive,
-        isFeatured: image.isFeatured,
-        fileSize: image.fileSize,
-        mimeType: image.mimeType,
-        uploadedBy: image.uploadedBy,
-        createdAt: image.createdAt,
-        updatedAt: image.updatedAt,
-        uploadedByMember: image.uploadedByMember,
-        imageURL: `/uploads/${image.filename}`
-      })),
+      images: images.map(image => {
+        // Check if filename is already a Cloudinary URL
+        let imageURL = image.filename;
+        if (!image.filename.startsWith('http://') && !image.filename.startsWith('https://')) {
+          // Legacy local file - generate URL
+          imageURL = getFileUrl(image.filename, baseUrl, 'gallery-images');
+        }
+        
+        return {
+          id: image.id,
+          entityType: image.entityType,
+          entityId: image.entityId,
+          filename: image.filename,
+          originalName: image.originalName,
+          caption: image.caption,
+          altText: image.altText,
+          displayOrder: image.displayOrder,
+          isActive: image.isActive,
+          isFeatured: image.isFeatured,
+          fileSize: image.fileSize,
+          mimeType: image.mimeType,
+          uploadedBy: image.uploadedBy,
+          createdAt: image.createdAt,
+          updatedAt: image.updatedAt,
+          uploadedByMember: image.uploadedByMember,
+          imageURL: imageURL
+        };
+      }),
       pagination: {
         currentPage: page,
         totalPages,
@@ -194,8 +185,22 @@ router.get('/:entityType/:entityId', [
 // @access  Private (Mobile)
 router.post('/:entityType/:entityId', protectMobile, [
   body('captions').optional().isArray().withMessage('Captions must be an array'),
-  body('altTexts').optional().isArray().withMessage('Alt texts must be an array')
-], upload.array('images', 10), async (req, res) => {
+  body('altTexts').optional().isArray().withMessage('Alt texts must be an array'),
+  body('images').optional().custom((value) => {
+    if (!value) return true; // Allow empty
+    if (!Array.isArray(value)) return false;
+    // Validate each image URL
+    return value.every(img => {
+      if (typeof img === 'string') {
+        if (img.startsWith('http://') || img.startsWith('https://')) {
+          return img.length <= 500; // Cloudinary URL
+        }
+        return img.length <= 255; // Legacy filename
+      }
+      return false;
+    });
+  }).withMessage('Images must be an array of Cloudinary URLs or filenames')
+], async (req, res) => {
   try {
     // Check validation errors
     const errors = validationResult(req);
@@ -344,19 +349,13 @@ router.post('/:entityType/:entityId', protectMobile, [
       altTexts = [req.body.altText];
     }
 
-    // Validate entity type
-    const validEntityTypes = ['event', 'member', 'association', 'vendor'];
-    if (!validEntityTypes.includes(entityType)) {
+    // Handle image URLs (Cloudinary or legacy files)
+    const imageUrls = req.body.images || [];
+    
+    if (!imageUrls || imageUrls.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid entity type. Must be one of: event, member, association, vendor'
-      });
-    }
-
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'No images provided'
+        message: 'No images provided. Send images array with Cloudinary URLs.'
       });
     }
 
@@ -371,20 +370,31 @@ router.post('/:entityType/:entityId', protectMobile, [
 
     let currentOrder = (maxOrder || 0) + 1;
 
-    // Prepare gallery records
-    const galleryRecords = req.files.map((file, index) => {
+    // Prepare gallery records from Cloudinary URLs
+    const galleryRecords = imageUrls.map((imageUrl, index) => {
+      // Extract filename from URL or use URL itself
+      let filename = imageUrl;
+      let originalName = imageUrl;
+      
+      // If it's a Cloudinary URL, extract the filename part
+      if (imageUrl.includes('cloudinary.com')) {
+        const urlParts = imageUrl.split('/');
+        originalName = urlParts[urlParts.length - 1].split('?')[0]; // Remove query params
+        filename = imageUrl; // Store full URL
+      }
+      
       const record = {
         entityType,
         entityId: parseInt(entityId),
-        filename: file.filename,
-        originalName: file.originalname,
+        filename: filename, // Store Cloudinary URL or legacy filename
+        originalName: originalName,
         caption: captions.length > 0 ? (captions[index] || captions[0] || null) : null,
         altText: altTexts.length > 0 ? (altTexts[index] || altTexts[0] || null) : null,
         displayOrder: currentOrder + index,
         isActive: true,
         isFeatured: false,
-        fileSize: file.size,
-        mimeType: file.mimetype,
+        fileSize: null, // Cloudinary URLs don't have file size info
+        mimeType: 'image/jpeg', // Default, can be determined from URL if needed
         uploadedBy: memberId // Use memberId for mobile uploads
       };
       
@@ -396,41 +406,44 @@ router.post('/:entityType/:entityId', protectMobile, [
       returning: true
     });
 
+    const baseUrl = req.protocol + '://' + req.get('host');
+    
     res.status(201).json({
       success: true,
       message: `${createdImages.length} images uploaded successfully`,
-      images: createdImages.map(image => ({
-        id: image.id,
-        entityType: image.entityType,
-        entityId: image.entityId,
-        filename: image.filename,
-        originalName: image.originalName,
-        caption: image.caption,
-        altText: image.altText,
-        displayOrder: image.displayOrder,
-        isActive: image.isActive,
-        isFeatured: image.isFeatured,
-        fileSize: image.fileSize,
-        mimeType: image.mimeType,
-        uploadedBy: image.uploadedBy,
-        createdAt: image.createdAt,
-        updatedAt: image.updatedAt,
-        imageURL: `/uploads/${image.filename}`
-      }))
+      images: createdImages.map(image => {
+        // Check if filename is already a Cloudinary URL
+        let imageURL = image.filename;
+        if (!image.filename.startsWith('http://') && !image.filename.startsWith('https://')) {
+          // Legacy local file - generate URL
+          imageURL = getFileUrl(image.filename, baseUrl, 'gallery-images');
+        }
+        
+        return {
+          id: image.id,
+          entityType: image.entityType,
+          entityId: image.entityId,
+          filename: image.filename,
+          originalName: image.originalName,
+          caption: image.caption,
+          altText: image.altText,
+          displayOrder: image.displayOrder,
+          isActive: image.isActive,
+          isFeatured: image.isFeatured,
+          fileSize: image.fileSize,
+          mimeType: image.mimeType,
+          uploadedBy: image.uploadedBy,
+          createdAt: image.createdAt,
+          updatedAt: image.updatedAt,
+          imageURL: imageURL
+        };
+      })
     });
 
   } catch (error) {
     console.error('Upload gallery images error:', error);
     
-    // Clean up uploaded files if database operation fails
-    if (req.files) {
-      req.files.forEach(file => {
-        const filePath = path.join(__dirname, '../uploads', file.filename);
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
-      });
-    }
+    // No need to delete files for Cloudinary URLs - they're managed by Cloudinary
 
     res.status(500).json({
       success: false,
@@ -507,6 +520,8 @@ router.put('/:id', [
     // Refresh the image data
     await image.reload();
 
+    const baseUrl = req.protocol + '://' + req.get('host');
+    
     res.status(200).json({
       success: true,
       message: 'Image updated successfully',
@@ -527,7 +542,9 @@ router.put('/:id', [
         createdAt: image.createdAt,
         updatedAt: image.updatedAt,
         uploadedByMember: image.uploadedByMember,
-        imageURL: `/uploads/${image.filename}`
+        imageURL: image.filename.startsWith('http://') || image.filename.startsWith('https://') 
+          ? image.filename 
+          : getFileUrl(image.filename, baseUrl, 'gallery-images')
       }
     });
 
