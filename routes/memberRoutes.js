@@ -306,7 +306,7 @@ router.post('/', protect, [
     // Add image URLs to response
     const memberData = memberWithDetails.toJSON();
     if (memberData.profileImage) {
-      memberData.profileImageURL = getFileUrl(memberData.profileImage, baseUrl);
+      memberData.profileImageURL = getFileUrl(memberData.profileImage, baseUrl, 'profile-images');
     }
     if (memberData.businessImages && memberData.businessImages.length > 0) {
       memberData.businessImageURLs = memberData.businessImages.map(filename => getFileUrl(filename, baseUrl));
@@ -494,7 +494,7 @@ router.put('/:id', protect, [
     // Add image URLs to response
     const memberData = member.toJSON();
     if (memberData.profileImage) {
-      memberData.profileImageURL = getFileUrl(memberData.profileImage, baseUrl);
+      memberData.profileImageURL = getFileUrl(memberData.profileImage, baseUrl, 'profile-images');
     }
     if (memberData.businessImages && memberData.businessImages.length > 0) {
       memberData.businessImageURLs = memberData.businessImages.map(filename => getFileUrl(filename, baseUrl));

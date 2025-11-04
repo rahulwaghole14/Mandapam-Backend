@@ -189,7 +189,10 @@ const handleMulterError = (error, req, res, next) => {
 };
 
 // Utility function to get file URL
-const getFileUrl = (filename, baseUrl = '') => {
+// @param {string} filename - Filename (may include path)
+// @param {string} baseUrl - Base URL for the file
+// @param {string} defaultSubDir - Default subdirectory if filename has no path (e.g., 'event-images', 'profile-images')
+const getFileUrl = (filename, baseUrl = '', defaultSubDir = 'event-images') => {
   if (!filename) return null;
   
   // Handle filenames that might already contain a path
@@ -198,43 +201,25 @@ const getFileUrl = (filename, baseUrl = '') => {
   
   // Check if filename already contains a subdirectory path
   const pathParts = cleanFilename.split('/');
+  
   if (pathParts.length > 1) {
     // Filename contains a path like "mandap-events/image.jpg"
-    // Extract the actual filename and subdirectory
     const actualFilename = pathParts[pathParts.length - 1];
     const subDir = pathParts[0];
     
-    // First, check if file exists at the path specified in filename
-    const filePath = path.join(UPLOADS_BASE_DIR, subDir, actualFilename);
-    if (fs.existsSync(filePath)) {
-      return `${baseUrl}/uploads/${subDir}/${actualFilename}`;
-    }
-    
-    // Also check event-images subdirectory (common case for events)
-    const eventImagePath = path.join(UPLOADS_BASE_DIR, 'event-images', actualFilename);
-    if (fs.existsSync(eventImagePath)) {
-      return `${baseUrl}/uploads/event-images/${actualFilename}`;
-    }
-    
-    // Also check if the full path exists (nested subdirectory)
-    const fullPath = path.join(UPLOADS_BASE_DIR, ...pathParts);
-    if (fs.existsSync(fullPath)) {
+    // Known subdirectories - use as-is
+    const knownSubDirs = ['event-images', 'profile-images', 'business-images', 'gallery-images', 'documents', 'images', 'general'];
+    if (knownSubDirs.includes(subDir)) {
       return `${baseUrl}/uploads/${cleanFilename}`;
     }
+    
+    // Unknown subdirectory - extract filename and use default subdirectory
+    // This handles cases like "mandap-events/image.jpg" -> "/uploads/event-images/image.jpg"
+    return `${baseUrl}/uploads/${defaultSubDir}/${actualFilename}`;
   }
   
-  // Try to find file in known subdirectories
-  const subDirs = ['profile-images', 'business-images', 'gallery-images', 'event-images', 'documents', 'images', 'general'];
-  
-  for (const subDir of subDirs) {
-    const filePath = path.join(UPLOADS_BASE_DIR, subDir, cleanFilename);
-    if (fs.existsSync(filePath)) {
-      return `${baseUrl}/uploads/${subDir}/${cleanFilename}`;
-    }
-  }
-  
-  // Fallback to flat structure
-  return `${baseUrl}/uploads/${cleanFilename}`;
+  // No path in filename - use default subdirectory
+  return `${baseUrl}/uploads/${defaultSubDir}/${cleanFilename}`;
 };
 
 // Utility function to delete file

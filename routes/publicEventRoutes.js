@@ -305,7 +305,7 @@ router.post('/events/:id/register-payment',
     
     if (req.file) {
       profileImageFilename = req.file.filename;
-      profileImageURL = getFileUrl(profileImageFilename, baseUrl);
+      profileImageURL = getFileUrl(profileImageFilename, baseUrl, 'profile-images');
     }
 
     // Find or create member
@@ -332,7 +332,7 @@ router.post('/events/:id/register-payment',
     
     // Get profile image URL if available (use existing if member already had one)
     if (!profileImageURL && member.profileImage) {
-      profileImageURL = getFileUrl(member.profileImage, baseUrl);
+      profileImageURL = getFileUrl(member.profileImage, baseUrl, 'profile-images');
     }
 
     // Check if already registered for this event
