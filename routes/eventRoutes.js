@@ -6,6 +6,7 @@ const Member = require('../models/Member');
 const EventRegistration = require('../models/EventRegistration');
 const EventExhibitor = require('../models/EventExhibitor');
 const qrService = require('../services/qrService');
+const paymentService = require('../services/paymentService');
 const User = require('../models/User');
 const { protect, authorize, authorizeDistrict } = require('../middleware/authMiddleware');
 const fcmService = require('../services/fcmService');
@@ -899,6 +900,496 @@ router.get('/:id/registrations', protect, async (req, res) => {
   } catch (error) {
     console.error('Get registrations error:', error);
     res.status(500).json({ success: false, message: 'Server error while fetching registrations' });
+  }
+});
+
+// Web Frontend Registration Endpoints
+// @desc    Create Razorpay order for event registration (Web)
+// @route   POST /api/events/:id/register-payment
+// @access  Private (web users)
+router.post('/:id/register-payment', protect, [
+  body('memberId').optional().isInt().withMessage('memberId must be a valid integer')
+], async (req, res) => {
+  try {
+    const eventId = parseInt(req.params.id, 10);
+    const userId = req.user.id;
+    const { memberId } = req.body;
+    
+    if (isNaN(eventId)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid event ID' 
+      });
+    }
+    
+    const event = await Event.findOne({
+      where: { id: eventId }
+    });
+    
+    if (!event) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Event not found' 
+      });
+    }
+
+    // Check if event is in the past or completed
+    const now = new Date();
+    const eventEndDate = new Date(event.endDate);
+    if (eventEndDate < now) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Cannot register for past or completed events' 
+      });
+    }
+    
+    const fee = Number(event.registrationFee || 0);
+    
+    // If event is free, return success without payment
+    if (!(fee > 0)) {
+      return res.status(200).json({ 
+        success: true, 
+        isFree: true,
+        message: 'This event is free. Please use the RSVP endpoint to register.',
+        event: {
+          id: event.id,
+          title: event.title,
+          registrationFee: 0
+        }
+      });
+    }
+
+    // Check if Razorpay is configured
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+      console.error('Razorpay not configured: Missing RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET');
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Payment gateway is not configured. Please contact administrator.' 
+      });
+    }
+
+    // Determine member ID
+    let targetMemberId = memberId;
+    
+    // If admin is registering someone else, use provided memberId
+    if (memberId && req.user.role === 'admin') {
+      const member = await Member.findByPk(memberId);
+      if (!member) {
+        return res.status(404).json({
+          success: false,
+          message: 'Member not found'
+        });
+      }
+      targetMemberId = memberId;
+    } else {
+      // User registering themselves - find member by phone
+      if (!req.user.phone) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please add a phone number to your profile to register for events'
+        });
+      }
+      
+      // Find member by phone
+      let member = await Member.findOne({
+        where: { phone: req.user.phone }
+      });
+      
+      if (!member) {
+        return res.status(404).json({
+          success: false,
+          message: 'Member profile not found. Please ensure your phone number matches a member record.',
+          suggestion: 'Contact administrator to link your user account with a member profile'
+        });
+      }
+      
+      targetMemberId = member.id;
+    }
+
+    // Check if already registered
+    const existingRegistration = await EventRegistration.findOne({
+      where: { eventId, memberId: targetMemberId }
+    });
+
+    if (existingRegistration && existingRegistration.paymentStatus === 'paid') {
+      return res.status(400).json({
+        success: false,
+        message: 'Already registered and paid for this event'
+      });
+    }
+
+    // Get member details for prefill
+    const member = await Member.findByPk(targetMemberId);
+    
+    const order = await paymentService.createOrder(fee, `evt_${eventId}_mem_${targetMemberId}_${Date.now()}`);
+    
+    // Prepare payment options for frontend (Razorpay Checkout)
+    const paymentOptions = {
+      key: process.env.RAZORPAY_KEY_ID,
+      amount: order.amount, // Already in paise
+      currency: 'INR',
+      name: event.title || 'Event Registration',
+      description: `Event Registration Fee - ${event.title || 'Event'}`,
+      order_id: order.id,
+      prefill: {
+        name: member?.name || '',
+        email: member?.email || '',
+        contact: member?.phone || ''
+      },
+      theme: {
+        color: '#2563eb' // Blue theme
+      },
+      notes: {
+        eventId: eventId.toString(),
+        memberId: targetMemberId.toString(),
+        eventName: event.title
+      }
+    };
+    
+    return res.status(201).json({ 
+      success: true, 
+      isFree: false,
+      order, 
+      keyId: process.env.RAZORPAY_KEY_ID,
+      paymentOptions // Provide pre-configured options
+    });
+  } catch (error) {
+    console.error('Create order error:', error);
+    const errorMessage = error.message || 'Server error while creating order';
+    res.status(500).json({ 
+      success: false, 
+      message: errorMessage,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// @desc    Confirm payment and create registration (Web)
+// @route   POST /api/events/:id/confirm-payment
+// @access  Private (web users)
+router.post('/:id/confirm-payment', protect, [
+  body('razorpay_order_id', 'Razorpay order ID is required').notEmpty(),
+  body('razorpay_payment_id', 'Razorpay payment ID is required').notEmpty(),
+  body('razorpay_signature', 'Razorpay signature is required').notEmpty(),
+  body('memberId').optional().isInt().withMessage('memberId must be a valid integer')
+], async (req, res) => {
+  try {
+    const eventId = parseInt(req.params.id, 10);
+    const userId = req.user.id;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, notes, memberId } = req.body;
+
+    if (isNaN(eventId)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid event ID' 
+      });
+    }
+    
+    const event = await Event.findOne({
+      where: { id: eventId }
+    });
+    
+    if (!event) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Event not found' 
+      });
+    }
+
+    const fee = Number(event.registrationFee || 0);
+    
+    // If event is free, use RSVP flow instead
+    if (!(fee > 0)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'This event is free. Please use the RSVP endpoint to register.',
+        useRSVP: true
+      });
+    }
+
+    // Validate payment fields for paid events
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Payment details are required' 
+      });
+    }
+
+    if (!paymentService.verifySignature({ razorpay_order_id, razorpay_payment_id, razorpay_signature })) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid payment signature' 
+      });
+    }
+
+    // Determine member ID
+    let targetMemberId = memberId;
+    
+    // If admin is registering someone else, use provided memberId
+    if (memberId && req.user.role === 'admin') {
+      const member = await Member.findByPk(memberId);
+      if (!member) {
+        return res.status(404).json({
+          success: false,
+          message: 'Member not found'
+        });
+      }
+      targetMemberId = memberId;
+    } else {
+      // User registering themselves - find member by phone
+      if (!req.user.phone) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please add a phone number to your profile to register for events'
+        });
+      }
+      
+      // Find member by phone
+      let member = await Member.findOne({
+        where: { phone: req.user.phone }
+      });
+      
+      if (!member) {
+        return res.status(404).json({
+          success: false,
+          message: 'Member profile not found. Please ensure your phone number matches a member record.'
+        });
+      }
+      
+      targetMemberId = member.id;
+    }
+
+    const amountPaid = fee;
+
+    // Upsert registration with paid status
+    let registration = await EventRegistration.findOne({ where: { eventId, memberId: targetMemberId } });
+    const isNewRegistration = !registration;
+    
+    if (registration) {
+      // Update existing registration
+      const wasPaid = registration.paymentStatus === 'paid';
+      await registration.update({
+        paymentStatus: 'paid',
+        amountPaid: amountPaid,
+        paymentOrderId: razorpay_order_id,
+        paymentId: razorpay_payment_id,
+        status: 'registered',
+        notes: notes || registration.notes,
+        registeredAt: registration.registeredAt || new Date()
+      });
+      
+      // Only increment attendee count if this was not previously paid
+      if (!wasPaid) {
+        await Event.increment('currentAttendees', {
+          where: { id: eventId }
+        });
+      }
+    } else {
+      // Create new registration
+      registration = await EventRegistration.create({
+        eventId,
+        memberId: targetMemberId,
+        status: 'registered',
+        paymentStatus: 'paid',
+        amountPaid: amountPaid,
+        paymentOrderId: razorpay_order_id,
+        paymentId: razorpay_payment_id,
+        notes: notes || null,
+        registeredAt: new Date()
+      });
+      
+      // Update event attendee count for new registration
+      await Event.increment('currentAttendees', {
+        where: { id: eventId }
+      });
+    }
+
+    // Generate QR on the fly
+    const qrDataURL = await qrService.generateQrDataURL(registration);
+    res.status(201).json({ 
+      success: true, 
+      message: 'Registration confirmed', 
+      registrationId: registration.id, 
+      qrDataURL,
+      registration: {
+        id: registration.id,
+        eventId: registration.eventId,
+        memberId: registration.memberId,
+        status: registration.status,
+        paymentStatus: registration.paymentStatus,
+        amountPaid: registration.amountPaid
+      }
+    });
+  } catch (error) {
+    console.error('Confirm payment error:', error);
+    const errorMessage = error.message || 'Server error while confirming payment';
+    res.status(500).json({ 
+      success: false, 
+      message: errorMessage,
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// @desc    Get my registrations (Web)
+// @route   GET /api/events/my/registrations
+// @access  Private (web users)
+router.get('/my/registrations', protect, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Find member by phone
+    if (!req.user.phone) {
+      return res.status(200).json({
+        success: true,
+        registrations: [],
+        message: 'No phone number in profile. Cannot fetch registrations.'
+      });
+    }
+    
+    const member = await Member.findOne({
+      where: { phone: req.user.phone }
+    });
+    
+    if (!member) {
+      return res.status(200).json({
+        success: true,
+        registrations: [],
+        message: 'Member profile not found'
+      });
+    }
+
+    const regs = await EventRegistration.findAll({
+      where: { memberId: member.id },
+      include: [{ 
+        model: Event, 
+        as: 'event',
+        include: [{ model: EventExhibitor, as: 'exhibitors' }]
+      }],
+      order: [['registeredAt', 'DESC']]
+    });
+
+    const items = await Promise.all(regs.map(async r => ({
+      id: r.id,
+      event: r.event,
+      status: r.status,
+      paymentStatus: r.paymentStatus,
+      amountPaid: r.amountPaid,
+      registeredAt: r.registeredAt,
+      attendedAt: r.attendedAt,
+      qrDataURL: await qrService.generateQrDataURL(r)
+    })));
+
+    res.json({ success: true, registrations: items });
+  } catch (error) {
+    console.error('Get my registrations error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching registrations'
+    });
+  }
+});
+
+// @desc    Check registration status for an event (Web)
+// @route   GET /api/events/:id/my-registration
+// @access  Private (web users)
+router.get('/:id/my-registration', protect, async (req, res) => {
+  try {
+    const eventId = parseInt(req.params.id, 10);
+    const userId = req.user.id;
+    const { memberId } = req.query; // Optional memberId for admin to check other members
+
+    if (isNaN(eventId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid event ID'
+      });
+    }
+
+    // Determine member ID
+    let targetMemberId = memberId ? parseInt(memberId, 10) : null;
+    
+    // If admin is checking someone else, use provided memberId
+    if (targetMemberId && req.user.role === 'admin') {
+      const member = await Member.findByPk(targetMemberId);
+      if (!member) {
+        return res.status(404).json({
+          success: false,
+          message: 'Member not found'
+        });
+      }
+    } else {
+      // User checking their own registration - find member by phone
+      if (!req.user.phone) {
+        return res.status(200).json({
+          success: true,
+          isRegistered: false,
+          message: 'No phone number in profile. Cannot check registration.'
+        });
+      }
+      
+      // Find member by phone
+      let member = await Member.findOne({
+        where: { phone: req.user.phone }
+      });
+      
+      if (!member) {
+        return res.status(200).json({
+          success: true,
+          isRegistered: false,
+          message: 'Member profile not found'
+        });
+      }
+      
+      targetMemberId = member.id;
+    }
+
+    // Get registration status
+    const registration = await EventRegistration.findOne({
+      where: { eventId, memberId: targetMemberId },
+      include: [{ model: Event, as: 'event' }]
+    });
+
+    if (!registration) {
+      return res.status(200).json({
+        success: true,
+        isRegistered: false,
+        message: 'Not registered for this event'
+      });
+    }
+
+    // Generate QR code if registered
+    const qrDataURL = await qrService.generateQrDataURL(registration);
+
+    res.status(200).json({
+      success: true,
+      isRegistered: true,
+      registration: {
+        id: registration.id,
+        eventId: registration.eventId,
+        memberId: registration.memberId,
+        status: registration.status,
+        paymentStatus: registration.paymentStatus,
+        amountPaid: registration.amountPaid,
+        registeredAt: registration.registeredAt,
+        attendedAt: registration.attendedAt,
+        qrDataURL
+      },
+      event: registration.event ? {
+        id: registration.event.id,
+        title: registration.event.title,
+        startDate: registration.event.startDate,
+        endDate: registration.event.endDate,
+        status: registration.event.status
+      } : null
+    });
+
+  } catch (error) {
+    console.error('Check registration status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while checking registration status'
+    });
   }
 });
 
