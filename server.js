@@ -68,6 +68,7 @@ const allowedOrigins = [
   'http://127.0.0.1:5173',
   // Add your Render frontend URL here when deployed
   'https://mandap-web-frontend.onrender.com',
+  'https://mandap-web-frontend-new.onrender.com', // New frontend URL
   // Common frontend hosting domains
   'https://mandap-ui-all-modals-web.vercel.app',
   'https://mandap-ui-all-modals-web.netlify.app',
