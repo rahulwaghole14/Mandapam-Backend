@@ -534,12 +534,30 @@ router.post('/', protect, [
 // @access  Private
 router.put('/:id', protect, [
   body('title').optional().notEmpty().trim().withMessage('Title cannot be empty'),
+  body('name').optional().trim(), // Accept 'name' as alias for 'title'
   body('description').optional().trim(),
   body('type').optional().isIn([
     'Meeting', 'Workshop', 'Seminar', 'Celebration', 'Other'
   ]),
-  body('startDate').optional().isISO8601().withMessage('Invalid start date format'),
-  body('endDate').optional().isISO8601().withMessage('Invalid end date format'),
+  body('fee').optional().isFloat({ min: 0 }), // Accept 'fee' as alias for 'registrationFee'
+  body('startDateTime').optional().custom((value) => {
+    // Accept ISO8601 or formats like "2025-11-01T12:52"
+    if (typeof value === 'string' && (value.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/) || !isNaN(Date.parse(value)))) {
+      return true;
+    }
+    throw new Error('Invalid startDateTime format');
+  }),
+  body('endDateTime').optional().custom((value) => {
+    // Accept ISO8601 or formats like "2025-11-01T12:52"
+    if (typeof value === 'string' && (value.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/) || !isNaN(Date.parse(value)))) {
+      return true;
+    }
+    throw new Error('Invalid endDateTime format');
+  }),
+  body('startDate').optional(),
+  body('endDate').optional(),
+  body('startTime').optional().matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/),
+  body('endTime').optional().matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/),
   body('location').optional().trim(),
   body('address').optional().trim(),
   body('city').optional().trim(),
@@ -581,16 +599,111 @@ router.put('/:id', protect, [
       });
     }
 
-    // Validate date logic if both dates are provided
-    if (req.body.startDate && req.body.endDate) {
-      const startDate = new Date(req.body.startDate);
-      const endDate = new Date(req.body.endDate);
-      if (endDate < startDate) {
-        return res.status(400).json({
-          success: false,
-          message: 'End date must be after start date'
-        });
+    // Normalize frontend field names to backend format
+    if (req.body.name && !req.body.title) {
+      req.body.title = req.body.name;
+    }
+    if (req.body.fee !== undefined && req.body.registrationFee === undefined) {
+      req.body.registrationFee = req.body.fee;
+    }
+
+    // Handle startDateTime/endDateTime format from frontend
+    if (req.body.startDateTime && !req.body.startDate) {
+      // Handle formats like "2025-11-01T12:52" or full ISO
+      let dtStr = req.body.startDateTime;
+      if (dtStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)) {
+        // Format: YYYY-MM-DDTHH:MM - add seconds
+        dtStr = dtStr + ':00';
       }
+      const dt = new Date(dtStr);
+      if (!isNaN(dt.getTime())) {
+        req.body.startDate = dt.toISOString().split('T')[0];
+        const timeStr = dt.toTimeString().split(' ')[0].slice(0, 5); // HH:MM
+        if (timeStr !== '00:00') {
+          req.body.startTime = timeStr;
+        }
+      }
+    }
+    if (req.body.endDateTime && !req.body.endDate) {
+      // Handle formats like "2025-11-01T12:52" or full ISO
+      let dtStr = req.body.endDateTime;
+      if (dtStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)) {
+        // Format: YYYY-MM-DDTHH:MM - add seconds
+        dtStr = dtStr + ':00';
+      }
+      const dt = new Date(dtStr);
+      if (!isNaN(dt.getTime())) {
+        req.body.endDate = dt.toISOString().split('T')[0];
+        const timeStr = dt.toTimeString().split(' ')[0].slice(0, 5); // HH:MM
+        if (timeStr !== '00:00') {
+          req.body.endTime = timeStr;
+        }
+      }
+    }
+
+    // Handle date and time conversion
+    let startDate, endDate;
+    
+    if (req.body.startDate !== undefined) {
+      // If startTime is provided, combine date and time
+      if (req.body.startTime) {
+        startDate = new Date(`${req.body.startDate}T${req.body.startTime}:00`);
+      } else if (existingEvent.startDate) {
+        // If updating date but not time, preserve existing time
+        const existingStart = new Date(existingEvent.startDate);
+        const timeStr = existingStart.toTimeString().split(' ')[0].slice(0, 5); // HH:MM
+        if (timeStr !== '00:00') {
+          startDate = new Date(`${req.body.startDate}T${timeStr}:00`);
+        } else {
+          startDate = new Date(req.body.startDate);
+        }
+      } else {
+        startDate = new Date(req.body.startDate);
+      }
+    } else if (req.body.startTime !== undefined) {
+      // If only time is being updated, use existing date with new time
+      if (existingEvent.startDate) {
+        const existingStart = new Date(existingEvent.startDate);
+        const dateStr = existingStart.toISOString().split('T')[0];
+        startDate = new Date(`${dateStr}T${req.body.startTime}:00`);
+      }
+    }
+    
+    if (req.body.endDate !== undefined) {
+      // If endTime is provided, combine date and time
+      if (req.body.endTime) {
+        endDate = new Date(`${req.body.endDate}T${req.body.endTime}:00`);
+      } else if (existingEvent.endDate) {
+        // If updating date but not time, preserve existing time
+        const existingEnd = new Date(existingEvent.endDate);
+        const timeStr = existingEnd.toTimeString().split(' ')[0].slice(0, 5); // HH:MM
+        if (timeStr !== '00:00') {
+          endDate = new Date(`${req.body.endDate}T${timeStr}:00`);
+        } else {
+          endDate = new Date(req.body.endDate);
+        }
+      } else {
+        endDate = new Date(req.body.endDate);
+      }
+    } else if (req.body.endTime !== undefined) {
+      // If only time is being updated, use existing date with new time
+      if (existingEvent.endDate) {
+        const existingEnd = new Date(existingEvent.endDate);
+        const dateStr = existingEnd.toISOString().split('T')[0];
+        endDate = new Date(`${dateStr}T${req.body.endTime}:00`);
+      } else if (startDate) {
+        // If no endDate but endTime is provided, use startDate with endTime
+        const startDateStr = startDate.toISOString().split('T')[0];
+        endDate = new Date(`${startDateStr}T${req.body.endTime}:00`);
+      }
+    }
+
+    // Validate date logic if both dates are provided
+    if (startDate && endDate && endDate < startDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'End date must be after start date'
+      });
     }
 
     // Handle uploaded event image
@@ -607,23 +720,34 @@ router.put('/:id', protect, [
       console.log('Event image updated:', req.file.filename);
     }
 
-    // Prepare update data
+    // Prepare update data - only include fields that are being updated
     const updateData = {
-      ...req.body,
       updatedBy: req.user.id
     };
 
-    // Handle image field
+    // Only update fields that are provided
+    if (req.body.title !== undefined) updateData.title = req.body.title;
+    if (req.body.description !== undefined) updateData.description = req.body.description;
+    if (req.body.type !== undefined) updateData.type = req.body.type;
+    if (startDate !== undefined) updateData.startDate = startDate;
+    if (endDate !== undefined) updateData.endDate = endDate;
+    if (req.body.location !== undefined) updateData.location = req.body.location;
+    if (req.body.address !== undefined) updateData.address = req.body.address;
+    if (req.body.city !== undefined) updateData.city = req.body.city;
+    if (req.body.district !== undefined) updateData.district = req.body.district;
+    if (req.body.state !== undefined) updateData.state = req.body.state;
+    if (req.body.pincode !== undefined) updateData.pincode = req.body.pincode;
+    if (req.body.contactPerson !== undefined) updateData.contactPerson = req.body.contactPerson;
+    if (req.body.contactPhone !== undefined) updateData.contactPhone = req.body.contactPhone;
+    if (req.body.contactEmail !== undefined) updateData.contactEmail = req.body.contactEmail;
+    if (req.body.maxAttendees !== undefined) updateData.maxAttendees = req.body.maxAttendees;
+    if (req.body.registrationFee !== undefined) updateData.registrationFee = req.body.registrationFee;
+    if (req.body.isActive !== undefined) updateData.isActive = req.body.isActive;
+    if (req.body.isPublic !== undefined) updateData.isPublic = req.body.isPublic;
+
+    // Handle image field - only update if new file is uploaded
     if (req.file) {
       updateData.image = req.file.filename;
-    }
-
-    // Convert dates if provided
-    if (req.body.startDate) {
-      updateData.startDate = new Date(req.body.startDate);
-    }
-    if (req.body.endDate) {
-      updateData.endDate = new Date(req.body.endDate);
     }
 
     // Update event
@@ -640,7 +764,7 @@ router.put('/:id', protect, [
     // Transform image field to include full URL if image exists
     const eventResponse = event.toJSON();
     if (eventResponse.image) {
-      eventResponse.imageURL = `/uploads/event-images/${eventResponse.image}`;
+      eventResponse.imageURL = getFileUrl(eventResponse.image, baseUrl);
     }
 
     // Send notification for event update
