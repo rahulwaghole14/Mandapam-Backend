@@ -713,15 +713,18 @@ router.put('/:id', protect, [
     // Handle uploaded event image
     const baseUrl = req.protocol + '://' + req.get('host');
     if (req.file) {
+      console.log('📸 New image uploaded:', req.file.filename);
+      console.log('📸 Old image filename:', existingEvent.image);
+      
       // Delete old event image if exists
       if (existingEvent.image) {
         try {
           await deleteFile(existingEvent.image);
+          console.log('✅ Old image deleted successfully');
         } catch (error) {
-          console.log('Could not delete old event image:', error.message);
+          console.log('⚠️ Could not delete old event image:', error.message);
         }
       }
-      console.log('Event image updated:', req.file.filename);
     }
 
     // Prepare update data - only include fields that are being updated
@@ -768,7 +771,8 @@ router.put('/:id', protect, [
     // Transform image field to include full URL if image exists
     const eventResponse = event.toJSON();
     if (eventResponse.image) {
-      eventResponse.imageURL = getFileUrl(eventResponse.image, baseUrl);
+      eventResponse.imageURL = getFileUrl(eventResponse.image, baseUrl, 'event-images');
+      console.log('📸 Generated image URL:', eventResponse.imageURL);
     }
 
     // Send notification for event update
@@ -800,7 +804,7 @@ router.put('/:id', protect, [
       uploadedFiles: {
         image: req.file ? {
           filename: req.file.filename,
-          url: getFileUrl(req.file.filename, baseUrl)
+          url: getFileUrl(req.file.filename, baseUrl, 'event-images')
         } : null
       }
     });

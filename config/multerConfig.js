@@ -225,18 +225,50 @@ const getFileUrl = (filename, baseUrl = '', defaultSubDir = 'event-images') => {
 // Utility function to delete file
 const deleteFile = (filename) => {
   return new Promise((resolve, reject) => {
+    if (!filename) {
+      resolve(false);
+      return;
+    }
+    
+    // Handle filenames that might contain a path
+    const cleanFilename = filename.replace(/^\/+/, '').replace(/\\/g, '/');
+    const pathParts = cleanFilename.split('/');
+    
+    // Extract actual filename if path is included
+    let actualFilename = cleanFilename;
+    if (pathParts.length > 1) {
+      actualFilename = pathParts[pathParts.length - 1];
+    }
+    
     const subDirs = ['profile-images', 'business-images', 'gallery-images', 'event-images', 'documents', 'images', 'general'];
     
     // Try to find and delete the file in any subdirectory
     for (const subDir of subDirs) {
-      const filePath = path.join(UPLOADS_BASE_DIR, subDir, filename);
+      const filePath = path.join(UPLOADS_BASE_DIR, subDir, actualFilename);
       if (fs.existsSync(filePath)) {
         fs.unlink(filePath, (error) => {
           if (error) {
             console.error('Error deleting file:', error);
             reject(error);
           } else {
-            console.log('File deleted successfully:', filename);
+            console.log('File deleted successfully:', actualFilename, 'from', subDir);
+            resolve(true);
+          }
+        });
+        return;
+      }
+    }
+    
+    // Also try the full path if filename contains a path
+    if (pathParts.length > 1) {
+      const fullPath = path.join(UPLOADS_BASE_DIR, ...pathParts);
+      if (fs.existsSync(fullPath)) {
+        fs.unlink(fullPath, (error) => {
+          if (error) {
+            console.error('Error deleting file:', error);
+            reject(error);
+          } else {
+            console.log('File deleted successfully from path:', cleanFilename);
             resolve(true);
           }
         });
@@ -245,16 +277,22 @@ const deleteFile = (filename) => {
     }
     
     // Fallback to flat structure
-    const filePath = path.join(UPLOADS_BASE_DIR, filename);
-    fs.unlink(filePath, (error) => {
-      if (error) {
-        console.error('Error deleting file:', error);
-        reject(error);
-      } else {
-        console.log('File deleted successfully:', filename);
-        resolve(true);
-      }
-    });
+    const filePath = path.join(UPLOADS_BASE_DIR, actualFilename);
+    if (fs.existsSync(filePath)) {
+      fs.unlink(filePath, (error) => {
+        if (error) {
+          console.error('Error deleting file:', error);
+          reject(error);
+        } else {
+          console.log('File deleted successfully:', actualFilename);
+          resolve(true);
+        }
+      });
+    } else {
+      console.log('File not found for deletion:', actualFilename);
+      // Don't reject if file doesn't exist - it might have been deleted already
+      resolve(false);
+    }
   });
 };
 
