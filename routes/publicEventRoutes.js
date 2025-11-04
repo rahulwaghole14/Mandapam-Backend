@@ -8,12 +8,17 @@ const EventExhibitor = require('../models/EventExhibitor');
 const qrService = require('../services/qrService');
 const paymentService = require('../services/paymentService');
 const { Op } = require('sequelize');
+const { 
+  profileImageUpload, 
+  handleMulterError, 
+  getFileUrl 
+} = require('../config/multerConfig');
 
 const router = express.Router();
 
 // Helper function to find or create member
 async function findOrCreateMember(memberData) {
-  const { phone, name, email, businessName, businessType, city, associationId } = memberData;
+  const { phone, name, email, businessName, businessType, city, associationId, profileImage } = memberData;
   
   // Check if member exists by phone
   let member = await Member.findOne({
@@ -21,7 +26,10 @@ async function findOrCreateMember(memberData) {
   });
   
   if (member) {
-    // Member exists, return existing member
+    // Member exists - update profile image if provided and not already set
+    if (profileImage && !member.profileImage) {
+      await member.update({ profileImage });
+    }
     return { member, isNew: false };
   }
   
@@ -44,6 +52,7 @@ async function findOrCreateMember(memberData) {
     city,
     associationId,
     associationName,
+    profileImage: profileImage || null,
     isActive: true,
     isVerified: false
   });
@@ -231,15 +240,19 @@ router.get('/events/:id/check-registration', [
 // @desc    Initiate payment registration (Public - Member creation + payment initiation)
 // @route   POST /api/public/events/:id/register-payment
 // @access  Public
-router.post('/events/:id/register-payment', [
-  body('name', 'Name is required').notEmpty().trim(),
-  body('phone', 'Phone number is required').notEmpty().matches(/^[0-9]{10}$/).withMessage('Phone must be 10 digits'),
-  body('email', 'Email is required').isEmail().normalizeEmail(),
-  body('businessName', 'Business name is required').notEmpty().trim(),
-  body('businessType', 'Business type is required').isIn(['catering', 'sound', 'mandap', 'madap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
-  body('city', 'City is required').notEmpty().trim(),
-  body('associationId', 'Association ID is required').isInt({ min: 1 })
-], async (req, res) => {
+router.post('/events/:id/register-payment', 
+  profileImageUpload.single('photo'), // Accept photo upload
+  handleMulterError,
+  [
+    body('name', 'Name is required').notEmpty().trim(),
+    body('phone', 'Phone number is required').notEmpty().matches(/^[0-9]{10}$/).withMessage('Phone must be 10 digits'),
+    body('email', 'Email is required').isEmail().normalizeEmail(),
+    body('businessName', 'Business name is required').notEmpty().trim(),
+    body('businessType', 'Business type is required').isIn(['catering', 'sound', 'mandap', 'madap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
+    body('city', 'City is required').notEmpty().trim(),
+    body('associationId', 'Association ID is required').isInt({ min: 1 })
+  ], 
+  async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -285,6 +298,16 @@ router.post('/events/:id/register-payment', [
       });
     }
 
+    // Handle profile image upload
+    let profileImageFilename = null;
+    let profileImageURL = null;
+    const baseUrl = req.protocol + '://' + req.get('host');
+    
+    if (req.file) {
+      profileImageFilename = req.file.filename;
+      profileImageURL = getFileUrl(profileImageFilename, baseUrl);
+    }
+
     // Find or create member
     let memberResult;
     try {
@@ -295,7 +318,8 @@ router.post('/events/:id/register-payment', [
         businessName,
         businessType,
         city,
-        associationId
+        associationId,
+        profileImage: profileImageFilename
       });
     } catch (error) {
       return res.status(400).json({
@@ -305,6 +329,11 @@ router.post('/events/:id/register-payment', [
     }
 
     const { member, isNew } = memberResult;
+    
+    // Get profile image URL if available (use existing if member already had one)
+    if (!profileImageURL && member.profileImage) {
+      profileImageURL = getFileUrl(member.profileImage, baseUrl);
+    }
 
     // Check if already registered for this event
     const existingRegistration = await EventRegistration.findOne({
@@ -350,7 +379,8 @@ router.post('/events/:id/register-payment', [
           id: member.id,
           name: member.name,
           phone: member.phone,
-          isNew
+          isNew,
+          profileImageURL
         },
         registration: {
           id: registration.id,
@@ -406,7 +436,8 @@ router.post('/events/:id/register-payment', [
         id: member.id,
         name: member.name,
         phone: member.phone,
-        isNew
+        isNew,
+        profileImageURL
       },
       order,
       keyId: process.env.RAZORPAY_KEY_ID,

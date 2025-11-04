@@ -224,25 +224,22 @@ GET /api/public/events/32/check-registration?phone=9876543210
 **Endpoint**: `POST /api/public/events/:id/register-payment`  
 **Access**: Public
 
-Creates/finds member account and initiates payment for event registration.
+Creates/finds member account and initiates payment for event registration. **Accepts photo upload** for member profile image.
 
 #### Request Parameters
 
 **URL Parameters:**
 - `id` (integer, required): Event ID
 
-**Request Body:**
-```json
-{
-  "name": "John Doe",
-  "phone": "9876543210",
-  "email": "john@example.com",
-  "businessName": "John's Catering Services",
-  "businessType": "catering",
-  "city": "Pune",
-  "associationId": 1
-}
-```
+**Request Body (multipart/form-data):**
+- `name` (string, required): Full name (2-100 characters)
+- `phone` (string, required): 10-digit phone number (unique)
+- `email` (string, required): Valid email address
+- `businessName` (string, required): Business name (2-200 characters)
+- `businessType` (enum, required): One of: `catering`, `sound`, `mandap`, `madap`, `light`, `decorator`, `photography`, `videography`, `transport`, `other`
+- `city` (string, required): City name
+- `associationId` (integer, required): Association ID (must exist in database)
+- `photo` (file, optional): Profile image file (max 5MB, images only: jpg, jpeg, png, gif, webp)
 
 #### Required Fields
 
@@ -253,6 +250,12 @@ Creates/finds member account and initiates payment for event registration.
 - `businessType` (enum): One of: `catering`, `sound`, `mandap`, `madap`, `light`, `decorator`, `photography`, `videography`, `transport`, `other`
 - `city` (string): City name
 - `associationId` (integer): Association ID (must exist in database)
+
+#### Optional Fields
+
+- `photo` (file): Profile image file (max 5MB)
+
+**Note**: The request must be sent as `multipart/form-data` when including a photo.
 
 #### Response
 
@@ -266,7 +269,8 @@ Creates/finds member account and initiates payment for event registration.
     "id": 123,
     "name": "John Doe",
     "phone": "9876543210",
-    "isNew": true
+    "isNew": true,
+    "profileImageURL": "https://example.com/uploads/profile-images/image-1234567890.jpg"
   },
   "registration": {
     "id": 456,
@@ -289,7 +293,8 @@ Creates/finds member account and initiates payment for event registration.
     "id": 123,
     "name": "John Doe",
     "phone": "9876543210",
-    "isNew": false
+    "isNew": false,
+    "profileImageURL": "https://example.com/uploads/profile-images/image-1234567890.jpg"
   },
   "order": {
     "id": "order_RamtONiHbf6jBR",
@@ -451,9 +456,17 @@ Verifies payment signature and creates event registration.
 
 ### 1. **Auto Member Creation**
 - System automatically checks if member exists by phone number
-- If exists: Uses existing member
-- If not: Creates new member with provided details
+- If exists: Uses existing member (updates profile image if not already set)
+- If not: Creates new member with provided details including profile image
 - Returns `isNew: true/false` in response
+
+### 2. **Photo Upload**
+- Profile photo can be uploaded during registration
+- Image is stored in `uploads/profile-images/` directory
+- Maximum file size: 5MB
+- Supported formats: jpg, jpeg, png, gif, webp
+- Photo URL is returned in response for display
+- If member already exists with a photo, existing photo is used unless new one is provided
 
 ### 2. **Duplicate Prevention**
 - Checks if member is already registered for the event
@@ -490,22 +503,25 @@ const checkRegistration = async (eventId, phone) => {
   return data.isRegistered;
 };
 
-// Step 3: Initiate registration and payment
+// Step 2: Initiate registration and payment (with photo upload)
 const initiateRegistration = async (eventId, formData) => {
+  const formDataToSend = new FormData();
+  formDataToSend.append('name', formData.name);
+  formDataToSend.append('phone', formData.phone);
+  formDataToSend.append('email', formData.email);
+  formDataToSend.append('businessName', formData.businessName);
+  formDataToSend.append('businessType', formData.businessType);
+  formDataToSend.append('city', formData.city);
+  formDataToSend.append('associationId', formData.associationId);
+  
+  // Add photo if provided
+  if (formData.photo) {
+    formDataToSend.append('photo', formData.photo);
+  }
+  
   const response = await fetch(`/api/public/events/${eventId}/register-payment`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      name: formData.name,
-      phone: formData.phone,
-      email: formData.email,
-      businessName: formData.businessName,
-      businessType: formData.businessType,
-      city: formData.city,
-      associationId: formData.associationId
-    })
+    body: formDataToSend // FormData automatically sets Content-Type with boundary
   });
   
   const data = await response.json();
@@ -520,7 +536,8 @@ const initiateRegistration = async (eventId, formData) => {
       success: true,
       isFree: true,
       registration: data.registration,
-      qrDataURL: data.qrDataURL
+      qrDataURL: data.qrDataURL,
+      profileImageURL: data.member.profileImageURL
     };
   }
   
@@ -529,7 +546,8 @@ const initiateRegistration = async (eventId, formData) => {
     success: true,
     isFree: false,
     memberId: data.member.id,
-    paymentOptions: data.paymentOptions
+    paymentOptions: data.paymentOptions,
+    profileImageURL: data.member.profileImageURL
   };
 };
 
@@ -669,12 +687,16 @@ const registerForEvent = async (eventId, formData) => {
 
 - [ ] Include Razorpay Checkout script
 - [ ] Create registration form with all required fields
+- [ ] **Add photo upload field (file input)**
 - [ ] Implement city dropdown
 - [ ] Implement association dropdown (filtered by city)
 - [ ] Handle member creation/retrieval
+- [ ] Handle file upload (multipart/form-data)
+- [ ] Display uploaded photo preview
 - [ ] Handle payment flow for paid events
 - [ ] Handle free events (skip payment)
 - [ ] Display QR code after successful registration
+- [ ] Display profile image after successful registration
 - [ ] Check registration status before allowing registration
 - [ ] Handle duplicate registration errors
 - [ ] Display validation errors
