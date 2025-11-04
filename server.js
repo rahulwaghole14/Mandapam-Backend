@@ -146,7 +146,12 @@ app.use('/uploads', (req, res, next) => {
     if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
       res.header('Access-Control-Allow-Origin', '*');
     } else {
-      res.header('Access-Control-Allow-Origin', 'null');
+      // Allow Render/Vercel/Netlify domains
+      if (origin && (origin.includes('.onrender.com') || origin.includes('.vercel.app') || origin.includes('.netlify.app'))) {
+        res.header('Access-Control-Allow-Origin', origin);
+      } else {
+        res.header('Access-Control-Allow-Origin', 'null');
+      }
     }
   }
   
@@ -162,7 +167,7 @@ app.use('/uploads', (req, res, next) => {
     next();
   }
 }, express.static(uploadsPath, {
-  setHeaders: (res, path) => {
+  setHeaders: (res, filePath) => {
     // Set additional headers for static files
     res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
     res.setHeader('Access-Control-Allow-Origin', '*');

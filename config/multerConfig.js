@@ -190,21 +190,51 @@ const handleMulterError = (error, req, res, next) => {
 
 // Utility function to get file URL
 const getFileUrl = (filename, baseUrl = '') => {
-  // Determine the subdirectory based on filename or context
-  // For simplicity, we'll assume a flat structure or rely on the filename prefix
-  // A more robust solution would involve storing the subdirectory in the DB
+  if (!filename) return null;
+  
+  // Handle filenames that might already contain a path
+  // Remove any leading slashes or path separators
+  const cleanFilename = filename.replace(/^\/+/, '').replace(/\\/g, '/');
+  
+  // Check if filename already contains a subdirectory path
+  const pathParts = cleanFilename.split('/');
+  if (pathParts.length > 1) {
+    // Filename contains a path like "mandap-events/image.jpg"
+    // Extract the actual filename and subdirectory
+    const actualFilename = pathParts[pathParts.length - 1];
+    const subDir = pathParts[0];
+    
+    // First, check if file exists at the path specified in filename
+    const filePath = path.join(UPLOADS_BASE_DIR, subDir, actualFilename);
+    if (fs.existsSync(filePath)) {
+      return `${baseUrl}/uploads/${subDir}/${actualFilename}`;
+    }
+    
+    // Also check event-images subdirectory (common case for events)
+    const eventImagePath = path.join(UPLOADS_BASE_DIR, 'event-images', actualFilename);
+    if (fs.existsSync(eventImagePath)) {
+      return `${baseUrl}/uploads/event-images/${actualFilename}`;
+    }
+    
+    // Also check if the full path exists (nested subdirectory)
+    const fullPath = path.join(UPLOADS_BASE_DIR, ...pathParts);
+    if (fs.existsSync(fullPath)) {
+      return `${baseUrl}/uploads/${cleanFilename}`;
+    }
+  }
+  
+  // Try to find file in known subdirectories
   const subDirs = ['profile-images', 'business-images', 'gallery-images', 'event-images', 'documents', 'images', 'general'];
   
-  // Check if file exists in any subdirectory
   for (const subDir of subDirs) {
-    const filePath = path.join(UPLOADS_BASE_DIR, subDir, filename);
+    const filePath = path.join(UPLOADS_BASE_DIR, subDir, cleanFilename);
     if (fs.existsSync(filePath)) {
-      return `${baseUrl}/uploads/${subDir}/${filename}`;
+      return `${baseUrl}/uploads/${subDir}/${cleanFilename}`;
     }
   }
   
   // Fallback to flat structure
-  return `${baseUrl}/uploads/${filename}`;
+  return `${baseUrl}/uploads/${cleanFilename}`;
 };
 
 // Utility function to delete file
