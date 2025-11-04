@@ -91,8 +91,11 @@ app.use(cors({
       console.log('✅ CORS allowed for origin:', origin);
       callback(null, true);
     } else {
-      // For development, be more permissive
-      if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
+      // For production, check if it's a Render frontend (be more permissive)
+      if (origin.includes('.onrender.com') || origin.includes('.vercel.app') || origin.includes('.netlify.app')) {
+        console.log('⚠️ CORS allowing Render/Vercel/Netlify origin:', origin);
+        callback(null, true);
+      } else if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
         console.log('⚠️ CORS allowing unknown origin in development:', origin);
         callback(null, true);
       } else {
