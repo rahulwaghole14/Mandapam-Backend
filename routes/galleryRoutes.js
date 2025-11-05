@@ -593,10 +593,24 @@ router.delete('/:id', protect, async (req, res) => {
       });
     }
 
-    // Delete the file from filesystem
-    const filePath = path.join(__dirname, '../uploads', image.filename);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    // Only delete local files, not Cloudinary URLs
+    // Cloudinary URLs are managed by Cloudinary and shouldn't be deleted from local filesystem
+    if (image.filename && !image.filename.startsWith('http://') && !image.filename.startsWith('https://')) {
+      // It's a local file - try to delete it
+      try {
+        const path = require('path');
+        const fs = require('fs');
+        const filePath = path.join(__dirname, '../uploads', image.filename);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+          console.log('✅ Local file deleted:', image.filename);
+        }
+      } catch (fileError) {
+        console.log('⚠️ Could not delete local file:', fileError.message);
+        // Continue with database deletion even if file deletion fails
+      }
+    } else {
+      console.log('ℹ️ Cloudinary URL - skipping local file deletion');
     }
 
     // Delete the database record
@@ -611,7 +625,8 @@ router.delete('/:id', protect, async (req, res) => {
     console.error('Delete gallery image error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error while deleting image'
+      message: 'Server error while deleting image',
+      error: error.message
     });
   }
 });
