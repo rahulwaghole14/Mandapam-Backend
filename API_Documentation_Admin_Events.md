@@ -44,7 +44,8 @@ curl -H "Authorization: Bearer <ADMIN_TOKEN>" \
 ## Check-in by QR (Attendance)
 - Method: POST
 - Path: /api/events/checkin
-- Description: Marks attendance using a QR token scanned at the gate.
+- Access: Public (No authentication required)
+- Description: Marks attendance using a QR token scanned at the gate. The QR token itself provides security through HMAC signature verification.
 
 Body
 ```
@@ -69,11 +70,12 @@ Errors
 
 Curl
 ```
-curl -X POST -H "Authorization: Bearer <ADMIN_TOKEN>" \
-  -H "Content-Type: application/json" \
+curl -X POST -H "Content-Type: application/json" \
   -d '{"qrToken":"EVT:..."}' \
   http://localhost:5000/api/events/checkin
 ```
+
+**Note:** No authentication token is required. The endpoint is publicly accessible for easy QR scanning by event staff.
 
 ## Exhibitors: Create
 - Method: POST

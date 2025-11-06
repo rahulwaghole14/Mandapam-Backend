@@ -1575,8 +1575,8 @@ router.get('/:id/my-registration', protect, async (req, res) => {
 
 // @desc    Check-in attendee by QR
 // @route   POST /api/events/checkin
-// @access  Private (admin)
-router.post('/checkin', protect, [
+// @access  Public (no authentication required - QR token provides security)
+router.post('/checkin', [
   body('qrToken', 'qrToken is required').notEmpty()
 ], async (req, res) => {
   try {
