@@ -248,7 +248,13 @@ router.post('/events/:id/register-payment',
     body('businessName', 'Business name is required').notEmpty().trim(),
     body('businessType', 'Business type is required').isIn(['catering', 'sound', 'mandap', 'madap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
     body('city', 'City is required').notEmpty().trim(),
-    body('associationId', 'Association ID is required').isInt({ min: 1 }),
+    body('associationId', 'Association ID is required').custom((value) => {
+      const num = parseInt(value, 10);
+      if (isNaN(num) || num < 1) {
+        throw new Error('Association ID must be a valid positive integer');
+      }
+      return true;
+    }).toInt(),
     body('photo').optional().custom((value) => {
       if (!value || value === '' || value === null || value === undefined) return true;
       // Accept Cloudinary URL
