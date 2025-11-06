@@ -266,10 +266,32 @@ router.post('/events/:id/register-payment',
   ], 
   async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
+    // Log request details for debugging
+    console.log('Register payment request:', {
+      method: req.method,
+      url: req.url,
+      contentType: req.get('Content-Type'),
+      body: req.body,
+      bodyKeys: Object.keys(req.body || {}),
+      bodyLength: JSON.stringify(req.body || {}).length
+    });
+
+    // Check if body is empty or missing required fields
+    if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({
         success: false,
+        message: 'Request body is empty. Please ensure data is being sent correctly.',
+        contentType: req.get('Content-Type'),
+        hint: 'If using form-urlencoded, ensure data is properly serialized. If using JSON, set Content-Type to application/json.'
+      });
+    }
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      console.log('Validation errors:', errors.array());
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
         errors: errors.array()
       });
     }
