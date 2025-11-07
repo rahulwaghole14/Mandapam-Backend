@@ -240,7 +240,7 @@ POST /api/bod
 ```
 
 ### 🔐 **Authentication & Authorization:**
-- **Read Operations**: Any authenticated user (`admin`, `sub-admin`, `user`)
+- **Read Operations**: Any authenticated user (`admin`, `manager`, `sub-admin`, `user`)
 - **Write Operations**: Admin only (`admin` role required)
 - **Header**: `Authorization: Bearer <jwt_token>`
 

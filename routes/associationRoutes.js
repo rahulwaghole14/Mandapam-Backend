@@ -98,7 +98,7 @@ const validateAssociation = [
 // @desc    Create new association
 // @route   POST /api/associations
 // @access  Private (Admin, Sub-Admin)
-router.post('/', protect, authorize(['admin', 'sub-admin']), validateAssociation, async (req, res) => {
+router.post('/', protect, authorize(['admin', 'manager', 'sub-admin']), validateAssociation, async (req, res) => {
   try {
     console.log('Association POST request received:', req.body);
     
@@ -460,7 +460,7 @@ router.get('/:id/members', [
 // @desc    Update association
 // @route   PUT /api/associations/:id
 // @access  Private (Admin, Sub-Admin)
-router.put('/:id', protect, authorize(['admin', 'sub-admin']), validateAssociation, async (req, res) => {
+router.put('/:id', protect, authorize(['admin', 'manager', 'sub-admin']), validateAssociation, async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -561,7 +561,7 @@ router.put('/:id', protect, authorize(['admin', 'sub-admin']), validateAssociati
 // @desc    Delete association
 // @route   DELETE /api/associations/:id
 // @access  Private (Admin, Sub-Admin)
-router.delete('/:id', protect, authorize(['admin', 'sub-admin']), async (req, res) => {
+router.delete('/:id', protect, authorize(['admin', 'manager', 'sub-admin']), async (req, res) => {
   try {
     const association = await Association.findByPk(req.params.id);
     
@@ -591,7 +591,7 @@ router.delete('/:id', protect, authorize(['admin', 'sub-admin']), async (req, re
 // @desc    Toggle association status
 // @route   PATCH /api/associations/:id/toggle-status
 // @access  Private (Admin, Sub-Admin)
-router.patch('/:id/toggle-status', protect, authorize(['admin', 'sub-admin']), async (req, res) => {
+router.patch('/:id/toggle-status', protect, authorize(['admin', 'manager', 'sub-admin']), async (req, res) => {
   try {
     const association = await Association.findByPk(req.params.id);
     

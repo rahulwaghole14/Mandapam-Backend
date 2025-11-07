@@ -418,7 +418,7 @@
 
 ### POST /api/associations
 **Description**: Create new association  
-**Access**: Private (Bearer Token, Admin/Sub-admin only)  
+**Access**: Private (Bearer Token, Admin/Manager/Sub-admin only)  
 **Request Body**:
 ```json
 {
@@ -438,13 +438,13 @@
 
 ### PUT /api/associations/:id
 **Description**: Update association  
-**Access**: Private (Bearer Token, Admin/Sub-admin only)  
+**Access**: Private (Bearer Token, Admin/Manager/Sub-admin only)  
 **Path Parameters**:
 - `id`: Association ID
 
 ### DELETE /api/associations/:id
 **Description**: Delete association  
-**Access**: Private (Bearer Token, Admin/Sub-admin only)  
+**Access**: Private (Bearer Token, Admin/Manager/Sub-admin only)  
 **Path Parameters**:
 - `id`: Association ID
 

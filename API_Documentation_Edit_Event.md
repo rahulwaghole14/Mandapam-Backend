@@ -5,7 +5,7 @@
 **Endpoint**: `PUT /api/events/:id`  
 **Authentication**: Required (Bearer Token)  
 **Content-Type**: `application/json`  
-**Access**: Admin, Sub-admin (district-based access)
+**Access**: Admin, Manager, Sub-admin (district-based access)
 
 ---
 
@@ -527,7 +527,7 @@ updateEvent(33, {
 
 ### 5. Access Control
 - **Admin**: Can update any event
-- **Sub-admin**: Can only update events in their district
+- **Manager/Sub-admin**: Can only update events in their district
 - Returns 403 if access denied
 
 ### 6. Validation
@@ -613,7 +613,7 @@ updateEvent(33, {
 - [ ] Verify old image is deleted when new one uploaded
 - [ ] Verify image URL is returned correctly
 - [ ] Test with invalid data (validation errors)
-- [ ] Test access control (sub-admin district)
+- [ ] Test access control (manager/sub-admin district)
 
 ---
 

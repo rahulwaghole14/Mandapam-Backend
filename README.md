@@ -5,7 +5,7 @@ A comprehensive Node.js backend API for the Mandap Association Platform, built w
 ## 🚀 Features
 
 - **🔐 JWT Authentication** - Secure user authentication and authorization
-- **👥 Role-Based Access Control** - Admin and Sub-admin roles with district-based permissions
+- **👥 Role-Based Access Control** - Admin, Manager, and Sub-admin roles with district-based permissions
 - **📊 MongoDB Integration** - Scalable document database with Mongoose ODM
 - **🛡️ Security Features** - Input validation, rate limiting, CORS, and Helmet
 - **📁 File Upload Support** - Image and document uploads
@@ -184,6 +184,7 @@ Authorization: Bearer <your-jwt-token>
 ### User Roles
 
 - **Admin**: Full access to all resources across all districts
+- **Manager**: Similar access to sub-admins but scoped to their district; intended for operational managers
 - **Sub-admin**: Restricted access to resources within their assigned district
 
 ### Permission System

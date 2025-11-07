@@ -429,7 +429,7 @@ router.post('/users', protect, authorize('admin'), [
   body('name', 'Name is required').notEmpty().trim(),
   body('email', 'Please include a valid email').isEmail(),
   body('password', 'Password must be at least 6 characters').isLength({ min: 6 }),
-  body('role', 'Role must be admin or sub-admin').isIn(['admin', 'sub-admin']),
+  body('role', 'Role must be admin, manager or sub-admin').isIn(['admin', 'manager', 'sub-admin']),
   body('district', 'District is required').notEmpty(),
   body('state', 'State is required').notEmpty(),
   body('phone', 'Please add a valid phone number').matches(/^[0-9]{10}$/)

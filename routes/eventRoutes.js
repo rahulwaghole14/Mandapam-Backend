@@ -627,8 +627,8 @@ router.put('/:id', protect, [
       });
     }
 
-    // Check district access for sub-admins
-    if (req.user.role === 'sub-admin' && existingEvent.district !== req.user.district) {
+    // Check district access for sub-admins and managers
+    if (['manager', 'sub-admin'].includes(req.user.role) && existingEvent.district !== req.user.district) {
       return res.status(403).json({
         success: false,
         message: 'Access denied to event in different district'
@@ -880,8 +880,8 @@ router.delete('/:id', protect, async (req, res) => {
       });
     }
 
-    // Check district access for sub-admins
-    if (req.user.role === 'sub-admin' && event.district !== req.user.district) {
+    // Check district access for sub-admins and managers
+    if (['manager', 'sub-admin'].includes(req.user.role) && event.district !== req.user.district) {
       return res.status(403).json({
         success: false,
         message: 'Access denied to event in different district'
@@ -911,7 +911,7 @@ router.get('/stats/overview', async (req, res) => {
   try {
     // Build filter for district-based access
     const where = {};
-    if (req.user.role === 'sub-admin') {
+    if (['manager', 'sub-admin'].includes(req.user.role)) {
       where.district = req.user.district;
     }
 
@@ -1019,8 +1019,8 @@ router.put('/:id/status', protect, [
       });
     }
 
-    // Check district access for sub-admins
-    if (req.user.role === 'sub-admin' && event.district !== req.user.district) {
+    // Check district access for sub-admins and managers
+    if (['manager', 'sub-admin'].includes(req.user.role) && event.district !== req.user.district) {
       return res.status(403).json({
         success: false,
         message: 'Access denied to event in different district'

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the API endpoints for event registration in the web frontend. These endpoints allow web users (admin/sub-admin/user) to register for events with payment support using Razorpay.
+This document describes the API endpoints for event registration in the web frontend. These endpoints allow web users (admin/manager/sub-admin/user) to register for events with payment support using Razorpay.
 
 ## Base URL
 - **Development**: `http://localhost:5000/api`

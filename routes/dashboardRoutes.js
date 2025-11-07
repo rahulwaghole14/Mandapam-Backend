@@ -21,7 +21,7 @@ router.get('/stats', async (req, res) => {
   try {
     // Build filter for district-based access
     const where = {};
-    if (req.user.role === 'sub-admin') {
+    if (['manager', 'sub-admin'].includes(req.user.role)) {
       where.district = req.user.district;
     }
 
@@ -147,7 +147,7 @@ router.get('/recent-members', [
     
     // Build filter for district-based access
     const where = {};
-    if (req.user.role === 'sub-admin') {
+    if (['manager', 'sub-admin'].includes(req.user.role)) {
       where.district = req.user.district;
     }
 
@@ -201,7 +201,7 @@ router.get('/district-coverage', async (req, res) => {
   try {
     // Build filter for district-based access
     const where = {};
-    if (req.user.role === 'sub-admin') {
+    if (['manager', 'sub-admin'].includes(req.user.role)) {
       where.district = req.user.district;
     }
 
@@ -270,7 +270,7 @@ router.get('/growth-trends', [
     
     // Build filter for district-based access
     const where = {};
-    if (req.user.role === 'sub-admin') {
+    if (['manager', 'sub-admin'].includes(req.user.role)) {
       where.district = req.user.district;
     }
 
@@ -349,7 +349,7 @@ router.get('/associations-map', async (req, res) => {
   try {
     // Build filter for district-based access
     const filter = {};
-    if (req.user.role === 'sub-admin') {
+    if (['manager', 'sub-admin'].includes(req.user.role)) {
       filter.district = req.user.district;
     }
 
@@ -394,7 +394,7 @@ router.get('/monthly-member-growth', async (req, res) => {
     
     // Build filter for district-based access
     const filter = {};
-    if (req.user.role === 'sub-admin') {
+    if (['manager', 'sub-admin'].includes(req.user.role)) {
       filter.district = req.user.district;
     }
 
@@ -449,7 +449,7 @@ router.get('/top-associations', async (req, res) => {
     
     // Build filter for district-based access
     const filter = {};
-    if (req.user.role === 'sub-admin') {
+    if (['manager', 'sub-admin'].includes(req.user.role)) {
       filter.district = req.user.district;
     }
     console.log('User role:', req.user.role);

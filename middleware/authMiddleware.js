@@ -72,20 +72,20 @@ const authorize = (...roles) => {
   };
 };
 
-// District-based authorization for sub-admins
+// District-based authorization for sub-admins and managers
 const authorizeDistrict = (req, res, next) => {
   if (req.user.role === 'admin') {
     return next(); // Admin can access all districts
   }
 
-  if (req.user.role === 'sub-admin') {
-    // Check if the resource belongs to the sub-admin's district
+  if (['manager', 'sub-admin'].includes(req.user.role)) {
+    // Check if the resource belongs to the allowed district for this role
     const resourceDistrict = req.body.district || req.params.district;
     
     if (resourceDistrict && resourceDistrict !== req.user.district) {
       return res.status(403).json({
         success: false,
-        message: `Sub-admin can only access resources in ${req.user.district} district`
+        message: `${req.user.role} can only access resources in ${req.user.district} district`
       });
     }
   }

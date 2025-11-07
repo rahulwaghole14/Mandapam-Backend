@@ -50,7 +50,7 @@ router.get('/', [
     const where = {};
 
     // District-based filtering for sub-admins
-    if (req.user.role === 'sub-admin') {
+    if (['manager', 'sub-admin'].includes(req.user.role)) {
       where.district = req.user.district;
     }
 
@@ -150,7 +150,7 @@ router.get('/:id', async (req, res) => {
     }
 
     // Check district access for sub-admins
-    if (req.user.role === 'sub-admin' && vendor.district !== req.user.district) {
+    if (['manager', 'sub-admin'].includes(req.user.role) && vendor.district !== req.user.district) {
       return res.status(403).json({
         success: false,
         message: 'Access denied to vendor in different district'
@@ -281,7 +281,7 @@ router.put('/:id', [
     }
 
     // Check district access for sub-admins
-    if (req.user.role === 'sub-admin' && existingVendor.district !== req.user.district) {
+    if (['manager', 'sub-admin'].includes(req.user.role) && existingVendor.district !== req.user.district) {
       return res.status(403).json({
         success: false,
         message: 'Access denied to vendor in different district'
@@ -362,7 +362,7 @@ router.get('/stats/overview', async (req, res) => {
   try {
     // Build filter for district-based access
     const where = {};
-    if (req.user.role === 'sub-admin') {
+    if (['manager', 'sub-admin'].includes(req.user.role)) {
       where.district = req.user.district;
     }
 
@@ -427,7 +427,7 @@ router.get('/stats/overview', async (req, res) => {
   }
 });
 
-// @desc    Verify vendor (Admin/Sub-admin)
+// @desc    Verify vendor (Admin/Manager/Sub-admin)
 // @route   PUT /api/vendors/:id/verify
 // @access  Private
 router.put('/:id/verify', async (req, res) => {
@@ -442,7 +442,7 @@ router.put('/:id/verify', async (req, res) => {
     }
 
     // Check district access for sub-admins
-    if (req.user.role === 'sub-admin' && vendor.district !== req.user.district) {
+    if (['manager', 'sub-admin'].includes(req.user.role) && vendor.district !== req.user.district) {
       return res.status(403).json({
         success: false,
         message: 'Access denied to vendor in different district'
