@@ -75,7 +75,8 @@ const allowedOrigins = [
   'https://mandap-ui-all-modals-web.onrender.com',
   'https://mandapam-backend-97mi.onrender.com',
   // Production domain
-  'https://mandapassociation.com'
+  'https://mandapassociation.com',
+  'https://www.mandapassociation.com'
 ];
 
 app.use(cors({
