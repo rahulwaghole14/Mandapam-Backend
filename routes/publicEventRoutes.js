@@ -16,6 +16,26 @@ const {
 
 const router = express.Router();
 
+async function resolveAssociation(associationId) {
+  if (associationId) {
+    const association = await Association.findByPk(associationId);
+    if (!association) {
+      throw new Error('Association not found');
+    }
+    return association;
+  }
+
+  const defaultAssociation = await Association.findOne({
+    where: { name: 'Other Association' }
+  });
+
+  if (!defaultAssociation) {
+    throw new Error('Default association "Other Association" not found. Please create it in the Associations list.');
+  }
+
+  return defaultAssociation;
+}
+
 // Helper function to find or create member
 async function findOrCreateMember(memberData) {
   const { phone, name, email, businessName, businessType, city, associationId, profileImage } = memberData;
@@ -26,19 +46,31 @@ async function findOrCreateMember(memberData) {
   });
   
   if (member) {
+    const updates = {};
     // Member exists - update profile image if provided and not already set
     if (profileImage && !member.profileImage) {
-      await member.update({ profileImage });
+      updates.profileImage = profileImage;
+    }
+
+    const association = await resolveAssociation(associationId || member.associationId);
+
+    if (association?.id) {
+      if (!member.associationId || (associationId && member.associationId !== association.id)) {
+        updates.associationId = association.id;
+      }
+      if (!member.associationName || updates.associationId) {
+        updates.associationName = association.name;
+      }
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await member.update(updates);
     }
     return { member, isNew: false };
   }
   
   // Create new member
-  // Validate association exists
-  const association = await Association.findByPk(associationId);
-  if (!association) {
-    throw new Error('Association not found');
-  }
+  const association = await resolveAssociation(associationId);
   
   // Get association name
   const associationName = association.name;
@@ -50,7 +82,7 @@ async function findOrCreateMember(memberData) {
     businessName,
     businessType,
     city,
-    associationId,
+    associationId: association.id,
     associationName,
     profileImage: profileImage || null,
     isActive: true,
@@ -244,11 +276,9 @@ router.post('/events/:id/register-payment',
   [
     body('name', 'Name is required').notEmpty().trim(),
     body('phone', 'Phone number is required').notEmpty().matches(/^[0-9]{10}$/).withMessage('Phone must be 10 digits'),
-    body('email', 'Email is required').isEmail().normalizeEmail(),
     body('businessName', 'Business name is required').notEmpty().trim(),
     body('businessType', 'Business type is required').isIn(['catering', 'sound', 'mandap', 'madap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
-    body('city', 'City is required').notEmpty().trim(),
-    body('associationId', 'Association ID is required').custom((value) => {
+    body('associationId').optional({ checkFalsy: true }).custom((value) => {
       const num = parseInt(value, 10);
       if (isNaN(num) || num < 1) {
         throw new Error('Association ID must be a valid positive integer');
@@ -297,7 +327,8 @@ router.post('/events/:id/register-payment',
     }
 
     const eventId = parseInt(req.params.id, 10);
-    const { name, phone, email, businessName, businessType, city, associationId } = req.body;
+    const { name, phone, email, businessName, businessType, city } = req.body;
+    const associationId = req.body.associationId || null;
 
     if (isNaN(eventId)) {
       return res.status(400).json({
@@ -353,7 +384,7 @@ router.post('/events/:id/register-payment',
         email,
         businessName,
         businessType,
-        city,
+        city: city || null,
         associationId,
         profileImage: profileImageFilename
       });
@@ -422,7 +453,10 @@ router.post('/events/:id/register-payment',
           name: member.name,
           phone: member.phone,
           isNew,
-          profileImageURL
+          profileImageURL,
+          city: member.city || null,
+          associationId: member.associationId || null,
+          associationName: member.associationName || null
         },
         registration: {
           id: registration.id,
@@ -479,7 +513,10 @@ router.post('/events/:id/register-payment',
         name: member.name,
         phone: member.phone,
         isNew,
-        profileImageURL
+        profileImageURL,
+        city: member.city || null,
+        associationId: member.associationId || null,
+        associationName: member.associationName || null
       },
       order,
       keyId: process.env.RAZORPAY_KEY_ID,
