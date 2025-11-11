@@ -15,8 +15,8 @@ const router = express.Router();
 
 // @desc    Upload profile image
 // @route   POST /api/upload/profile-image
-// @access  Private
-router.post('/profile-image', protect, profileImageUpload.single('image'), handleMulterError, async (req, res) => {
+// @access  Public
+router.post('/profile-image', profileImageUpload.single('image'), handleMulterError, async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({

@@ -1304,11 +1304,12 @@ router.post('/:id/confirm-payment', protect, [
 
     // Determine member ID
     let targetMemberId = memberId;
+    let memberRecord = null;
     
     // If admin is registering someone else, use provided memberId
     if (memberId && req.user.role === 'admin') {
-      const member = await Member.findByPk(memberId);
-      if (!member) {
+      memberRecord = await Member.findByPk(memberId);
+      if (!memberRecord) {
         return res.status(404).json({
           success: false,
           message: 'Member not found'
@@ -1325,18 +1326,29 @@ router.post('/:id/confirm-payment', protect, [
       }
       
       // Find member by phone
-      let member = await Member.findOne({
+      memberRecord = await Member.findOne({
         where: { phone: req.user.phone }
       });
       
-      if (!member) {
+      if (!memberRecord) {
         return res.status(404).json({
           success: false,
           message: 'Member profile not found. Please ensure your phone number matches a member record.'
         });
       }
       
-      targetMemberId = member.id;
+      targetMemberId = memberRecord.id;
+    }
+
+    if (!memberRecord) {
+      memberRecord = await Member.findByPk(targetMemberId);
+    }
+    
+    if (!memberRecord) {
+      return res.status(404).json({
+        success: false,
+        message: 'Member not found'
+      });
     }
 
     const amountPaid = fee;
@@ -1395,9 +1407,16 @@ router.post('/:id/confirm-payment', protect, [
         id: registration.id,
         eventId: registration.eventId,
         memberId: registration.memberId,
+        memberName: memberRecord.name,
         status: registration.status,
         paymentStatus: registration.paymentStatus,
         amountPaid: registration.amountPaid
+      },
+      member: {
+        id: memberRecord.id,
+        name: memberRecord.name,
+        phone: memberRecord.phone,
+        email: memberRecord.email || null
       }
     });
   } catch (error) {

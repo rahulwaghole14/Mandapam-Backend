@@ -244,12 +244,24 @@ router.get('/events/:id/check-registration', [
         id: registration.id,
         eventId: registration.eventId,
         memberId: registration.memberId,
+        memberName: member.name,
         status: registration.status,
         paymentStatus: registration.paymentStatus,
         amountPaid: registration.amountPaid,
         registeredAt: registration.registeredAt,
         attendedAt: registration.attendedAt,
         qrDataURL
+      },
+      member: {
+        id: member.id,
+        name: member.name,
+        phone: member.phone,
+        email: member.email || null,
+        businessName: member.businessName || null,
+        associationId: member.associationId || null,
+        associationName: member.associationName || null,
+        profileImage: member.profileImage || null,
+        city: member.city || null
       },
       event: registration.event ? {
         id: registration.event.id,
