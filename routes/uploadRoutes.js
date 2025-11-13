@@ -27,7 +27,7 @@ router.post('/profile-image', profileImageUpload.single('image'), handleMulterEr
 
     // Get the base URL for the file
     const baseUrl = req.protocol + '://' + req.get('host');
-    const fileUrl = getFileUrl(req.file.filename, baseUrl);
+    const fileUrl = getFileUrl(req.file.filename, baseUrl, 'profile-images');
 
     // Return the file information for storage in database
     res.status(200).json({
@@ -39,7 +39,7 @@ router.post('/profile-image', profileImageUpload.single('image'), handleMulterEr
         size: req.file.size,
         mimetype: req.file.mimetype,
         url: fileUrl,
-        localUrl: `/uploads/${req.file.filename}`
+        localUrl: `/uploads/profile-images/${req.file.filename}`
       }
     });
 

@@ -46,8 +46,46 @@ const { errorHandler } = require('./middleware/errorMiddleware');
 
 const app = express();
 
-// Security middleware
-app.use(helmet());
+const cspImgSrc = [
+  "'self'",
+  'data:',
+  'blob:',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:3001',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'https://mandap-web-frontend.onrender.com',
+  'https://mandap-web-frontend-new.onrender.com',
+  'https://mandap-ui-all-modals-web.vercel.app',
+  'https://mandap-ui-all-modals-web.netlify.app',
+  'https://mandap-ui-all-modals-web.onrender.com',
+  'https://mandapassociation.com',
+  'https://www.mandapassociation.com',
+  'https://res.cloudinary.com'
+];
+
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        baseUri: ["'self'"],
+        fontSrc: ["'self'", 'https:', 'data:'],
+        formAction: ["'self'"],
+        frameAncestors: ["'self'"],
+        imgSrc: cspImgSrc,
+        objectSrc: ["'none'"],
+        scriptSrc: ["'self'"],
+        scriptSrcAttr: ["'none'"],
+        styleSrc: ["'self'", 'https:', "'unsafe-inline'"],
+        upgradeInsecureRequests: []
+      }
+    }
+  })
+);
 
 // CORS configuration
 const allowedOrigins = [

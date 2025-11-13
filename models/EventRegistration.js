@@ -1,5 +1,8 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/database');
+const Member = require('./Member');
+const { deleteImage, isCloudinaryUrl } = require('../services/cloudinaryService');
+const { deleteFile } = require('../config/multerConfig');
 
 const EventRegistration = sequelize.define('EventRegistration', {
   id: {
@@ -91,3 +94,94 @@ const EventRegistration = sequelize.define('EventRegistration', {
 });
 
 module.exports = EventRegistration;
+
+async function cleanupMemberMedia(memberId, options = {}) {
+  if (!memberId) return;
+
+  const transaction = options.transaction;
+
+  try {
+    const remainingCount = await EventRegistration.count({
+      where: { memberId },
+      transaction
+    });
+
+    if (remainingCount > 0) {
+      return;
+    }
+
+    const member = await Member.findByPk(memberId, { transaction });
+    if (!member || !member.profileImage) {
+      return;
+    }
+
+    const profileImage = member.profileImage;
+    let removed = false;
+
+    if (isCloudinaryUrl(profileImage)) {
+      const result = await deleteImage(profileImage);
+      removed = result.deleted || result.reason === 'not-found';
+      if (!removed && result.reason === 'cloudinary-not-configured') {
+        console.warn(
+          'Cloudinary delete skipped - credentials missing. Profile image not removed automatically.'
+        );
+      }
+    } else {
+      try {
+        await deleteFile(profileImage);
+        removed = true;
+      } catch (error) {
+        console.error('Failed to delete local profile image:', error.message);
+      }
+    }
+
+    if (removed) {
+      await member.update(
+        { profileImage: null },
+        { transaction }
+      );
+    }
+  } catch (error) {
+    console.error('EventRegistration cleanup error:', error);
+  }
+}
+
+EventRegistration.addHook('afterDestroy', async (registration, options) => {
+  if (registration?.memberId) {
+    await cleanupMemberMedia(registration.memberId, options || {});
+  }
+});
+
+EventRegistration.addHook('beforeBulkDestroy', async (options) => {
+  if (!options || options.individualHooks || !options.where) {
+    return;
+  }
+
+  const registrations = await EventRegistration.findAll({
+    where: options.where,
+    attributes: ['memberId']
+  });
+
+  options._targetMemberIds = [
+    ...new Set(
+      registrations
+        .map((registration) => registration.memberId)
+        .filter((memberId) => memberId != null)
+    )
+  ];
+});
+
+EventRegistration.addHook('afterBulkDestroy', async (options) => {
+  if (!options || options.individualHooks) {
+    return;
+  }
+
+  const memberIds = options._targetMemberIds;
+  if (!memberIds || memberIds.length === 0) {
+    return;
+  }
+
+  await Promise.all(
+    memberIds.map((memberId) => cleanupMemberMedia(memberId, options || {}))
+  );
+});

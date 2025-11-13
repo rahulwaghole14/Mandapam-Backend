@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult, query } = require('express-validator');
 const { Op } = require('sequelize');
+const path = require('path');
 const Event = require('../models/Event');
 const Member = require('../models/Member');
 const EventRegistration = require('../models/EventRegistration');
@@ -19,6 +20,45 @@ const {
 } = require('../config/multerConfig');
 
 const router = express.Router();
+
+const ensureProfileImageUrl = (value, baseUrl) => {
+  if (!value) {
+    return { url: null, stored: null };
+  }
+
+  const stringValue = typeof value === 'string' ? value.trim() : '';
+  if (!stringValue) {
+    return { url: null, stored: null };
+  }
+
+  const httpPattern = /^https?:\/\//i;
+  if (httpPattern.test(stringValue)) {
+    if (stringValue.includes('/uploads/event-images/')) {
+      const filename = stringValue.substring(stringValue.lastIndexOf('/') + 1);
+      if (!filename) {
+        return { url: stringValue, stored: stringValue };
+      }
+      const normalizedUrl = `${baseUrl}/uploads/profile-images/${encodeURIComponent(filename)}`;
+      return { url: normalizedUrl, stored: `profile-images/${filename}` };
+    }
+    return { url: stringValue, stored: stringValue };
+  }
+
+  const normalizedPath = stringValue.replace(/^\/+/, '').replace(/\\/g, '/');
+  let relativePath = normalizedPath;
+
+  if (relativePath.startsWith('uploads/')) {
+    relativePath = relativePath.slice('uploads/'.length);
+  }
+
+  if (!relativePath.startsWith('profile-images/')) {
+    const filename = relativePath.substring(relativePath.lastIndexOf('/') + 1);
+    relativePath = `profile-images/${filename}`;
+  }
+
+  const resolvedUrl = getFileUrl(relativePath, baseUrl, 'profile-images');
+  return { url: resolvedUrl, stored: relativePath };
+};
 
 // Note: Public routes don't need authentication
 // Authentication is applied individually to protected routes
@@ -1061,20 +1101,81 @@ router.get('/:id/registrations', protect, async (req, res) => {
 
     const regs = await EventRegistration.findAll({
       where: { eventId },
-      include: [{ model: Member, as: 'member', attributes: ['id', 'name', 'phone'] }],
+      include: [
+        {
+          model: Member,
+          as: 'member',
+          attributes: [
+            'id',
+            'name',
+            'phone',
+            'email',
+            'businessName',
+            'businessType',
+            'city',
+            'associationName',
+            'profileImage'
+          ]
+        }
+      ],
       order: [['registeredAt', 'DESC']]
     });
 
-    const list = regs.map(r => ({
-      memberId: r.memberId,
-      name: r.member?.name,
-      phone: r.member?.phone,
-      amountPaid: r.amountPaid,
-      paymentStatus: r.paymentStatus,
-      status: r.status,
-      registeredAt: r.registeredAt,
-      attendedAt: r.attendedAt
-    }));
+    const baseUrl = req.protocol + '://' + req.get('host');
+
+    const list = regs.map((registration) => {
+      const memberInstance = registration.member;
+      const memberData = memberInstance
+        ? memberInstance.toJSON
+          ? memberInstance.toJSON()
+          : { ...memberInstance }
+        : null;
+
+      const baseProfileSource =
+        memberData?.profileImageURL ||
+        memberData?.profileImage ||
+        registration.profileImageURL ||
+        registration.profileImage ||
+        null;
+
+      const profileMeta = ensureProfileImageUrl(baseProfileSource, baseUrl);
+      const normalizedProfileUrl = profileMeta.url;
+
+      const fullMember = memberData
+        ? {
+            ...memberData,
+            profileImage: profileMeta.stored || memberData.profileImage || memberData.profileImageURL || null,
+            profileImageURL: normalizedProfileUrl || memberData.profileImageURL || memberData.profileImage || null
+          }
+        : null;
+
+      const effectiveProfileUrl =
+        normalizedProfileUrl ||
+        fullMember?.profileImageURL ||
+        fullMember?.profileImage ||
+        null;
+
+      return {
+        registrationId: registration.id,
+        eventId: registration.eventId,
+        memberId: registration.memberId,
+        name: fullMember?.name || memberInstance?.name || null,
+        phone: fullMember?.phone || memberInstance?.phone || null,
+        email: fullMember?.email || null,
+        businessName: fullMember?.businessName || null,
+        businessType: fullMember?.businessType || null,
+        city: fullMember?.city || null,
+        amountPaid: registration.amountPaid,
+        paymentStatus: registration.paymentStatus,
+        status: registration.status,
+        registeredAt: registration.registeredAt,
+        attendedAt: registration.attendedAt,
+        profileImage: effectiveProfileUrl,
+        profileImageURL: effectiveProfileUrl,
+        photo: effectiveProfileUrl,
+        member: fullMember
+      };
+    });
 
     res.json({ success: true, registrations: list });
   } catch (error) {

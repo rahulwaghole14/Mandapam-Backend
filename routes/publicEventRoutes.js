@@ -16,6 +16,45 @@ const {
 
 const router = express.Router();
 
+const ensureProfileImageUrl = (value, baseUrl) => {
+  if (!value) {
+    return { url: null, stored: null };
+  }
+
+  const stringValue = typeof value === 'string' ? value.trim() : '';
+  if (!stringValue) {
+    return { url: null, stored: null };
+  }
+
+  const httpPattern = /^https?:\/\//i;
+  if (httpPattern.test(stringValue)) {
+    if (stringValue.includes('/uploads/event-images/')) {
+      const filename = stringValue.substring(stringValue.lastIndexOf('/') + 1);
+      if (!filename) {
+        return { url: stringValue, stored: stringValue };
+      }
+      const normalizedUrl = `${baseUrl}/uploads/profile-images/${encodeURIComponent(filename)}`;
+      return { url: normalizedUrl, stored: `profile-images/${filename}` };
+    }
+    return { url: stringValue, stored: stringValue };
+  }
+
+  const normalizedPath = stringValue.replace(/^\/+/, '').replace(/\\/g, '/');
+  let relativePath = normalizedPath;
+
+  if (relativePath.startsWith('uploads/')) {
+    relativePath = relativePath.slice('uploads/'.length);
+  }
+
+  if (!relativePath.startsWith('profile-images/')) {
+    const filename = relativePath.substring(relativePath.lastIndexOf('/') + 1);
+    relativePath = `profile-images/${filename}`;
+  }
+
+  const resolvedUrl = getFileUrl(relativePath, baseUrl, 'profile-images');
+  return { url: resolvedUrl, stored: relativePath };
+};
+
 async function resolveAssociation(associationId) {
   if (associationId) {
     const association = await Association.findByPk(associationId);
@@ -208,7 +247,7 @@ router.get('/events/:id/check-registration', [
     }
 
     // Find member by phone
-    const member = await Member.findOne({
+  const member = await Member.findOne({
       where: { phone }
     });
 
@@ -237,6 +276,13 @@ router.get('/events/:id/check-registration', [
     // Generate QR code if registered
     const qrDataURL = await qrService.generateQrDataURL(registration);
 
+    const baseUrl = req.protocol + '://' + req.get('host');
+    const profileMeta = ensureProfileImageUrl(
+      member.profileImageURL || member.profileImage || null,
+      baseUrl
+    );
+    const profileImageURL = profileMeta.url;
+
     res.status(200).json({
       success: true,
       isRegistered: true,
@@ -260,7 +306,8 @@ router.get('/events/:id/check-registration', [
         businessName: member.businessName || null,
         associationId: member.associationId || null,
         associationName: member.associationName || null,
-        profileImage: member.profileImage || null,
+        profileImage: profileMeta.stored || member.profileImage || null,
+        profileImageURL,
         city: member.city || null
       },
       event: registration.event ? {
@@ -410,13 +457,14 @@ router.post('/events/:id/register-payment',
     const { member, isNew } = memberResult;
     
     // Get profile image URL if available (use existing if member already had one)
-    if (!profileImageURL && member.profileImage) {
-      // Check if it's already a Cloudinary URL
-      if (member.profileImage.startsWith('http://') || member.profileImage.startsWith('https://')) {
-        profileImageURL = member.profileImage;
-      } else {
-        // Legacy local file - generate URL
-        profileImageURL = getFileUrl(member.profileImage, baseUrl, 'profile-images');
+    if (!profileImageURL) {
+      const fallbackMeta = ensureProfileImageUrl(
+        member.profileImageURL || member.profileImage || null,
+        baseUrl
+      );
+      profileImageURL = fallbackMeta.url;
+      if (!profileImageFilename && fallbackMeta.stored) {
+        profileImageFilename = fallbackMeta.stored;
       }
     }
 
@@ -465,6 +513,7 @@ router.post('/events/:id/register-payment',
           name: member.name,
           phone: member.phone,
           isNew,
+          profileImage: profileImageFilename || member.profileImage || null,
           profileImageURL,
           city: member.city || null,
           associationId: member.associationId || null,
@@ -525,6 +574,7 @@ router.post('/events/:id/register-payment',
         name: member.name,
         phone: member.phone,
         isNew,
+        profileImage: profileImageFilename || member.profileImage || null,
         profileImageURL,
         city: member.city || null,
         associationId: member.associationId || null,
@@ -678,6 +728,13 @@ router.post('/events/:id/confirm-payment', [
     // Generate QR code
     const qrDataURL = await qrService.generateQrDataURL(registration);
 
+    const baseUrl = req.protocol + '://' + req.get('host');
+    const profileMeta = ensureProfileImageUrl(
+      member.profileImageURL || member.profileImage || null,
+      baseUrl
+    );
+    const profileImageURL = profileMeta.url;
+
     res.status(201).json({
       success: true,
       message: 'Registration confirmed',
@@ -695,7 +752,9 @@ router.post('/events/:id/confirm-payment', [
       member: {
         id: member.id,
         name: member.name,
-        phone: member.phone
+        phone: member.phone,
+        profileImage: profileMeta.stored || member.profileImage || null,
+        profileImageURL
       }
     });
 
