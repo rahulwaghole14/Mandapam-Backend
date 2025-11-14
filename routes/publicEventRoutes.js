@@ -7,7 +7,10 @@ const EventRegistration = require('../models/EventRegistration');
 const EventExhibitor = require('../models/EventExhibitor');
 const qrService = require('../services/qrService');
 const paymentService = require('../services/paymentService');
+const whatsappService = require('../services/whatsappService');
 const { Op } = require('sequelize');
+const fs = require('fs');
+const path = require('path');
 const { 
   profileImageUpload, 
   handleMulterError, 
@@ -765,6 +768,354 @@ router.post('/events/:id/confirm-payment', [
       success: false,
       message: errorMessage,
       error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// @desc    Save PDF to database
+// @route   POST /api/public/events/:id/registrations/:registrationId/save-pdf
+// @access  Public
+router.post('/events/:id/registrations/:registrationId/save-pdf', [
+  body('pdfBase64', 'PDF base64 data is required').notEmpty(),
+  body('fileName', 'File name is required').notEmpty()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        errors: errors.array()
+      });
+    }
+
+    const eventId = parseInt(req.params.id, 10);
+    const registrationId = parseInt(req.params.registrationId, 10);
+    const { pdfBase64, fileName } = req.body;
+
+    if (isNaN(eventId) || isNaN(registrationId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid event ID or registration ID'
+      });
+    }
+
+    // Verify registration exists and belongs to event
+    const registration = await EventRegistration.findOne({
+      where: {
+        id: registrationId,
+        eventId: eventId
+      },
+      include: [
+        {
+          model: Member,
+          as: 'member',
+          required: true
+        },
+        {
+          model: Event,
+          as: 'event'
+        }
+      ]
+    });
+
+    if (!registration) {
+      return res.status(404).json({
+        success: false,
+        message: 'Registration not found'
+      });
+    }
+
+    // Get member for WhatsApp sending
+    const member = registration.member;
+
+    // Validate PDF base64
+    if (!pdfBase64 || pdfBase64.length < 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or incomplete PDF data'
+      });
+    }
+
+    // Create PDFs directory if it doesn't exist
+    const pdfsDir = path.join(process.cwd(), 'uploads', 'pdfs');
+    if (!fs.existsSync(pdfsDir)) {
+      fs.mkdirSync(pdfsDir, { recursive: true });
+    }
+
+    // Generate unique filename
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const pdfFileName = `${path.basename(sanitizedFileName, path.extname(sanitizedFileName))}-${uniqueSuffix}.pdf`;
+    const pdfFilePath = path.join(pdfsDir, pdfFileName);
+    const pdfRelativePath = `pdfs/${pdfFileName}`;
+
+    // Convert base64 to buffer and save to file
+    try {
+      const pdfBuffer = Buffer.from(pdfBase64, 'base64');
+      fs.writeFileSync(pdfFilePath, pdfBuffer);
+    } catch (writeError) {
+      console.error('Error writing PDF file:', writeError);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to save PDF file'
+      });
+    }
+
+    // Save PDF path to database
+    await registration.update({
+      pdfPath: pdfRelativePath
+    });
+
+    // Automatically send WhatsApp after PDF is saved (even if user closes page)
+    // This ensures WhatsApp is sent even if frontend is closed
+    if (member && member.phone) {
+      console.log(`[WhatsApp Auto-Send] Starting auto-send for registration ${registrationId}`);
+      console.log(`[WhatsApp Auto-Send] Member: ${member.name || 'N/A'}, Phone: ${member.phone}`);
+      console.log(`[WhatsApp Auto-Send] PDF Path: ${pdfFilePath}`);
+      console.log(`[WhatsApp Auto-Send] PDF Exists: ${fs.existsSync(pdfFilePath)}`);
+      
+      whatsappService.sendPdfViaWhatsApp(
+        member.phone,
+        pdfFilePath,
+        member.name || ''
+      ).then((result) => {
+        console.log(`[WhatsApp Auto-Send] Result for registration ${registrationId}:`, result);
+        if (result.success) {
+          console.log(`[WhatsApp Auto-Send] ✅ Successfully sent to ${member.phone}`);
+          // Update registration to mark PDF as sent
+          registration.update({
+            pdfSentAt: new Date()
+          }).then(() => {
+            console.log(`[WhatsApp Auto-Send] ✅ Updated pdfSentAt for registration ${registrationId}`);
+          }).catch((updateError) => {
+            console.error(`[WhatsApp Auto-Send] ❌ Failed to update pdfSentAt for registration ${registrationId}:`, updateError);
+          });
+        } else {
+          console.error(`[WhatsApp Auto-Send] ❌ Failed for registration ${registrationId}:`, result.error);
+        }
+      }).catch((whatsappError) => {
+        // Log error but don't fail the save PDF request
+        // WhatsApp sending can be retried later via send-whatsapp endpoint
+        console.error(`[WhatsApp Auto-Send] ❌ Exception for registration ${registrationId}:`, whatsappError);
+        if (whatsappError.response) {
+          console.error(`[WhatsApp Auto-Send] Response status: ${whatsappError.response.status}`);
+          console.error(`[WhatsApp Auto-Send] Response data:`, whatsappError.response.data);
+        }
+        if (whatsappError.message) {
+          console.error(`[WhatsApp Auto-Send] Error message: ${whatsappError.message}`);
+        }
+      });
+    } else {
+      console.warn(`[WhatsApp Auto-Send] ⚠️ Skipping auto-send for registration ${registrationId}: member or phone missing`);
+      console.warn(`[WhatsApp Auto-Send] Member exists: ${!!member}, Phone: ${member?.phone || 'N/A'}`);
+    }
+
+    const baseUrl = req.protocol + '://' + req.get('host');
+    const pdfUrl = `${baseUrl}/uploads/${pdfRelativePath}`;
+
+    res.status(200).json({
+      success: true,
+      message: 'PDF saved successfully. WhatsApp message will be sent automatically.',
+      pdfPath: pdfRelativePath,
+      pdfUrl: pdfUrl
+    });
+
+  } catch (error) {
+    console.error('Save PDF error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Server error while saving PDF'
+    });
+  }
+});
+
+// @desc    Download/Fetch PDF from database
+// @route   GET /api/public/events/:id/registrations/:registrationId/download-pdf
+// @access  Public
+router.get('/events/:id/registrations/:registrationId/download-pdf', async (req, res) => {
+  try {
+    const eventId = parseInt(req.params.id, 10);
+    const registrationId = parseInt(req.params.registrationId, 10);
+
+    if (isNaN(eventId) || isNaN(registrationId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid event ID or registration ID'
+      });
+    }
+
+    // Get registration with PDF path
+    const registration = await EventRegistration.findOne({
+      where: {
+        id: registrationId,
+        eventId: eventId
+      }
+    });
+
+    if (!registration) {
+      return res.status(404).json({
+        success: false,
+        message: 'Registration not found'
+      });
+    }
+
+    if (!registration.pdfPath) {
+      return res.status(404).json({
+        success: false,
+        message: 'PDF not found for this registration. Please generate and save PDF first.'
+      });
+    }
+
+    // Construct full PDF file path
+    const pdfFilePath = path.join(process.cwd(), 'uploads', registration.pdfPath);
+
+    // Check if PDF file exists
+    if (!fs.existsSync(pdfFilePath)) {
+      return res.status(404).json({
+        success: false,
+        message: 'PDF file not found on server'
+      });
+    }
+
+    // Generate filename from registration ID
+    const fileName = `mandapam-visitor-pass-${registrationId}.pdf`;
+
+    // Set headers for PDF download
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+    // Send PDF file
+    res.sendFile(pdfFilePath, (err) => {
+      if (err) {
+        console.error('Error sending PDF file:', err);
+        if (!res.headersSent) {
+          res.status(500).json({
+            success: false,
+            message: 'Failed to send PDF file'
+          });
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Download PDF error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Server error while downloading PDF'
+    });
+  }
+});
+
+// @desc    Send WhatsApp message with PDF
+// @route   POST /api/public/events/:id/registrations/:registrationId/send-whatsapp
+// @access  Public
+router.post('/events/:id/registrations/:registrationId/send-whatsapp', async (req, res) => {
+  try {
+    const eventId = parseInt(req.params.id, 10);
+    const registrationId = parseInt(req.params.registrationId, 10);
+
+    if (isNaN(eventId) || isNaN(registrationId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid event ID or registration ID'
+      });
+    }
+
+    // Get registration with member and event details
+    const registration = await EventRegistration.findOne({
+      where: {
+        id: registrationId,
+        eventId: eventId
+      },
+      include: [
+        {
+          model: Member,
+          as: 'member',
+          required: true
+        },
+        {
+          model: Event,
+          as: 'event'
+        }
+      ]
+    });
+
+    if (!registration) {
+      return res.status(404).json({
+        success: false,
+        message: 'Registration not found'
+      });
+    }
+
+    if (!registration.pdfPath) {
+      return res.status(400).json({
+        success: false,
+        message: 'PDF not found for this registration. Please save PDF first.'
+      });
+    }
+
+    // Get member phone number
+    const memberPhone = registration.member?.phone;
+    if (!memberPhone) {
+      return res.status(400).json({
+        success: false,
+        message: 'Member phone number not found'
+      });
+    }
+
+    // Get member name for personalized message
+    const memberName = registration.member?.name || '';
+
+    // Construct full PDF file path
+    const pdfFilePath = path.join(process.cwd(), 'uploads', registration.pdfPath);
+
+    // Check if PDF file exists
+    if (!fs.existsSync(pdfFilePath)) {
+      return res.status(404).json({
+        success: false,
+        message: 'PDF file not found on server'
+      });
+    }
+
+    // Send PDF via WhatsApp
+    console.log(`[WhatsApp Manual-Send] Starting manual send for registration ${registrationId}`);
+    console.log(`[WhatsApp Manual-Send] Member: ${memberName || 'N/A'}, Phone: ${memberPhone}`);
+    console.log(`[WhatsApp Manual-Send] PDF Path: ${pdfFilePath}`);
+    console.log(`[WhatsApp Manual-Send] PDF Exists: ${fs.existsSync(pdfFilePath)}`);
+    
+    const result = await whatsappService.sendPdfViaWhatsApp(
+      memberPhone,
+      pdfFilePath,
+      memberName
+    );
+
+    console.log(`[WhatsApp Manual-Send] Result for registration ${registrationId}:`, result);
+
+    if (result.success) {
+      console.log(`[WhatsApp Manual-Send] ✅ Successfully sent to ${memberPhone}`);
+      // Update registration to mark PDF as sent
+      await registration.update({
+        pdfSentAt: new Date()
+      });
+      console.log(`[WhatsApp Manual-Send] ✅ Updated pdfSentAt for registration ${registrationId}`);
+
+      return res.status(200).json({
+        success: true,
+        message: result.message || 'PDF sent via WhatsApp successfully'
+      });
+    } else {
+      console.error(`[WhatsApp Manual-Send] ❌ Failed for registration ${registrationId}:`, result.error);
+      return res.status(500).json({
+        success: false,
+        message: result.error || 'Failed to send PDF via WhatsApp'
+      });
+    }
+
+  } catch (error) {
+    console.error('Send WhatsApp error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Server error while sending WhatsApp message'
     });
   }
 });

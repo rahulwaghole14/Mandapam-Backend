@@ -558,7 +558,7 @@ const PORT = process.env.PORT || 5000;
 const startServer = async () => {
   try {
     await connectDB();
-    app.listen(PORT, () => {
+    app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📊 Environment: ${process.env.NODE_ENV}`);
       console.log(`🔗 Health check: http://localhost:${PORT}/health`);
@@ -567,9 +567,7 @@ const startServer = async () => {
       // Start scheduler service
       schedulerService.start();
       
-      // Initialize WhatsApp service
-      const whatsappService = require('./services/whatsappService');
-      whatsappService.initialize();
+      // WhatsApp service is ready (no initialization needed)
     });
   } catch (error) {
     console.error('Failed to start server:', error);

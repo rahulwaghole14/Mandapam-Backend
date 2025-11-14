@@ -1,214 +1,224 @@
 const axios = require('axios');
-const { WhatsAppConfig } = require('../models');
+const FormData = require('form-data');
+const fs = require('fs');
+const path = require('path');
 
-class WhatsAppService {
-  constructor() {
-    this.baseUrl = 'https://alldigimkt.org/api/send';
-    this.isEnabled = false;
-    this.currentConfig = null;
-  }
+const DEVICE_UID = process.env.WHATSAPP_DEVICE_UID || 'a8bec8c820614d8ba084a55429716a78';
+const DEVICE_NAME = process.env.WHATSAPP_DEVICE_NAME || 'Mandapam';
+const COUNTRY_CODE = '91';
 
-  /**
-   * Initialize the service with active configuration
-   */
-  async initialize() {
-    try {
-      this.currentConfig = await WhatsAppConfig.getActiveConfig();
-      this.isEnabled = this.currentConfig && this.currentConfig.isActive;
-      
-      if (this.isEnabled) {
-        console.log('✅ WhatsApp service initialized with active configuration');
-      } else {
-        console.log('⚠️ WhatsApp service initialized but no active configuration found');
-      }
-    } catch (error) {
-      console.error('❌ Error initializing WhatsApp service:', error);
-      this.isEnabled = false;
-    }
-  }
+const WHATSAPP_MESSAGE_TEMPLATE = `
+🙏 MANDAPAM 2026 – कोल्हापूर मध्ये आपले हार्दिक स्वागत! 🎉
 
-  /**
-   * Format phone number to 91{10-digit} format
-   * @param {string} phoneNumber - 10-digit phone number
-   * @returns {string} - Formatted phone number
-   */
-  formatPhoneNumber(phoneNumber) {
-    // Remove any non-digit characters
-    const cleaned = phoneNumber.replace(/\D/g, '');
+आपण आता MANDAPAM Association चे अधिकृत सदस्य झाला आहात. 🎊
+
+आपला Visitor Pass खाली जोडलेला आहे. 🎫
+
+📞 कार्यक्रमाची सविस्तर माहिती, एक्झिबिटर्स माहिती, वेळापत्रक आणि खास ऑफर्स पाहण्यासाठी
+MANDAPAM App डाउनलोड करा 👇
+
+📱 Android वापरकर्त्यांसाठी:
+👉 https://play.google.com/store/apps/details?id=com.mandapam.expo
+
+🍎 iOS वापरकर्त्यांसाठी:
+👉 लवकरच येत आहे
+
+🔑 आपल्या मोबाईल क्रमांकाने लॉगिन करून अँपमध्ये प्रवेश करा.
+
+आपल्या सहभागाबद्दल मनःपूर्वक धन्यवाद!
+
+— MANDAPAM टीम
+`.trim();
+
+/**
+ * Format phone number to 91XXXXXXXXXX
+ */
+function formatPhoneNumber(value) {
+  const digits = (value || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.length === 10) return `${COUNTRY_CODE}${digits}`;
+  if (digits.length === 12 && digits.startsWith(COUNTRY_CODE)) return digits;
+  if (digits.length > 10) return `${COUNTRY_CODE}${digits.slice(-10)}`;
+  return '';
+}
+
+/**
+ * Build WhatsApp message with member name
+ */
+function buildMessage(memberName) {
+  const greetingName = memberName ? `प्रिय ${memberName},\n\n` : '';
+  return `${greetingName}${WHATSAPP_MESSAGE_TEMPLATE}`;
+}
+
+/**
+ * Send PDF file via WhatsApp
+ * @param {string} phoneNumber - Phone number (will be formatted to 91XXXXXXXXXX)
+ * @param {string} pdfFilePath - Path to PDF file
+ * @param {string} memberName - Member name for personalized message
+ * @returns {Promise<{success: boolean, message?: string, error?: string}>}
+ */
+async function sendPdfViaWhatsApp(phoneNumber, pdfFilePath, memberName = '') {
+  try {
+    console.log(`[WhatsApp Service] sendPdfViaWhatsApp called`);
+    console.log(`[WhatsApp Service] Phone: ${phoneNumber}, File: ${pdfFilePath}, Name: ${memberName}`);
+    console.log(`[WhatsApp Service] DEVICE_UID: ${DEVICE_UID}, DEVICE_NAME: ${DEVICE_NAME}`);
     
-    // If it's already 12 digits (91 + 10 digits), return as is
-    if (cleaned.length === 12 && cleaned.startsWith('91')) {
-      return cleaned;
-    }
+    const formattedPhone = formatPhoneNumber(phoneNumber);
+    console.log(`[WhatsApp Service] Formatted phone: ${formattedPhone}`);
     
-    // If it's 10 digits, add 91 prefix
-    if (cleaned.length === 10) {
-      return `91${cleaned}`;
-    }
-    
-    // If it's 11 digits and starts with 0, remove 0 and add 91
-    if (cleaned.length === 11 && cleaned.startsWith('0')) {
-      return `91${cleaned.substring(1)}`;
-    }
-    
-    throw new Error(`Invalid phone number format: ${phoneNumber}`);
-  }
-
-  /**
-   * Generate OTP message template
-   * @param {string} otp - 6-digit OTP
-   * @returns {string} - Formatted message
-   */
-  generateOTPMessage(otp) {
-    return `🔐 Your Mandapam Association OTP is: ${otp}\n\nThis OTP is valid for 10 minutes. Do not share it with anyone.\n\nThank you for using Mandapam Association services!`;
-  }
-
-  /**
-   * Send OTP via WhatsApp
-   * @param {string} phoneNumber - 10-digit phone number
-   * @param {string} otp - 6-digit OTP
-   * @returns {Promise<Object>} - API response
-   */
-  async sendOTP(phoneNumber, otp) {
-    if (!this.isEnabled || !this.currentConfig) {
-      throw new Error('WhatsApp service is not configured or enabled');
-    }
-
-    try {
-      const formattedNumber = this.formatPhoneNumber(phoneNumber);
-      const message = this.generateOTPMessage(otp);
-      
-      console.log(`📱 Sending WhatsApp OTP to ${formattedNumber}`);
-      
-      const response = await this.sendMessage(formattedNumber, message);
-      
-      console.log(`✅ WhatsApp OTP sent successfully to ${formattedNumber}`);
-      return response;
-      
-    } catch (error) {
-      console.error(`❌ Error sending WhatsApp OTP to ${phoneNumber}:`, error.message);
-      throw error;
-    }
-  }
-
-  /**
-   * Send generic message via WhatsApp
-   * @param {string} phoneNumber - Formatted phone number (91XXXXXXXXXX)
-   * @param {string} message - Message to send
-   * @returns {Promise<Object>} - API response
-   */
-  async sendMessage(phoneNumber, message) {
-    if (!this.isEnabled || !this.currentConfig) {
-      throw new Error('WhatsApp service is not configured or enabled');
-    }
-
-    try {
-      const params = {
-        number: phoneNumber,
-        type: 'text',
-        message: message,
-        instance_id: this.currentConfig.instanceId,
-        access_token: this.currentConfig.accessToken
-      };
-
-      console.log(`📤 Sending WhatsApp message to ${phoneNumber}`);
-      console.log(`📝 Message: ${message.substring(0, 50)}...`);
-
-      const response = await axios.get(this.baseUrl, { params });
-      
-      console.log(`✅ WhatsApp message sent successfully to ${phoneNumber}`);
-      return {
-        success: true,
-        data: response.data,
-        phoneNumber: phoneNumber,
-        messageLength: message.length
-      };
-      
-    } catch (error) {
-      console.error(`❌ Error sending WhatsApp message to ${phoneNumber}:`, error.message);
-      
-      if (error.response) {
-        console.error('Response status:', error.response.status);
-        console.error('Response data:', error.response.data);
-      }
-      
-      throw new Error(`WhatsApp API error: ${error.message}`);
-    }
-  }
-
-  /**
-   * Test WhatsApp configuration
-   * @param {string} testPhoneNumber - Test phone number
-   * @returns {Promise<Object>} - Test result
-   */
-  async testConfiguration(testPhoneNumber = '919876543210') {
-    try {
-      const testMessage = '🧪 This is a test message from Mandapam Association WhatsApp service. If you receive this, the configuration is working correctly!';
-      
-      const result = await this.sendMessage(testPhoneNumber, testMessage);
-      
-      return {
-        success: true,
-        message: 'WhatsApp configuration test successful',
-        testPhoneNumber: testPhoneNumber,
-        result: result
-      };
-      
-    } catch (error) {
+    if (!formattedPhone) {
+      console.error(`[WhatsApp Service] ❌ Invalid phone number format: ${phoneNumber}`);
       return {
         success: false,
-        message: 'WhatsApp configuration test failed',
-        error: error.message,
-        testPhoneNumber: testPhoneNumber
+        error: 'Invalid phone number format'
       };
     }
-  }
 
-  /**
-   * Update configuration and reinitialize
-   * @param {Object} config - New configuration
-   */
-  async updateConfiguration(config) {
-    try {
-      // Deactivate all existing configurations
-      await WhatsAppConfig.deactivateAll();
-      
-      // Create new active configuration
-      const newConfig = await WhatsAppConfig.create({
-        instanceId: config.instanceId,
-        accessToken: config.accessToken,
-        isActive: true,
-        createdBy: config.createdBy
-      });
-      
-      // Reinitialize service
-      await this.initialize();
-      
-      console.log('✅ WhatsApp configuration updated successfully');
-      return newConfig;
-      
-    } catch (error) {
-      console.error('❌ Error updating WhatsApp configuration:', error);
-      throw error;
+    if (!pdfFilePath || !fs.existsSync(pdfFilePath)) {
+      console.error(`[WhatsApp Service] ❌ PDF file not found: ${pdfFilePath}`);
+      console.error(`[WhatsApp Service] File exists check: ${fs.existsSync(pdfFilePath)}`);
+      return {
+        success: false,
+        error: 'PDF file not found'
+      };
     }
-  }
 
-  /**
-   * Get current configuration status
-   * @returns {Object} - Configuration status
-   */
-  getStatus() {
+    const fileStats = fs.statSync(pdfFilePath);
+    console.log(`[WhatsApp Service] PDF file size: ${fileStats.size} bytes (${(fileStats.size / 1024 / 1024).toFixed(2)} MB)`);
+
+    const message = buildMessage(memberName);
+    console.log(`[WhatsApp Service] Message length: ${message.length} characters`);
+
+    // Create FormData for file upload
+    const formData = new FormData();
+    formData.append('file', fs.createReadStream(pdfFilePath));
+    formData.append('phone', formattedPhone);
+    formData.append('message', message);
+
+    const apiUrl = `https://messagesapi.co.in/chat/sendMessageFile/${DEVICE_UID}/${encodeURIComponent(DEVICE_NAME)}`;
+    console.log(`[WhatsApp Service] Sending to API: ${apiUrl}`);
+
+    // Send via WhatsApp API
+    const response = await axios.post(
+      apiUrl,
+      formData,
+      {
+        headers: {
+          ...formData.getHeaders()
+        },
+        timeout: 30000 // 30 seconds timeout
+      }
+    );
+
+    console.log(`[WhatsApp Service] API Response status: ${response.status}`);
+    console.log(`[WhatsApp Service] API Response data:`, JSON.stringify(response.data).substring(0, 200));
+
+    if (response.status === 200) {
+      console.log(`[WhatsApp Service] ✅ Successfully sent to ${formattedPhone}`);
+      return {
+        success: true,
+        message: 'PDF sent via WhatsApp successfully'
+      };
+    } else {
+      console.error(`[WhatsApp Service] ❌ API returned status ${response.status}`);
+      return {
+        success: false,
+        error: `WhatsApp API returned status ${response.status}`
+      };
+    }
+  } catch (error) {
+    console.error(`[WhatsApp Service] ❌ Exception caught:`, error.message);
+    if (error.response) {
+      console.error(`[WhatsApp Service] Response status: ${error.response.status}`);
+      console.error(`[WhatsApp Service] Response data:`, JSON.stringify(error.response.data));
+    }
+    if (error.request) {
+      console.error(`[WhatsApp Service] Request made but no response received`);
+    }
+    console.error(`[WhatsApp Service] Full error:`, error);
+    
     return {
-      isEnabled: this.isEnabled,
-      hasConfig: !!this.currentConfig,
-      instanceId: this.currentConfig?.instanceId || null,
-      isActive: this.currentConfig?.isActive || false,
-      lastUpdated: this.currentConfig?.updatedAt || null
+      success: false,
+      error: error.response?.data || error.message || 'Failed to send PDF via WhatsApp'
     };
   }
 }
 
-// Create singleton instance
-const whatsappService = new WhatsAppService();
+/**
+ * Send PDF from base64 string via WhatsApp (for temporary files)
+ * @param {string} phoneNumber - Phone number (will be formatted to 91XXXXXXXXXX)
+ * @param {string} pdfBase64 - PDF as base64 string
+ * @param {string} fileName - PDF file name
+ * @param {string} memberName - Member name for personalized message
+ * @returns {Promise<{success: boolean, message?: string, error?: string}>}
+ */
+async function sendPdfBase64ViaWhatsApp(phoneNumber, pdfBase64, fileName, memberName = '') {
+  try {
+    const formattedPhone = formatPhoneNumber(phoneNumber);
+    
+    if (!formattedPhone) {
+      return {
+        success: false,
+        error: 'Invalid phone number format'
+      };
+    }
 
-module.exports = whatsappService;
+    if (!pdfBase64 || pdfBase64.length < 100) {
+      return {
+        success: false,
+        error: 'Invalid or incomplete PDF data'
+      };
+    }
+
+    // Convert base64 to buffer
+    const pdfBuffer = Buffer.from(pdfBase64, 'base64');
+
+    const message = buildMessage(memberName);
+
+    // Create FormData for file upload
+    const formData = new FormData();
+    formData.append('file', pdfBuffer, {
+      filename: fileName || 'visitor-pass.pdf',
+      contentType: 'application/pdf'
+    });
+    formData.append('phone', formattedPhone);
+    formData.append('message', message);
+
+    // Send via WhatsApp API
+    const response = await axios.post(
+      `https://messagesapi.co.in/chat/sendMessageFile/${DEVICE_UID}/${encodeURIComponent(DEVICE_NAME)}`,
+      formData,
+      {
+        headers: {
+          ...formData.getHeaders()
+        },
+        timeout: 30000 // 30 seconds timeout
+      }
+    );
+
+    if (response.status === 200) {
+      return {
+        success: true,
+        message: 'PDF sent via WhatsApp successfully'
+      };
+    } else {
+      return {
+        success: false,
+        error: `WhatsApp API returned status ${response.status}`
+      };
+    }
+  } catch (error) {
+    console.error('WhatsApp service error:', error);
+    return {
+      success: false,
+      error: error.response?.data || error.message || 'Failed to send PDF via WhatsApp'
+    };
+  }
+}
+
+module.exports = {
+  sendPdfViaWhatsApp,
+  sendPdfBase64ViaWhatsApp,
+  formatPhoneNumber,
+  buildMessage
+};

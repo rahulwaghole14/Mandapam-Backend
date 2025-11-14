@@ -70,6 +70,16 @@ const EventRegistration = sequelize.define('EventRegistration', {
   notes: {
     type: DataTypes.TEXT,
     allowNull: true
+  },
+  pdfPath: {
+    type: DataTypes.STRING(500),
+    allowNull: true,
+    field: 'pdf_path'
+  },
+  pdfSentAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    field: 'pdf_sent_at'
   }
 }, {
   tableName: 'event_registrations',
