@@ -9,6 +9,7 @@ const qrService = require('../services/qrService');
 const paymentService = require('../services/paymentService');
 const whatsappService = require('../services/whatsappService');
 const { Op } = require('sequelize');
+const { sequelize } = require('../config/database');
 const fs = require('fs');
 const path = require('path');
 const { 
@@ -88,80 +89,201 @@ const ensureProfileImageUrl = (value, baseUrl) => {
   return { url: resolvedUrl, stored: relativePath };
 };
 
-async function resolveAssociation(associationId) {
+async function resolveAssociation(associationId, transaction = null) {
   if (associationId) {
-    const association = await Association.findByPk(associationId);
+    const association = await Association.findByPk(associationId, { transaction });
     if (!association) {
+      console.error('❌ Association not found:', associationId);
       throw new Error('Association not found');
     }
     return association;
   }
 
-  const defaultAssociation = await Association.findOne({
-    where: { name: 'Other Association' }
+  // Try to find default association
+  let defaultAssociation = await Association.findOne({
+    where: { name: 'Other Association' },
+    transaction
   });
 
+  // Auto-create default association if it doesn't exist
   if (!defaultAssociation) {
-    throw new Error('Default association "Other Association" not found. Please create it in the Associations list.');
+    console.warn('⚠️ Default association "Other Association" not found, creating it...');
+    try {
+      defaultAssociation = await Association.create({
+        name: 'Other Association',
+        city: 'General',
+        district: 'General',
+        state: 'Maharashtra',
+        isActive: true
+      }, { transaction });
+      console.log('✅ Default association created successfully:', defaultAssociation.id);
+    } catch (createError) {
+      console.error('❌ Failed to create default association:', createError);
+      throw new Error('Failed to create default association. Please contact administrator.');
+    }
   }
 
   return defaultAssociation;
 }
 
-// Helper function to find or create member
-async function findOrCreateMember(memberData) {
+// Helper function to find or create member with validation and transaction support
+async function findOrCreateMember(memberData, transaction = null) {
   const { phone, name, email, businessName, businessType, city, associationId, profileImage } = memberData;
   
-  // Check if member exists by phone
+  console.log('🔍 findOrCreateMember - Starting with data:', {
+    phone,
+    name,
+    businessName,
+    businessType,
+    city,
+    associationId,
+    hasProfileImage: !!profileImage
+  });
+  
+  // Pre-validation: Check phone format
+  if (!phone || !/^[0-9]{10}$/.test(phone)) {
+    console.error('❌ Invalid phone format:', phone);
+    throw new Error('Phone number must be exactly 10 digits');
+  }
+  
+  // Pre-validation: Check required fields
+  if (!name || name.trim().length < 2) {
+    console.error('❌ Invalid name:', name);
+    throw new Error('Name must be at least 2 characters');
+  }
+  
+  if (!businessName || businessName.trim().length < 2) {
+    console.error('❌ Invalid business name:', businessName);
+    throw new Error('Business name must be at least 2 characters');
+  }
+  
+  if (!businessType) {
+    console.error('❌ Missing business type');
+    throw new Error('Business type is required');
+  }
+  
+  // Check if member exists by phone (with transaction support)
   let member = await Member.findOne({
-    where: { phone }
+    where: { phone },
+    transaction
   });
   
   if (member) {
+    console.log('✅ Member already exists:', member.id);
     const updates = {};
     // Member exists - update profile image if provided and not already set
     if (profileImage && !member.profileImage) {
       updates.profileImage = profileImage;
+      console.log('📸 Updating profile image for existing member');
     }
 
-    const association = await resolveAssociation(associationId || member.associationId);
+    try {
+      const association = await resolveAssociation(associationId || member.associationId, transaction);
 
-    if (association?.id) {
-      if (!member.associationId || (associationId && member.associationId !== association.id)) {
-        updates.associationId = association.id;
+      if (association?.id) {
+        if (!member.associationId || (associationId && member.associationId !== association.id)) {
+          updates.associationId = association.id;
+          console.log('🔄 Updating association ID:', association.id);
+        }
+        if (!member.associationName || updates.associationId) {
+          updates.associationName = association.name;
+        }
       }
-      if (!member.associationName || updates.associationId) {
-        updates.associationName = association.name;
-      }
-    }
 
-    if (Object.keys(updates).length > 0) {
-      await member.update(updates);
+      if (Object.keys(updates).length > 0) {
+        await member.update(updates, { transaction });
+        console.log('✅ Member updated successfully');
+      }
+    } catch (updateError) {
+      console.error('❌ Error updating existing member:', updateError);
+      // Don't fail if update fails, member already exists
     }
+    
     return { member, isNew: false };
   }
   
-  // Create new member
-  const association = await resolveAssociation(associationId);
+  // Create new member with transaction support
+  console.log('🆕 Creating new member...');
   
-  // Get association name
-  const associationName = association.name;
-  
-  member = await Member.create({
-    name,
-    phone,
-    email: email || null,
-    businessName,
-    businessType,
-    city,
-    associationId: association.id,
-    associationName,
-    profileImage: profileImage || null,
-    isActive: true,
-    isVerified: false
-  });
-  
-  return { member, isNew: true };
+  try {
+    // Resolve association (will auto-create default if needed)
+    const association = await resolveAssociation(associationId, transaction);
+    
+    if (!association || !association.id) {
+      console.error('❌ Failed to resolve association');
+      throw new Error('Failed to resolve association');
+    }
+    
+    // Get association name
+    const associationName = association.name;
+    
+    console.log('📝 Creating member with association:', {
+      associationId: association.id,
+      associationName
+    });
+    
+    // Pre-check: Verify phone doesn't exist (double-check before create)
+    const duplicateCheck = await Member.findOne({
+      where: { phone },
+      transaction
+    });
+    
+    if (duplicateCheck) {
+      console.log('⚠️ Duplicate member found during creation, returning existing member');
+      return { member: duplicateCheck, isNew: false };
+    }
+    
+    // Create member with transaction
+    member = await Member.create({
+      name: name.trim(),
+      phone,
+      email: email ? email.trim() : null,
+      businessName: businessName.trim(),
+      businessType,
+      city: city ? city.trim() : null,
+      associationId: association.id,
+      associationName,
+      profileImage: profileImage || null,
+      isActive: true,
+      isVerified: false
+    }, { transaction });
+    
+    console.log('✅ Member created successfully:', member.id);
+    
+    // Verify member was actually created
+    const verifyMember = await Member.findByPk(member.id, { transaction });
+    if (!verifyMember) {
+      console.error('❌ Member creation verification failed - member not found after create');
+      throw new Error('Member creation failed - verification error');
+    }
+    
+    return { member, isNew: true };
+    
+  } catch (createError) {
+    console.error('❌ Error creating member:', {
+      error: createError.message,
+      stack: createError.stack,
+      phone,
+      name,
+      businessName
+    });
+    
+    // Check if it's a unique constraint violation (duplicate phone)
+    if (createError.name === 'SequelizeUniqueConstraintError' || createError.message?.includes('unique')) {
+      console.log('⚠️ Unique constraint violation, member may have been created by another process');
+      // Try to find the member
+      const existingMember = await Member.findOne({
+        where: { phone },
+        transaction
+      });
+      if (existingMember) {
+        console.log('✅ Found existing member after unique constraint error');
+        return { member: existingMember, isNew: false };
+      }
+    }
+    
+    throw new Error(`Failed to create member: ${createError.message}`);
+  }
 }
 
 // @desc    Get associations by city (Public - for registration form)
@@ -467,9 +589,14 @@ router.post('/events/:id/register-payment',
       console.log('Profile photo URL received:', profileImageURL);
     }
 
-    // Find or create member
+    // Find or create member with transaction
     let memberResult;
+    let memberTransaction;
+    
     try {
+      memberTransaction = await sequelize.transaction();
+      console.log('🔄 Starting transaction for member creation/registration');
+      
       memberResult = await findOrCreateMember({
         phone,
         name,
@@ -479,15 +606,46 @@ router.post('/events/:id/register-payment',
         city: city || null,
         associationId,
         profileImage: profileImageFilename
-      });
+      }, memberTransaction);
+      
+      // Commit transaction after member is created
+      await memberTransaction.commit();
+      console.log('✅ Member creation transaction committed successfully');
+      
     } catch (error) {
+      // Rollback transaction on error (if transaction was created)
+      if (memberTransaction && !memberTransaction.finished) {
+        await memberTransaction.rollback();
+        console.error('❌ Member creation transaction rolled back due to error:', error.message);
+      }
+      
+      console.error('❌ Member creation error details:', {
+        error: error.message,
+        stack: error.stack,
+        phone,
+        name,
+        businessName
+      });
+      
       return res.status(400).json({
         success: false,
-        message: error.message || 'Error creating member'
+        message: error.message || 'Error creating member',
+        error: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
 
     const { member, isNew } = memberResult;
+    
+    // Verify member exists in database
+    if (!member || !member.id) {
+      console.error('❌ Member creation failed - member object invalid');
+      return res.status(500).json({
+        success: false,
+        message: 'Member creation failed - please try again'
+      });
+    }
+    
+    console.log('✅ Member verified in database:', member.id);
     
     // Get profile image URL if available (use existing if member already had one)
     if (!profileImageURL) {
@@ -519,23 +677,47 @@ router.post('/events/:id/register-payment',
 
     // If event is free, return success without payment
     if (!(fee > 0)) {
-      // Create registration immediately for free events
-      const registration = await EventRegistration.create({
-        eventId,
-        memberId: member.id,
-        status: 'registered',
-        paymentStatus: 'free',
-        amountPaid: 0,
-        registeredAt: new Date()
-      });
+      // Create registration with transaction for free events
+      const freeEventTransaction = await sequelize.transaction();
+      
+      try {
+        console.log('🔄 Creating free event registration with transaction');
+        
+        // Create registration immediately for free events
+        const registration = await EventRegistration.create({
+          eventId,
+          memberId: member.id,
+          status: 'registered',
+          paymentStatus: 'free',
+          amountPaid: 0,
+          registeredAt: new Date()
+        }, { transaction: freeEventTransaction });
 
-      // Update event attendee count
-      await Event.increment('currentAttendees', {
-        where: { id: eventId }
-      });
+        // Verify registration was created
+        const verifyRegistration = await EventRegistration.findByPk(registration.id, { transaction: freeEventTransaction });
+        if (!verifyRegistration) {
+          throw new Error('Registration creation verification failed');
+        }
 
-      // Generate QR code with retry logic (QR is important for pass)
-      const qrDataURL = await generateQrWithRetry(registration, 'free event registration');
+        // Update event attendee count
+        await Event.increment('currentAttendees', {
+          where: { id: eventId },
+          transaction: freeEventTransaction
+        });
+        
+        // Commit transaction
+        await freeEventTransaction.commit();
+        console.log('✅ Free event registration transaction committed');
+        
+        // Generate QR code with retry logic (QR is important for pass) - outside transaction
+        const qrDataURL = await generateQrWithRetry(registration, 'free event registration');
+        
+      } catch (freeEventError) {
+        // Rollback transaction on error
+        await freeEventTransaction.rollback();
+        console.error('❌ Free event registration transaction rolled back:', freeEventError);
+        throw freeEventError;
+      }
 
       return res.status(201).json({
         success: true,
@@ -714,48 +896,71 @@ router.post('/events/:id/confirm-payment', [
 
     const amountPaid = fee;
 
-    // Create or update registration
+    // Create or update registration with transaction
+    const paymentTransaction = await sequelize.transaction();
     let registration;
     const isNewRegistration = !existingRegistration;
 
-    if (existingRegistration) {
-      // Update existing registration
-      const wasPaid = existingRegistration.paymentStatus === 'paid';
-      await existingRegistration.update({
-        paymentStatus: 'paid',
-        amountPaid: amountPaid,
-        paymentOrderId: razorpay_order_id,
-        paymentId: razorpay_payment_id,
-        status: 'registered',
-        notes: notes || existingRegistration.notes,
-        registeredAt: existingRegistration.registeredAt || new Date()
-      });
-      registration = existingRegistration;
+    try {
+      console.log('🔄 Starting transaction for payment confirmation');
+      
+      if (existingRegistration) {
+        // Update existing registration
+        const wasPaid = existingRegistration.paymentStatus === 'paid';
+        await existingRegistration.update({
+          paymentStatus: 'paid',
+          amountPaid: amountPaid,
+          paymentOrderId: razorpay_order_id,
+          paymentId: razorpay_payment_id,
+          status: 'registered',
+          notes: notes || existingRegistration.notes,
+          registeredAt: existingRegistration.registeredAt || new Date()
+        }, { transaction: paymentTransaction });
+        registration = existingRegistration;
 
-      // Only increment attendee count if this was not previously paid
-      if (!wasPaid) {
+        // Only increment attendee count if this was not previously paid
+        if (!wasPaid) {
+          await Event.increment('currentAttendees', {
+            where: { id: eventId },
+            transaction: paymentTransaction
+          });
+        }
+      } else {
+        // Create new registration
+        registration = await EventRegistration.create({
+          eventId,
+          memberId,
+          status: 'registered',
+          paymentStatus: 'paid',
+          amountPaid: amountPaid,
+          paymentOrderId: razorpay_order_id,
+          paymentId: razorpay_payment_id,
+          notes: notes || null,
+          registeredAt: new Date()
+        }, { transaction: paymentTransaction });
+
+        // Verify registration was created
+        const verifyRegistration = await EventRegistration.findByPk(registration.id, { transaction: paymentTransaction });
+        if (!verifyRegistration) {
+          throw new Error('Registration creation verification failed');
+        }
+
+        // Update event attendee count
         await Event.increment('currentAttendees', {
-          where: { id: eventId }
+          where: { id: eventId },
+          transaction: paymentTransaction
         });
       }
-    } else {
-      // Create new registration
-      registration = await EventRegistration.create({
-        eventId,
-        memberId,
-        status: 'registered',
-        paymentStatus: 'paid',
-        amountPaid: amountPaid,
-        paymentOrderId: razorpay_order_id,
-        paymentId: razorpay_payment_id,
-        notes: notes || null,
-        registeredAt: new Date()
-      });
-
-      // Update event attendee count
-      await Event.increment('currentAttendees', {
-        where: { id: eventId }
-      });
+      
+      // Commit transaction
+      await paymentTransaction.commit();
+      console.log('✅ Payment confirmation transaction committed successfully');
+      
+    } catch (transactionError) {
+      // Rollback transaction on error
+      await paymentTransaction.rollback();
+      console.error('❌ Payment confirmation transaction rolled back:', transactionError);
+      throw transactionError;
     }
 
     // Generate QR code with retry logic (QR is important for pass)
