@@ -19,6 +19,36 @@ const {
 
 const router = express.Router();
 
+// Helper function to generate QR code with retry logic
+async function generateQrWithRetry(registration, context = 'registration') {
+  const maxRetries = 3;
+  const retryDelays = [100, 500, 1000]; // milliseconds
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const qrDataURL = await qrService.generateQrDataURL(registration);
+      console.log(`✅ QR code generated successfully for ${context} ${registration.id} (attempt ${attempt + 1})`);
+      return qrDataURL;
+    } catch (qrError) {
+      const isLastAttempt = attempt === maxRetries - 1;
+      console.error(`⚠️ QR code generation attempt ${attempt + 1}/${maxRetries} failed for ${context} ${registration.id}:`, qrError.message);
+      
+      if (isLastAttempt) {
+        console.error(`❌ All QR code generation attempts failed for ${context}:`, registration.id);
+        console.error('Registration was successful, but QR code generation failed. QR can be regenerated later via API.');
+        return null; // Return null if all attempts fail
+      } else {
+        // Wait before retrying (exponential backoff)
+        const delay = retryDelays[attempt] || 1000;
+        console.log(`⏳ Retrying QR generation in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  return null; // Fallback return
+}
+
 const ensureProfileImageUrl = (value, baseUrl) => {
   if (!value) {
     return { url: null, stored: null };
@@ -276,8 +306,8 @@ router.get('/events/:id/check-registration', [
       });
     }
 
-    // Generate QR code if registered
-    const qrDataURL = await qrService.generateQrDataURL(registration);
+    // Generate QR code if registered (with retry logic)
+    const qrDataURL = await generateQrWithRetry(registration, 'registration status check');
 
     const baseUrl = req.protocol + '://' + req.get('host');
     const profileMeta = ensureProfileImageUrl(
@@ -504,8 +534,8 @@ router.post('/events/:id/register-payment',
         where: { id: eventId }
       });
 
-      // Generate QR code
-      const qrDataURL = await qrService.generateQrDataURL(registration);
+      // Generate QR code with retry logic (QR is important for pass)
+      const qrDataURL = await generateQrWithRetry(registration, 'free event registration');
 
       return res.status(201).json({
         success: true,
@@ -529,7 +559,7 @@ router.post('/events/:id/register-payment',
           status: registration.status,
           paymentStatus: registration.paymentStatus
         },
-        qrDataURL
+        qrDataURL // May be null if generation failed
       });
     }
 
@@ -728,21 +758,32 @@ router.post('/events/:id/confirm-payment', [
       });
     }
 
-    // Generate QR code
-    const qrDataURL = await qrService.generateQrDataURL(registration);
+    // Generate QR code with retry logic (QR is important for pass)
+    const qrDataURL = await generateQrWithRetry(registration, 'paid event registration');
 
     const baseUrl = req.protocol + '://' + req.get('host');
-    const profileMeta = ensureProfileImageUrl(
-      member.profileImageURL || member.profileImage || null,
-      baseUrl
-    );
-    const profileImageURL = profileMeta.url;
+    let profileImageURL = null;
+    let profileImage = null;
+    try {
+      const profileMeta = ensureProfileImageUrl(
+        member.profileImageURL || member.profileImage || null,
+        baseUrl
+      );
+      profileImageURL = profileMeta.url;
+      profileImage = profileMeta.stored || member.profileImage || null;
+    } catch (profileError) {
+      console.error('⚠️ Profile image URL generation failed (non-critical):', profileError.message);
+      profileImageURL = member.profileImageURL || member.profileImage || null;
+      profileImage = member.profileImage || null;
+    }
 
+    // Always return success if registration was created
+    // QR code and profile image are optional enhancements
     res.status(201).json({
       success: true,
       message: 'Registration confirmed',
       registrationId: registration.id,
-      qrDataURL,
+      qrDataURL, // May be null if generation failed
       registration: {
         id: registration.id,
         eventId: registration.eventId,
@@ -756,7 +797,7 @@ router.post('/events/:id/confirm-payment', [
         id: member.id,
         name: member.name,
         phone: member.phone,
-        profileImage: profileMeta.stored || member.profileImage || null,
+        profileImage,
         profileImageURL
       }
     });
