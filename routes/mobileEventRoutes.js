@@ -6,6 +6,7 @@ const qrService = require('../services/qrService');
 const { Op, sequelize } = require('sequelize');
 const { protectMobile } = require('../middleware/mobileAuthMiddleware');
 const RSVPService = require('../services/rsvpService');
+const { getFileUrl } = require('../config/multerConfig');
 
 const router = express.Router();
 
@@ -594,11 +595,37 @@ router.post('/events/:id/confirm-payment', protectMobile, async (req, res) => {
 
     // Generate QR on the fly
     const qrDataURL = await qrService.generateQrDataURL(registration);
+    
+    // Fetch member data for name and image
+    const member = await Member.findByPk(memberId);
+    const baseUrl = req.protocol + '://' + req.get('host');
+    
+    // Get member name and profile image URL
+    let memberName = null;
+    let memberImageURL = null;
+    
+    if (member) {
+      memberName = member.name;
+      if (member.profileImage) {
+        // Check if it's already a Cloudinary URL
+        if (member.profileImage.startsWith('http://') || member.profileImage.startsWith('https://')) {
+          memberImageURL = member.profileImage;
+        } else {
+          // Legacy local file - generate URL
+          memberImageURL = getFileUrl(member.profileImage, baseUrl, 'profile-images');
+        }
+      }
+    }
+    
     res.status(201).json({ 
       success: true, 
       message: 'Registration confirmed', 
       registrationId: registration.id, 
       qrDataURL,
+      member: {
+        name: memberName,
+        profileImageURL: memberImageURL
+      },
       registration: {
         id: registration.id,
         eventId: registration.eventId,
@@ -625,6 +652,26 @@ router.post('/events/:id/confirm-payment', protectMobile, async (req, res) => {
 router.get('/my/events', protectMobile, async (req, res) => {
   try {
     const memberId = req.user.id;
+    const baseUrl = req.protocol + '://' + req.get('host');
+    
+    // Fetch member data once for all registrations
+    const member = await Member.findByPk(memberId);
+    let memberName = null;
+    let memberImageURL = null;
+    
+    if (member) {
+      memberName = member.name;
+      if (member.profileImage) {
+        // Check if it's already a Cloudinary URL
+        if (member.profileImage.startsWith('http://') || member.profileImage.startsWith('https://')) {
+          memberImageURL = member.profileImage;
+        } else {
+          // Legacy local file - generate URL
+          memberImageURL = getFileUrl(member.profileImage, baseUrl, 'profile-images');
+        }
+      }
+    }
+    
     const regs = await EventRegistration.findAll({
       where: { memberId },
       include: [{ model: Event, as: 'event', include: [{ model: EventExhibitor, as: 'exhibitors' }] }],
@@ -638,7 +685,11 @@ router.get('/my/events', protectMobile, async (req, res) => {
       paymentStatus: r.paymentStatus,
       registeredAt: r.registeredAt,
       attendedAt: r.attendedAt,
-      qrDataURL: await qrService.generateQrDataURL(r)
+      qrDataURL: await qrService.generateQrDataURL(r),
+      member: {
+        name: memberName,
+        profileImageURL: memberImageURL
+      }
     })));
 
     res.json({ success: true, registrations: items });
@@ -654,10 +705,42 @@ router.get('/my/events', protectMobile, async (req, res) => {
 router.get('/registrations/:id/qr', protectMobile, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const reg = await EventRegistration.findByPk(id);
-    if (!reg || reg.memberId !== req.user.id) return res.status(404).json({ success: false, message: 'Registration not found' });
+    const reg = await EventRegistration.findByPk(id, {
+      include: [{ model: Member, as: 'member' }]
+    });
+    
+    if (!reg || reg.memberId !== req.user.id) {
+      return res.status(404).json({ success: false, message: 'Registration not found' });
+    }
+    
     const dataUrl = await qrService.generateQrDataURL(reg);
-    res.json({ success: true, qrDataURL: dataUrl });
+    
+    // Get member name and profile image URL
+    const baseUrl = req.protocol + '://' + req.get('host');
+    let memberName = null;
+    let memberImageURL = null;
+    
+    if (reg.member) {
+      memberName = reg.member.name;
+      if (reg.member.profileImage) {
+        // Check if it's already a Cloudinary URL
+        if (reg.member.profileImage.startsWith('http://') || reg.member.profileImage.startsWith('https://')) {
+          memberImageURL = reg.member.profileImage;
+        } else {
+          // Legacy local file - generate URL
+          memberImageURL = getFileUrl(reg.member.profileImage, baseUrl, 'profile-images');
+        }
+      }
+    }
+    
+    res.json({ 
+      success: true, 
+      qrDataURL: dataUrl,
+      member: {
+        name: memberName,
+        profileImageURL: memberImageURL
+      }
+    });
   } catch (error) {
     console.error('Get QR error:', error);
     res.status(500).json({ success: false, message: 'Server error while generating QR' });
@@ -684,6 +767,27 @@ router.post('/events/:id/rsvp', protectMobile, async (req, res) => {
     // Register for event using RSVP service
     const registration = await RSVPService.registerForEvent(eventId, memberId, notes);
 
+    // Fetch member data for name and image
+    const member = await Member.findByPk(memberId);
+    const baseUrl = req.protocol + '://' + req.get('host');
+    
+    // Get member name and profile image URL
+    let memberName = null;
+    let memberImageURL = null;
+    
+    if (member) {
+      memberName = member.name;
+      if (member.profileImage) {
+        // Check if it's already a Cloudinary URL
+        if (member.profileImage.startsWith('http://') || member.profileImage.startsWith('https://')) {
+          memberImageURL = member.profileImage;
+        } else {
+          // Legacy local file - generate URL
+          memberImageURL = getFileUrl(member.profileImage, baseUrl, 'profile-images');
+        }
+      }
+    }
+
     res.status(201).json({
       success: true,
       message: 'Successfully registered for event',
@@ -694,6 +798,10 @@ router.post('/events/:id/rsvp', protectMobile, async (req, res) => {
         status: registration.status,
         registeredAt: registration.registeredAt,
         notes: registration.notes
+      },
+      member: {
+        name: memberName,
+        profileImageURL: memberImageURL
       }
     });
 

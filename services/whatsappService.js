@@ -127,19 +127,76 @@ async function sendPdfViaWhatsApp(phoneNumber, pdfFilePath, memberName = '') {
       };
     }
   } catch (error) {
-    console.error(`[WhatsApp Service] ❌ Exception caught:`, error.message);
+    // Detailed error logging for debugging
+    console.error(`[WhatsApp Service] ❌ EXCEPTION CAUGHT`);
+    console.error(`[WhatsApp Service] Error Type: ${error.name || 'Unknown'}`);
+    console.error(`[WhatsApp Service] Error Message: ${error.message || 'No message'}`);
+    console.error(`[WhatsApp Service] Error Code: ${error.code || 'No code'}`);
+    console.error(`[WhatsApp Service] Phone Number: ${phoneNumber} (formatted: ${formattedPhone})`);
+    console.error(`[WhatsApp Service] PDF File Path: ${pdfFilePath}`);
+    console.error(`[WhatsApp Service] Member Name: ${memberName || 'N/A'}`);
+    console.error(`[WhatsApp Service] DEVICE_UID: ${DEVICE_UID}`);
+    console.error(`[WhatsApp Service] DEVICE_NAME: ${DEVICE_NAME}`);
+    
     if (error.response) {
-      console.error(`[WhatsApp Service] Response status: ${error.response.status}`);
-      console.error(`[WhatsApp Service] Response data:`, JSON.stringify(error.response.data));
-    }
-    if (error.request) {
+      console.error(`[WhatsApp Service] ⚠️ API RESPONSE ERROR`);
+      console.error(`[WhatsApp Service] Response Status: ${error.response.status}`);
+      console.error(`[WhatsApp Service] Response Status Text: ${error.response.statusText || 'N/A'}`);
+      console.error(`[WhatsApp Service] Response Headers:`, JSON.stringify(error.response.headers || {}));
+      console.error(`[WhatsApp Service] Response Data:`, JSON.stringify(error.response.data || {}));
+    } else if (error.request) {
+      console.error(`[WhatsApp Service] ⚠️ NO RESPONSE FROM API`);
       console.error(`[WhatsApp Service] Request made but no response received`);
+      console.error(`[WhatsApp Service] Request Config:`, {
+        url: error.config?.url,
+        method: error.config?.method,
+        timeout: error.config?.timeout
+      });
+    } else {
+      console.error(`[WhatsApp Service] ⚠️ REQUEST SETUP ERROR`);
+      console.error(`[WhatsApp Service] Error occurred before request was sent`);
     }
-    console.error(`[WhatsApp Service] Full error:`, error);
+    
+    if (error.stack) {
+      console.error(`[WhatsApp Service] Stack Trace:`, error.stack);
+    }
+    
+    // Build detailed error message
+    let errorMessage = 'Failed to send PDF via WhatsApp';
+    if (error.response?.data) {
+      if (typeof error.response.data === 'string') {
+        errorMessage = error.response.data;
+      } else if (error.response.data.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response.data.error) {
+        errorMessage = error.response.data.error;
+      } else {
+        errorMessage = JSON.stringify(error.response.data);
+      }
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    
+    // Add context to error message
+    if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+      errorMessage = `WhatsApp API timeout: ${errorMessage}`;
+    } else if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+      errorMessage = `WhatsApp API connection failed: ${errorMessage}`;
+    } else if (error.response?.status) {
+      errorMessage = `WhatsApp API error (${error.response.status}): ${errorMessage}`;
+    }
     
     return {
       success: false,
-      error: error.response?.data || error.message || 'Failed to send PDF via WhatsApp'
+      error: errorMessage,
+      errorCode: error.code,
+      errorStatus: error.response?.status,
+      errorDetails: process.env.NODE_ENV === 'development' ? {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        response: error.response?.data
+      } : undefined
     };
   }
 }
@@ -208,10 +265,46 @@ async function sendPdfBase64ViaWhatsApp(phoneNumber, pdfBase64, fileName, member
       };
     }
   } catch (error) {
-    console.error('WhatsApp service error:', error);
+    // Detailed error logging for base64 sending
+    console.error(`[WhatsApp Service] ❌ EXCEPTION CAUGHT (Base64)`);
+    console.error(`[WhatsApp Service] Error Type: ${error.name || 'Unknown'}`);
+    console.error(`[WhatsApp Service] Error Message: ${error.message || 'No message'}`);
+    console.error(`[WhatsApp Service] Error Code: ${error.code || 'No code'}`);
+    console.error(`[WhatsApp Service] Phone Number: ${phoneNumber} (formatted: ${formattedPhone})`);
+    console.error(`[WhatsApp Service] File Name: ${fileName || 'N/A'}`);
+    console.error(`[WhatsApp Service] PDF Base64 Length: ${pdfBase64?.length || 0}`);
+    console.error(`[WhatsApp Service] Member Name: ${memberName || 'N/A'}`);
+    
+    if (error.response) {
+      console.error(`[WhatsApp Service] ⚠️ API RESPONSE ERROR (Base64)`);
+      console.error(`[WhatsApp Service] Response Status: ${error.response.status}`);
+      console.error(`[WhatsApp Service] Response Data:`, JSON.stringify(error.response.data || {}));
+    } else if (error.request) {
+      console.error(`[WhatsApp Service] ⚠️ NO RESPONSE FROM API (Base64)`);
+    }
+    
+    if (error.stack) {
+      console.error(`[WhatsApp Service] Stack Trace (Base64):`, error.stack);
+    }
+    
+    let errorMessage = 'Failed to send PDF via WhatsApp';
+    if (error.response?.data) {
+      if (typeof error.response.data === 'string') {
+        errorMessage = error.response.data;
+      } else if (error.response.data.message) {
+        errorMessage = error.response.data.message;
+      } else {
+        errorMessage = JSON.stringify(error.response.data);
+      }
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    
     return {
       success: false,
-      error: error.response?.data || error.message || 'Failed to send PDF via WhatsApp'
+      error: errorMessage,
+      errorCode: error.code,
+      errorStatus: error.response?.status
     };
   }
 }

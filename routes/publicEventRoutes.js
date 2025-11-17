@@ -1114,42 +1114,100 @@ router.post('/events/:id/registrations/:registrationId/save-pdf', [
 
     // Automatically send WhatsApp after PDF is saved (even if user closes page)
     // This ensures WhatsApp is sent even if frontend is closed
+    // Use retry logic for reliability
     if (member && member.phone) {
       console.log(`[WhatsApp Auto-Send] Starting auto-send for registration ${registrationId}`);
       console.log(`[WhatsApp Auto-Send] Member: ${member.name || 'N/A'}, Phone: ${member.phone}`);
       console.log(`[WhatsApp Auto-Send] PDF Path: ${pdfFilePath}`);
       console.log(`[WhatsApp Auto-Send] PDF Exists: ${fs.existsSync(pdfFilePath)}`);
       
-      whatsappService.sendPdfViaWhatsApp(
-        member.phone,
-        pdfFilePath,
-        member.name || ''
-      ).then((result) => {
-        console.log(`[WhatsApp Auto-Send] Result for registration ${registrationId}:`, result);
-        if (result.success) {
-          console.log(`[WhatsApp Auto-Send] ✅ Successfully sent to ${member.phone}`);
-          // Update registration to mark PDF as sent
-          registration.update({
-            pdfSentAt: new Date()
-          }).then(() => {
-            console.log(`[WhatsApp Auto-Send] ✅ Updated pdfSentAt for registration ${registrationId}`);
-          }).catch((updateError) => {
-            console.error(`[WhatsApp Auto-Send] ❌ Failed to update pdfSentAt for registration ${registrationId}:`, updateError);
-          });
-        } else {
-          console.error(`[WhatsApp Auto-Send] ❌ Failed for registration ${registrationId}:`, result.error);
+      // Retry logic for auto-send (runs in background, doesn't block response)
+      const autoSendWithRetry = async () => {
+        const maxRetries = 3;
+        const retryDelays = [2000, 5000, 10000]; // 2s, 5s, 10s
+        
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          try {
+            console.log(`[WhatsApp Auto-Send] Attempt ${attempt + 1}/${maxRetries} for registration ${registrationId}`);
+            
+            const result = await whatsappService.sendPdfViaWhatsApp(
+              member.phone,
+              pdfFilePath,
+              member.name || ''
+            );
+            
+            if (result.success) {
+              console.log(`[WhatsApp Auto-Send] ✅ Success on attempt ${attempt + 1} for registration ${registrationId}`);
+              // Update registration to mark PDF as sent
+              try {
+                await registration.update({
+                  pdfSentAt: new Date()
+                });
+                console.log(`[WhatsApp Auto-Send] ✅ Updated pdfSentAt for registration ${registrationId}`);
+              } catch (updateError) {
+                console.error(`[WhatsApp Auto-Send] ❌ Failed to update pdfSentAt for registration ${registrationId}:`, updateError);
+              }
+              return; // Success, exit
+            } else {
+              console.error(`[WhatsApp Auto-Send] ❌ Attempt ${attempt + 1}/${maxRetries} failed:`, result.error);
+              
+              // If it's the last attempt, log and exit
+              if (attempt === maxRetries - 1) {
+                console.error(`[WhatsApp Auto-Send] ❌ All ${maxRetries} attempts failed for registration ${registrationId}`);
+                return;
+              }
+              
+              // Wait before retrying
+              const delay = retryDelays[attempt] || 10000;
+              console.log(`[WhatsApp Auto-Send] ⏳ Retrying in ${delay}ms...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+            }
+          } catch (whatsappError) {
+            console.error(`[WhatsApp Auto-Send] ❌ Exception on attempt ${attempt + 1}/${maxRetries}:`, whatsappError.message);
+            
+            // If it's the last attempt, log and exit
+            if (attempt === maxRetries - 1) {
+              console.error(`[WhatsApp Auto-Send] ❌ All ${maxRetries} attempts failed with exceptions for registration ${registrationId}`);
+              return;
+            }
+            
+            // Wait before retrying
+            const delay = retryDelays[attempt] || 10000;
+            console.log(`[WhatsApp Auto-Send] ⏳ Retrying after exception in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
         }
-      }).catch((whatsappError) => {
-        // Log error but don't fail the save PDF request
+      };
+      
+      // Run auto-send in background (don't await - non-blocking)
+      autoSendWithRetry().catch((whatsappError) => {
+        // Detailed error logging - don't fail the save PDF request
         // WhatsApp sending can be retried later via send-whatsapp endpoint
-        console.error(`[WhatsApp Auto-Send] ❌ Exception for registration ${registrationId}:`, whatsappError);
+        console.error(`[WhatsApp Auto-Send] ❌ EXCEPTION for registration ${registrationId}`);
+        console.error(`[WhatsApp Auto-Send] Registration ID: ${registrationId}`);
+        console.error(`[WhatsApp Auto-Send] Event ID: ${eventId}`);
+        console.error(`[WhatsApp Auto-Send] Member ID: ${member?.id || 'N/A'}`);
+        console.error(`[WhatsApp Auto-Send] Member Name: ${member?.name || 'N/A'}`);
+        console.error(`[WhatsApp Auto-Send] Phone Number: ${member?.phone || 'N/A'}`);
+        console.error(`[WhatsApp Auto-Send] PDF Path: ${pdfFilePath}`);
+        console.error(`[WhatsApp Auto-Send] PDF Exists: ${fs.existsSync(pdfFilePath)}`);
+        console.error(`[WhatsApp Auto-Send] Error Type: ${whatsappError.name || 'Unknown'}`);
+        console.error(`[WhatsApp Auto-Send] Error Message: ${whatsappError.message || 'No message'}`);
+        console.error(`[WhatsApp Auto-Send] Error Code: ${whatsappError.code || 'No code'}`);
+        
         if (whatsappError.response) {
-          console.error(`[WhatsApp Auto-Send] Response status: ${whatsappError.response.status}`);
-          console.error(`[WhatsApp Auto-Send] Response data:`, whatsappError.response.data);
+          console.error(`[WhatsApp Auto-Send] ⚠️ API RESPONSE ERROR`);
+          console.error(`[WhatsApp Auto-Send] Response Status: ${whatsappError.response.status}`);
+          console.error(`[WhatsApp Auto-Send] Response Data:`, JSON.stringify(whatsappError.response.data || {}));
+        } else if (whatsappError.request) {
+          console.error(`[WhatsApp Auto-Send] ⚠️ NO RESPONSE FROM API`);
         }
-        if (whatsappError.message) {
-          console.error(`[WhatsApp Auto-Send] Error message: ${whatsappError.message}`);
+        
+        if (whatsappError.stack) {
+          console.error(`[WhatsApp Auto-Send] Stack Trace:`, whatsappError.stack);
         }
+        
+        console.error(`[WhatsApp Auto-Send] ⚠️ WhatsApp sending failed but PDF was saved. Can be retried via send-whatsapp endpoint.`);
       });
     } else {
       console.warn(`[WhatsApp Auto-Send] ⚠️ Skipping auto-send for registration ${registrationId}: member or phone missing`);
@@ -1260,10 +1318,22 @@ router.post('/events/:id/registrations/:registrationId/send-whatsapp', async (re
     const eventId = parseInt(req.params.id, 10);
     const registrationId = parseInt(req.params.registrationId, 10);
 
-    if (isNaN(eventId) || isNaN(registrationId)) {
+    console.log(`[WhatsApp Send] Request received - Event ID: ${eventId}, Registration ID: ${registrationId}`);
+
+    // Validate IDs
+    if (isNaN(eventId) || eventId <= 0) {
+      console.error(`[WhatsApp Send] Invalid event ID: ${req.params.id}`);
       return res.status(400).json({
         success: false,
-        message: 'Invalid event ID or registration ID'
+        message: 'Invalid event ID. Event ID must be a positive number.'
+      });
+    }
+
+    if (isNaN(registrationId) || registrationId <= 0) {
+      console.error(`[WhatsApp Send] Invalid registration ID: ${req.params.registrationId}`);
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid registration ID. Registration ID must be a positive number.'
       });
     }
 
@@ -1277,35 +1347,60 @@ router.post('/events/:id/registrations/:registrationId/send-whatsapp', async (re
         {
           model: Member,
           as: 'member',
-          required: true
+          required: false // Changed to false to handle cases where member might be missing
         },
         {
           model: Event,
-          as: 'event'
+          as: 'event',
+          required: false
         }
       ]
     });
 
     if (!registration) {
+      console.error(`[WhatsApp Send] Registration not found - Event ID: ${eventId}, Registration ID: ${registrationId}`);
       return res.status(404).json({
         success: false,
-        message: 'Registration not found'
+        message: `Registration not found for Event ID ${eventId} and Registration ID ${registrationId}`
       });
     }
 
-    if (!registration.pdfPath) {
+    // Check if member exists
+    if (!registration.member) {
+      console.error(`[WhatsApp Send] Member not found for registration ${registrationId}`);
       return res.status(400).json({
         success: false,
-        message: 'PDF not found for this registration. Please save PDF first.'
+        message: 'Member information not found for this registration'
       });
     }
 
     // Get member phone number
     const memberPhone = registration.member?.phone;
-    if (!memberPhone) {
+    if (!memberPhone || memberPhone.trim() === '') {
+      console.error(`[WhatsApp Send] Phone number missing for registration ${registrationId}, member ID: ${registration.member.id}`);
       return res.status(400).json({
         success: false,
-        message: 'Member phone number not found'
+        message: 'Member phone number is required but not found. Please update the member profile with a valid phone number.'
+      });
+    }
+
+    // Validate phone number format (should be 10 digits)
+    const phoneRegex = /^[6-9]\d{9}$/;
+    const cleanPhone = memberPhone.trim().replace(/^\+91|^91/, ''); // Remove country code if present
+    if (!phoneRegex.test(cleanPhone)) {
+      console.error(`[WhatsApp Send] Invalid phone number format: ${memberPhone}`);
+      return res.status(400).json({
+        success: false,
+        message: `Invalid phone number format: ${memberPhone}. Phone number must be 10 digits starting with 6-9.`
+      });
+    }
+
+    // Check if PDF path exists
+    if (!registration.pdfPath || registration.pdfPath.trim() === '') {
+      console.error(`[WhatsApp Send] PDF path missing for registration ${registrationId}`);
+      return res.status(400).json({
+        success: false,
+        message: 'PDF not found for this registration. Please generate and save the visitor pass PDF first.'
       });
     }
 
@@ -1315,53 +1410,152 @@ router.post('/events/:id/registrations/:registrationId/send-whatsapp', async (re
     // Construct full PDF file path
     const pdfFilePath = path.join(process.cwd(), 'uploads', registration.pdfPath);
 
-    // Check if PDF file exists
+    // Check if PDF file exists on filesystem
     if (!fs.existsSync(pdfFilePath)) {
+      console.error(`[WhatsApp Send] PDF file not found on server: ${pdfFilePath}`);
       return res.status(404).json({
         success: false,
-        message: 'PDF file not found on server'
+        message: 'PDF file not found on server. The PDF may have been deleted or moved. Please regenerate the visitor pass.'
       });
     }
 
-    // Send PDF via WhatsApp
-    console.log(`[WhatsApp Manual-Send] Starting manual send for registration ${registrationId}`);
-    console.log(`[WhatsApp Manual-Send] Member: ${memberName || 'N/A'}, Phone: ${memberPhone}`);
-    console.log(`[WhatsApp Manual-Send] PDF Path: ${pdfFilePath}`);
-    console.log(`[WhatsApp Manual-Send] PDF Exists: ${fs.existsSync(pdfFilePath)}`);
-    
-    const result = await whatsappService.sendPdfViaWhatsApp(
-      memberPhone,
-      pdfFilePath,
-      memberName
-    );
+    // Verify it's actually a file (not a directory)
+    const pdfStats = fs.statSync(pdfFilePath);
+    if (!pdfStats.isFile()) {
+      console.error(`[WhatsApp Send] PDF path is not a file: ${pdfFilePath}`);
+      return res.status(400).json({
+        success: false,
+        message: 'PDF path exists but is not a valid file'
+      });
+    }
 
-    console.log(`[WhatsApp Manual-Send] Result for registration ${registrationId}:`, result);
+    // Send PDF via WhatsApp with retry logic
+    console.log(`[WhatsApp Send] Starting send for registration ${registrationId}`);
+    console.log(`[WhatsApp Send] Member: ${memberName || 'N/A'}, Phone: ${cleanPhone}`);
+    console.log(`[WhatsApp Send] PDF Path: ${pdfFilePath}`);
+    console.log(`[WhatsApp Send] PDF Size: ${(pdfStats.size / 1024).toFixed(2)} KB`);
+    
+    // Retry logic for WhatsApp sending (important for pass delivery)
+    const maxRetries = 3;
+    const retryDelays = [2000, 5000, 10000]; // 2s, 5s, 10s
+    let result = null;
+    let lastError = null;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        console.log(`[WhatsApp Send] Attempt ${attempt + 1}/${maxRetries} for registration ${registrationId}`);
+        
+        result = await whatsappService.sendPdfViaWhatsApp(
+          cleanPhone, // Use cleaned phone number
+          pdfFilePath,
+          memberName
+        );
+        
+        if (result.success) {
+          console.log(`[WhatsApp Send] ✅ Success on attempt ${attempt + 1} for registration ${registrationId}`);
+          break; // Success, exit retry loop
+        } else {
+          lastError = result.error;
+          console.error(`[WhatsApp Send] ❌ Attempt ${attempt + 1}/${maxRetries} failed:`, result.error);
+          
+          // If it's the last attempt, break and return error
+          if (attempt === maxRetries - 1) {
+            break;
+          }
+          
+          // Wait before retrying
+          const delay = retryDelays[attempt] || 10000;
+          console.log(`[WhatsApp Send] ⏳ Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      } catch (whatsappError) {
+        lastError = whatsappError;
+        console.error(`[WhatsApp Send] ❌ Exception on attempt ${attempt + 1}/${maxRetries}:`, whatsappError.message);
+        
+        // If it's the last attempt, break and return error
+        if (attempt === maxRetries - 1) {
+          result = {
+            success: false,
+            error: whatsappError.message || 'WhatsApp sending failed after all retries'
+          };
+          break;
+        }
+        
+        // Wait before retrying
+        const delay = retryDelays[attempt] || 10000;
+        console.log(`[WhatsApp Send] ⏳ Retrying after exception in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+
+    console.log(`[WhatsApp Send] Final result for registration ${registrationId}:`, {
+      success: result?.success,
+      message: result?.message,
+      error: result?.error || lastError
+    });
 
     if (result.success) {
-      console.log(`[WhatsApp Manual-Send] ✅ Successfully sent to ${memberPhone}`);
+      console.log(`[WhatsApp Send] ✅ Successfully sent to ${cleanPhone}`);
+      
       // Update registration to mark PDF as sent
-      await registration.update({
-        pdfSentAt: new Date()
-      });
-      console.log(`[WhatsApp Manual-Send] ✅ Updated pdfSentAt for registration ${registrationId}`);
+      try {
+        await registration.update({
+          pdfSentAt: new Date()
+        });
+        console.log(`[WhatsApp Send] ✅ Updated pdfSentAt for registration ${registrationId}`);
+      } catch (updateError) {
+        console.error(`[WhatsApp Send] ⚠️ Failed to update pdfSentAt:`, updateError);
+        // Don't fail the request if update fails - message was sent successfully
+      }
 
       return res.status(200).json({
         success: true,
-        message: result.message || 'PDF sent via WhatsApp successfully'
+        message: result.message || 'PDF sent via WhatsApp successfully',
+        phone: cleanPhone
       });
     } else {
-      console.error(`[WhatsApp Manual-Send] ❌ Failed for registration ${registrationId}:`, result.error);
+      console.error(`[WhatsApp Send] ❌ Failed for registration ${registrationId}:`, result.error);
+      
+      // Provide more specific error message
+      let errorMessage = 'Failed to send PDF via WhatsApp';
+      if (result.error) {
+        if (typeof result.error === 'string') {
+          errorMessage = result.error;
+        } else if (result.error.message) {
+          errorMessage = result.error.message;
+        }
+      }
+      
       return res.status(500).json({
         success: false,
-        message: result.error || 'Failed to send PDF via WhatsApp'
+        message: errorMessage,
+        error: result.error
       });
     }
 
   } catch (error) {
-    console.error('Send WhatsApp error:', error);
-    res.status(500).json({
+    console.error('[WhatsApp Send] Exception caught:', error);
+    console.error('[WhatsApp Send] Error stack:', error.stack);
+    
+    // Provide more specific error messages
+    let errorMessage = 'Server error while sending WhatsApp message';
+    if (error.message) {
+      errorMessage = error.message;
+    }
+    
+    // Check for specific error types
+    if (error.code === 'ENOENT') {
+      errorMessage = 'PDF file not found on server';
+    } else if (error.code === 'EACCES') {
+      errorMessage = 'Permission denied accessing PDF file';
+    } else if (error.name === 'SequelizeDatabaseError') {
+      errorMessage = 'Database error occurred while processing request';
+    }
+    
+    return res.status(500).json({
       success: false,
-      message: error.message || 'Server error while sending WhatsApp message'
+      message: errorMessage,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
