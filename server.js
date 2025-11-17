@@ -40,9 +40,11 @@ const adminNotificationRoutes = require('./routes/adminNotificationRoutes');
 const birthdayRoutes = require('./routes/birthdayRoutes');
 const whatsappRoutes = require('./routes/whatsappRoutes');
 const publicEventRoutes = require('./routes/publicEventRoutes');
+const logRoutes = require('./routes/logRoutes');
 
 // Import middleware
 const { errorHandler } = require('./middleware/errorMiddleware');
+const requestLogger = require('./middleware/requestLogger');
 
 const app = express();
 
@@ -162,6 +164,9 @@ app.use('/api/', limiter);
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Request logging middleware (after body parsers, before routes)
+app.use(requestLogger);
 
 // Static file serving for uploads with CORS headers
 // Use Render's persistent disk storage
@@ -524,6 +529,7 @@ app.use('/api/whatsapp', whatsappRoutes);
 
 // Public event registration routes (no authentication required)
 app.use('/api/public', publicEventRoutes);
+app.use('/api/logs', logRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

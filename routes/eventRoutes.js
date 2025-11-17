@@ -11,6 +11,7 @@ const paymentService = require('../services/paymentService');
 const User = require('../models/User');
 const { protect, authorize, authorizeDistrict } = require('../middleware/authMiddleware');
 const fcmService = require('../services/fcmService');
+const Logger = require('../utils/logger');
 const { 
   eventImagesUpload,
   handleMulterError,
@@ -1699,34 +1700,170 @@ router.get('/:id/my-registration', protect, async (req, res) => {
 router.post('/checkin', [
   body('qrToken', 'qrToken is required').notEmpty()
 ], async (req, res) => {
+  const startTime = Date.now();
+  const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  
   try {
+    Logger.qrCheckin('INFO', 'QR Check-in request received', {
+      requestId,
+      ip: req.ip || req.connection.remoteAddress,
+      userAgent: req.get('user-agent'),
+      qrTokenLength: req.body.qrToken?.length || 0,
+      qrTokenPrefix: req.body.qrToken?.substring(0, 10) || 'N/A'
+    });
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      Logger.qrCheckin('WARN', 'Validation error', {
+        requestId,
+        errors: errors.array()
+      });
       return res.status(400).json({ success: false, errors: errors.array() });
     }
 
     const { qrToken } = req.body;
-    const parsed = JSON.parse(Buffer.from(qrToken.replace(/^EVT:/, ''), 'base64url').toString('utf8'));
+    
+    // Remove EVT: prefix if present
+    const tokenWithoutPrefix = qrToken.replace(/^EVT:/, '');
+    
+    // Decode base64url
+    let parsed;
+    try {
+      // Convert base64url to base64 (replace - with +, _ with /, add padding if needed)
+      let base64 = tokenWithoutPrefix.replace(/-/g, '+').replace(/_/g, '/');
+      // Add padding if needed
+      while (base64.length % 4) {
+        base64 += '=';
+      }
+      
+      const decoded = Buffer.from(base64, 'base64').toString('utf8');
+      parsed = JSON.parse(decoded);
+      
+      Logger.qrCheckin('DEBUG', 'QR token parsed successfully', {
+        requestId,
+        registrationId: parsed.data?.r,
+        eventId: parsed.data?.e,
+        memberId: parsed.data?.m
+      });
+    } catch (parseError) {
+      Logger.qrCheckin('ERROR', 'QR token parsing failed', {
+        requestId,
+        error: parseError.message,
+        errorStack: parseError.stack,
+        tokenLength: qrToken.length,
+        tokenPrefix: qrToken.substring(0, 50)
+      });
+      return res.status(400).json({ success: false, message: 'Invalid QR token format' });
+    }
+    
+    // Verify token signature
     const isValid = qrService.verifyToken(parsed);
     if (!isValid) {
-      return res.status(400).json({ success: false, message: 'Invalid QR token' });
+      Logger.qrCheckin('ERROR', 'QR token signature verification failed', {
+        requestId,
+        registrationId: parsed.data?.r,
+        eventId: parsed.data?.e,
+        memberId: parsed.data?.m,
+        tokenData: parsed.data
+      });
+      return res.status(400).json({ success: false, message: 'Invalid QR token signature' });
     }
 
     const { r: registrationId, e: eventId, m: memberId } = parsed.data;
 
+    Logger.qrCheckin('INFO', 'Looking up registration', {
+      requestId,
+      registrationId,
+      eventId,
+      memberId
+    });
+
     const registration = await EventRegistration.findOne({ where: { id: registrationId, eventId, memberId } });
     if (!registration) {
+      Logger.qrCheckin('WARN', 'Registration not found', {
+        requestId,
+        registrationId,
+        eventId,
+        memberId
+      });
       return res.status(404).json({ success: false, message: 'Registration not found' });
     }
 
+    // Fetch member data for name and profile image
+    const member = await Member.findByPk(memberId);
+    const baseUrl = req.protocol + '://' + req.get('host');
+    
+    // Get member name and profile image URL
+    let memberName = null;
+    let memberImageURL = null;
+    
+    if (member) {
+      memberName = member.name;
+      if (member.profileImage) {
+        // Check if it's already a Cloudinary URL
+        if (member.profileImage.startsWith('http://') || member.profileImage.startsWith('https://')) {
+          memberImageURL = member.profileImage;
+        } else {
+          // Legacy local file - generate URL
+          memberImageURL = getFileUrl(member.profileImage, baseUrl, 'profile-images');
+        }
+      }
+    }
+
     if (registration.status === 'attended') {
-      return res.json({ success: true, message: 'Already checked-in', attendedAt: registration.attendedAt });
+      const responseTime = Date.now() - startTime;
+      Logger.qrCheckin('INFO', 'Already checked-in', {
+        requestId,
+        registrationId,
+        memberId,
+        memberName,
+        attendedAt: registration.attendedAt,
+        responseTime: `${responseTime}ms`
+      });
+      
+      return res.json({ 
+        success: true, 
+        message: 'Already checked-in', 
+        attendedAt: registration.attendedAt,
+        member: {
+          name: memberName,
+          profileImageURL: memberImageURL
+        }
+      });
     }
 
     await registration.update({ status: 'attended', attendedAt: new Date() });
-    return res.json({ success: true, message: 'Check-in successful', attendedAt: registration.attendedAt });
+    
+    const responseTime = Date.now() - startTime;
+    Logger.qrCheckin('INFO', 'Check-in successful', {
+      requestId,
+      registrationId,
+      eventId,
+      memberId,
+      memberName,
+      responseTime: `${responseTime}ms`
+    });
+    
+    return res.json({ 
+      success: true, 
+      message: 'Check-in successful', 
+      attendedAt: registration.attendedAt,
+      member: {
+        name: memberName,
+        profileImageURL: memberImageURL
+      }
+    });
   } catch (error) {
-    console.error('Check-in error:', error);
+    const responseTime = Date.now() - startTime;
+    Logger.apiError('/api/events/checkin', error, req);
+    Logger.qrCheckin('ERROR', 'Check-in exception', {
+      requestId,
+      error: error.message,
+      errorStack: error.stack,
+      errorName: error.name,
+      responseTime: `${responseTime}ms`
+    });
+    
     res.status(500).json({ success: false, message: 'Server error during check-in' });
   }
 });
