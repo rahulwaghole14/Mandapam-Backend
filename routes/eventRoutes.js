@@ -2140,6 +2140,8 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
               isBuffer: Buffer.isBuffer(pdfBuffer)
             });
             
+            // Send via WhatsApp asynchronously (fire-and-forget)
+            // NOTE: This is NOT awaited - API responds immediately while WhatsApp sends in background
             whatsappService.sendPdfViaWhatsApp(
               cleanPhone,
               pdfBuffer,

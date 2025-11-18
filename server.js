@@ -15,16 +15,15 @@ const { sequelize, testConnection, syncDatabase } = require('./config/database')
 // Import scheduler service
 const schedulerService = require('./services/schedulerService');
 
-// Import WhatsApp worker (only start if Redis is available)
+// Import WhatsApp worker (disabled - using direct calls, no Redis required)
 let whatsappWorkerModule = null;
 let whatsappWorker = null;
 try {
   whatsappWorkerModule = require('./workers/whatsappWorker');
-  // Worker is initialized lazily, so we just check if module loaded
-  console.log('[Server] ✅ WhatsApp worker module loaded');
+  console.log('[Server] ✅ WhatsApp worker module loaded (disabled - using direct calls)');
 } catch (error) {
   console.warn('[Server] ⚠️ WhatsApp worker module not available:', error.message);
-  console.warn('[Server] ⚠️ WhatsApp sending will fall back to direct calls');
+  console.warn('[Server] ⚠️ WhatsApp sending will use direct calls');
 }
 
 // Import routes
@@ -585,16 +584,10 @@ const startServer = async () => {
       // Start scheduler service
       schedulerService.start();
       
-      // WhatsApp worker is automatically started when required (lazy initialization)
+      // WhatsApp worker is disabled - using direct calls (no Redis required)
       if (whatsappWorkerModule) {
-        // Try to get the worker (it may be null if Redis is not available)
         whatsappWorker = whatsappWorkerModule.getWorker();
-        if (whatsappWorker) {
-          console.log('[Server] ✅ WhatsApp worker is running');
-        } else {
-          console.log('[Server] ⚠️ WhatsApp worker not started (Redis may not be available)');
-          console.log('[Server] ⚠️ WhatsApp sending will fall back to direct calls');
-        }
+        console.log('[Server] ✅ WhatsApp sending configured (using direct calls, no queue)');
       }
     });
   } catch (error) {

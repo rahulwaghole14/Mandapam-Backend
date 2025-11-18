@@ -1306,7 +1306,8 @@ router.post('/events/:id/confirm-payment',
             isBuffer: Buffer.isBuffer(pdfBuffer)
           });
           
-          // Send via WhatsApp asynchronously (single attempt, no retries, no timeout)
+          // Send via WhatsApp asynchronously (fire-and-forget)
+          // NOTE: This is NOT awaited - API responds immediately while WhatsApp sends in background
           // This runs in background and can take as long as needed
           whatsappService.sendPdfViaWhatsApp(
             cleanPhone,
