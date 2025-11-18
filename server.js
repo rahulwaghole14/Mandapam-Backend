@@ -16,12 +16,14 @@ const { sequelize, testConnection, syncDatabase } = require('./config/database')
 const schedulerService = require('./services/schedulerService');
 
 // Import WhatsApp worker (only start if Redis is available)
+let whatsappWorkerModule = null;
 let whatsappWorker = null;
 try {
-  whatsappWorker = require('./workers/whatsappWorker');
-  console.log('[Server] ✅ WhatsApp worker loaded');
+  whatsappWorkerModule = require('./workers/whatsappWorker');
+  // Worker is initialized lazily, so we just check if module loaded
+  console.log('[Server] ✅ WhatsApp worker module loaded');
 } catch (error) {
-  console.warn('[Server] ⚠️ WhatsApp worker not available (Redis may not be configured):', error.message);
+  console.warn('[Server] ⚠️ WhatsApp worker module not available:', error.message);
   console.warn('[Server] ⚠️ WhatsApp sending will fall back to direct calls');
 }
 
@@ -583,9 +585,16 @@ const startServer = async () => {
       // Start scheduler service
       schedulerService.start();
       
-      // WhatsApp worker is automatically started when required
-      if (whatsappWorker) {
-        console.log('[Server] ✅ WhatsApp worker is running');
+      // WhatsApp worker is automatically started when required (lazy initialization)
+      if (whatsappWorkerModule) {
+        // Try to get the worker (it may be null if Redis is not available)
+        whatsappWorker = whatsappWorkerModule.getWorker();
+        if (whatsappWorker) {
+          console.log('[Server] ✅ WhatsApp worker is running');
+        } else {
+          console.log('[Server] ⚠️ WhatsApp worker not started (Redis may not be available)');
+          console.log('[Server] ⚠️ WhatsApp sending will fall back to direct calls');
+        }
       }
     });
   } catch (error) {
@@ -606,9 +615,12 @@ process.on('unhandledRejection', (err, promise) => {
 process.on('SIGTERM', async () => {
   console.log('🛑 SIGTERM received, shutting down gracefully...');
   schedulerService.stop();
-  if (whatsappWorker) {
-    await whatsappWorker.close();
-    console.log('[Server] ✅ WhatsApp worker closed');
+  if (whatsappWorkerModule) {
+    whatsappWorker = whatsappWorkerModule.getWorker();
+    if (whatsappWorker) {
+      await whatsappWorker.close();
+      console.log('[Server] ✅ WhatsApp worker closed');
+    }
   }
   process.exit(0);
 });
@@ -616,9 +628,12 @@ process.on('SIGTERM', async () => {
 process.on('SIGINT', async () => {
   console.log('🛑 SIGINT received, shutting down gracefully...');
   schedulerService.stop();
-  if (whatsappWorker) {
-    await whatsappWorker.close();
-    console.log('[Server] ✅ WhatsApp worker closed');
+  if (whatsappWorkerModule) {
+    whatsappWorker = whatsappWorkerModule.getWorker();
+    if (whatsappWorker) {
+      await whatsappWorker.close();
+      console.log('[Server] ✅ WhatsApp worker closed');
+    }
   }
   process.exit(0);
 });
