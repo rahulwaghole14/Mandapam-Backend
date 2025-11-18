@@ -15,6 +15,16 @@ const { sequelize, testConnection, syncDatabase } = require('./config/database')
 // Import scheduler service
 const schedulerService = require('./services/schedulerService');
 
+// Import WhatsApp worker (only start if Redis is available)
+let whatsappWorker = null;
+try {
+  whatsappWorker = require('./workers/whatsappWorker');
+  console.log('[Server] ✅ WhatsApp worker loaded');
+} catch (error) {
+  console.warn('[Server] ⚠️ WhatsApp worker not available (Redis may not be configured):', error.message);
+  console.warn('[Server] ⚠️ WhatsApp sending will fall back to direct calls');
+}
+
 // Import routes
 const authRoutes = require('./routes/authRoutes');
 const vendorRoutes = require('./routes/vendorRoutes');
@@ -573,7 +583,10 @@ const startServer = async () => {
       // Start scheduler service
       schedulerService.start();
       
-      // WhatsApp service is ready (no initialization needed)
+      // WhatsApp worker is automatically started when required
+      if (whatsappWorker) {
+        console.log('[Server] ✅ WhatsApp worker is running');
+      }
     });
   } catch (error) {
     console.error('Failed to start server:', error);
@@ -590,15 +603,23 @@ process.on('unhandledRejection', (err, promise) => {
 });
 
 // Handle graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('🛑 SIGTERM received, shutting down gracefully...');
   schedulerService.stop();
+  if (whatsappWorker) {
+    await whatsappWorker.close();
+    console.log('[Server] ✅ WhatsApp worker closed');
+  }
   process.exit(0);
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('🛑 SIGINT received, shutting down gracefully...');
   schedulerService.stop();
+  if (whatsappWorker) {
+    await whatsappWorker.close();
+    console.log('[Server] ✅ WhatsApp worker closed');
+  }
   process.exit(0);
 });
 

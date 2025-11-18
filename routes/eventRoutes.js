@@ -4,6 +4,7 @@ const { Op } = require('sequelize');
 const path = require('path');
 const Event = require('../models/Event');
 const Member = require('../models/Member');
+const Association = require('../models/Association');
 const EventRegistration = require('../models/EventRegistration');
 const EventExhibitor = require('../models/EventExhibitor');
 const qrService = require('../services/qrService');
@@ -12,6 +13,18 @@ const User = require('../models/User');
 const { protect, authorize, authorizeDistrict } = require('../middleware/authMiddleware');
 const fcmService = require('../services/fcmService');
 const Logger = require('../utils/logger');
+const { sequelize } = require('../config/database');
+const pdfService = require('../services/pdfService');
+const { acquireWhatsAppLock, releaseWhatsAppLock, updateLockToSentTime } = require('../utils/whatsappLock');
+
+// Import queue service (with fallback if Redis not available)
+let whatsappQueue = null;
+try {
+  whatsappQueue = require('../services/whatsappQueue');
+  Logger.info('Event Routes: WhatsApp queue loaded');
+} catch (error) {
+  Logger.warn('Event Routes: WhatsApp queue not available (Redis may not be configured)', { error: error.message });
+}
 const { 
   eventImagesUpload,
   handleMulterError,
@@ -60,6 +73,149 @@ const ensureProfileImageUrl = (value, baseUrl) => {
   const resolvedUrl = getFileUrl(relativePath, baseUrl, 'profile-images');
   return { url: resolvedUrl, stored: relativePath };
 };
+
+// Helper function to resolve association
+async function resolveAssociation(associationId, transaction = null) {
+  if (associationId) {
+    const association = await Association.findByPk(associationId, { transaction });
+    if (!association) {
+      console.error('❌ Association not found:', associationId);
+      throw new Error('Association not found');
+    }
+    return association;
+  }
+
+  // Try to find default association
+  let defaultAssociation = await Association.findOne({
+    where: { name: 'Other Association' },
+    transaction
+  });
+
+  // Auto-create default association if it doesn't exist
+  if (!defaultAssociation) {
+    console.warn('⚠️ Default association "Other Association" not found, creating it...');
+    try {
+      defaultAssociation = await Association.create({
+        name: 'Other Association',
+        city: 'General',
+        district: 'General',
+        state: 'Maharashtra',
+        isActive: true
+      }, { transaction });
+      console.log('✅ Default association created successfully:', defaultAssociation.id);
+    } catch (createError) {
+      console.error('❌ Failed to create default association:', createError);
+      throw new Error('Failed to create default association. Please contact administrator.');
+    }
+  }
+
+  return defaultAssociation;
+}
+
+// Helper function to find or create member
+async function findOrCreateMember(memberData, transaction = null) {
+  const { phone, name, email, businessName, businessType, city, associationId, profileImage } = memberData;
+  
+  // Validate phone format
+  if (!phone || !/^[0-9]{10}$/.test(phone)) {
+    throw new Error('Phone number must be exactly 10 digits');
+  }
+  
+  // Validate required fields
+  if (!name || name.trim().length < 2) {
+    throw new Error('Name must be at least 2 characters');
+  }
+  
+  if (!businessName || businessName.trim().length < 2) {
+    throw new Error('Business name must be at least 2 characters');
+  }
+  
+  if (!businessType) {
+    throw new Error('Business type is required');
+  }
+  
+  // Check if member exists
+  let member = await Member.findOne({
+    where: { phone },
+    transaction
+  });
+  
+  if (member) {
+    const updates = {};
+    if (profileImage && !member.profileImage) {
+      updates.profileImage = profileImage;
+    }
+
+    try {
+      const association = await resolveAssociation(associationId || member.associationId, transaction);
+      if (association?.id) {
+        if (!member.associationId || (associationId && member.associationId !== association.id)) {
+          updates.associationId = association.id;
+        }
+        if (!member.associationName || updates.associationId) {
+          updates.associationName = association.name;
+        }
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await member.update(updates, { transaction });
+      }
+    } catch (updateError) {
+      console.error('❌ Error updating existing member:', updateError);
+    }
+    
+    return { member, isNew: false };
+  }
+  
+  // Create new member
+  try {
+    const association = await resolveAssociation(associationId, transaction);
+    if (!association || !association.id) {
+      throw new Error('Failed to resolve association');
+    }
+    
+    const associationName = association.name;
+    
+    // Double-check for duplicates
+    const duplicateCheck = await Member.findOne({
+      where: { phone },
+      transaction
+    });
+    
+    if (duplicateCheck) {
+      return { member: duplicateCheck, isNew: false };
+    }
+    
+    member = await Member.create({
+      name: name.trim(),
+      phone,
+      email: email ? email.trim() : null,
+      businessName: businessName.trim(),
+      businessType,
+      city: city ? city.trim() : null,
+      associationId: association.id,
+      associationName,
+      profileImage: profileImage || null,
+      isActive: true,
+      isVerified: false
+    }, { transaction });
+    
+    return { member, isNew: true };
+    
+  } catch (createError) {
+    if (createError.name === 'SequelizeUniqueConstraintError' || createError.message?.includes('unique')) {
+      const existingMember = await Member.findOne({
+        where: { phone },
+        transaction
+      });
+      if (existingMember) {
+        return { member: existingMember, isNew: false };
+      }
+    }
+    
+    throw new Error(`Failed to create member: ${createError.message}`);
+  }
+}
 
 // Note: Public routes don't need authentication
 // Authentication is applied individually to protected routes
@@ -1526,6 +1682,624 @@ router.post('/:id/confirm-payment', protect, [
     const errorMessage = error.message || 'Server error while confirming payment';
     res.status(500).json({ 
       success: false, 
+      message: errorMessage,
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// @desc    Create manual registration with cash payment (Manager)
+// @route   POST /api/events/:id/manual-registration
+// @access  Private (admin, manager, sub-admin)
+router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 'sub-admin']), [
+  body('name', 'Name is required').notEmpty().trim(),
+  body('phone', 'Phone number is required').notEmpty().matches(/^[0-9]{10}$/).withMessage('Phone must be 10 digits'),
+  body('businessName', 'Business name is required').notEmpty().trim(),
+  body('businessType', 'Business type is required').isIn(['catering', 'sound', 'mandap', 'madap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
+  body('associationId').optional({ checkFalsy: true }).isInt({ min: 1 }).withMessage('Association ID must be a valid positive integer'),
+  body('photo').optional().custom((value) => {
+    if (!value || value === '' || value === null || value === undefined) return true;
+    if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
+      return value.length <= 500;
+    }
+    return false;
+  }).withMessage('Photo must be a valid Cloudinary URL')
+], async (req, res) => {
+  const requestStartTime = new Date();
+  Logger.info('Manual Registration: ========== REQUEST START ==========', {
+    timestamp: requestStartTime.toISOString(),
+    eventId: req.params.id,
+    userId: req.user?.id,
+    userName: req.user?.name,
+    userRole: req.user?.role,
+    body: {
+      name: req.body.name,
+      phone: req.body.phone,
+      email: req.body.email ? '***' : null,
+      businessName: req.body.businessName,
+      businessType: req.body.businessType,
+      city: req.body.city,
+      associationId: req.body.associationId,
+      hasPhoto: !!req.body.photo
+    }
+  });
+
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      Logger.warn('Manual Registration: Validation failed', { errors: errors.array() });
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const eventId = parseInt(req.params.id, 10);
+    const { name, phone, email, businessName, businessType, city, associationId, photo } = req.body;
+
+    Logger.info('Manual Registration: Request data parsed', {
+      eventId,
+      name,
+      phone,
+      email: email ? '***' : null,
+      businessName,
+      businessType,
+      city,
+      associationId,
+      hasPhoto: !!photo
+    });
+
+    if (isNaN(eventId)) {
+      Logger.error('Manual Registration: Invalid event ID', { eventId: req.params.id });
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid event ID'
+      });
+    }
+
+    // Get event
+    Logger.info('Manual Registration: Fetching event', { eventId });
+    const event = await Event.findOne({
+      where: { id: eventId }
+    });
+
+    if (!event) {
+      Logger.error('Manual Registration: Event not found', { eventId });
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found'
+      });
+    }
+
+    Logger.info('Manual Registration: Event found', {
+      eventId: event.id,
+      eventTitle: event.title || event.name,
+      registrationFee: event.registrationFee
+    });
+
+    const fee = Number(event.registrationFee || 0);
+    const baseUrl = req.protocol + '://' + req.get('host');
+    
+    Logger.info('Manual Registration: Configuration', {
+      fee,
+      baseUrl
+    });
+
+    // Create member and registration in a transaction
+    Logger.info('Manual Registration: Starting transaction');
+    const registrationTransaction = await sequelize.transaction();
+    
+    try {
+      // Find or create member
+      Logger.info('Manual Registration: Finding or creating member', {
+        phone,
+        name,
+        businessName,
+        businessType,
+        city: city || null,
+        associationId: associationId || null,
+        hasPhoto: !!photo
+      });
+
+      const memberResult = await findOrCreateMember({
+        phone,
+        name,
+        email,
+        businessName,
+        businessType,
+        city: city || null,
+        associationId: associationId || null,
+        profileImage: photo || null
+      }, registrationTransaction);
+
+      const { member, isNew: isNewMember } = memberResult;
+      
+      Logger.info('Manual Registration: Member result', {
+        memberId: member.id,
+        memberName: member.name,
+        memberPhone: member.phone,
+        isNewMember,
+        hasPhone: !!member.phone,
+        phoneValue: member.phone || 'NULL'
+      });
+
+      // Check if already registered
+      Logger.info('Manual Registration: Checking for existing registration', {
+        eventId,
+        memberId: member.id
+      });
+
+      const existingRegistration = await EventRegistration.findOne({
+        where: { eventId, memberId: member.id },
+        transaction: registrationTransaction
+      });
+
+      if (existingRegistration) {
+        Logger.warn('Manual Registration: Member already registered', {
+          registrationId: existingRegistration.id,
+          eventId,
+          memberId: member.id
+        });
+        await registrationTransaction.rollback();
+        return res.status(400).json({
+          success: false,
+          message: 'Member is already registered for this event',
+          registrationId: existingRegistration.id
+        });
+      }
+
+      Logger.info('Manual Registration: No existing registration found, creating new');
+
+      // Create registration with cash payment
+      // Note: paymentMethod column doesn't exist yet - will be added via migration
+      Logger.info('Manual Registration: Creating registration', {
+        eventId,
+        memberId: member.id,
+        fee,
+        paymentStatus: 'paid'
+      });
+
+      const registration = await EventRegistration.create({
+        eventId,
+        memberId: member.id,
+        status: 'registered',
+        paymentStatus: 'paid',
+        // paymentMethod: 'cash', // Column doesn't exist in DB yet
+        amountPaid: fee,
+        registeredAt: new Date()
+      }, { transaction: registrationTransaction });
+
+      Logger.info('Manual Registration: Registration created', {
+        registrationId: registration.id,
+        eventId: registration.eventId,
+        memberId: registration.memberId,
+        paymentStatus: registration.paymentStatus,
+        amountPaid: registration.amountPaid
+      });
+
+      // Update event attendee count
+      Logger.info('Manual Registration: Incrementing event attendees', { eventId });
+      await Event.increment('currentAttendees', {
+        where: { id: eventId },
+        transaction: registrationTransaction
+      });
+
+      // Commit transaction
+      Logger.info('Manual Registration: Committing transaction');
+      await registrationTransaction.commit();
+      Logger.info('Manual Registration: Transaction committed successfully');
+
+      // Reload member after transaction to ensure fresh data
+      Logger.info('Manual Registration: Reloading member after transaction', { memberId: member.id });
+      const freshMember = await Member.findByPk(member.id);
+      if (!freshMember) {
+        Logger.error('Manual Registration: Member not found after transaction commit', { memberId: member.id });
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to retrieve member after registration'
+        });
+      }
+
+      Logger.info('Manual Registration: Fresh member loaded', {
+        memberId: freshMember.id,
+        memberName: freshMember.name,
+        memberPhone: freshMember.phone,
+        hasPhone: !!freshMember.phone,
+        phoneType: typeof freshMember.phone,
+        phoneLength: freshMember.phone ? freshMember.phone.length : 0,
+        phoneValue: freshMember.phone || 'NULL'
+      });
+
+      // Generate QR code (outside transaction)
+      let qrDataURL = null;
+      try {
+        qrDataURL = await qrService.generateQrDataURL(registration);
+      } catch (qrError) {
+        Logger.warn('Manual Registration: QR generation failed (non-critical)', { error: qrError.message });
+      }
+
+      // Get profile image URL
+      const profileMeta = ensureProfileImageUrl(
+        freshMember.profileImageURL || freshMember.profileImage || photo || null,
+        baseUrl
+      );
+
+      // Automatically trigger WhatsApp sending for new registrations (same as public registration)
+      // This runs asynchronously and does NOT block the response
+      Logger.info('Manual Registration: Checking auto-send conditions', { 
+        hasMember: !!freshMember, 
+        hasPhone: !!(freshMember && freshMember.phone),
+        phone: freshMember?.phone || 'N/A',
+        registrationId: registration.id
+      });
+      
+      if (freshMember && freshMember.phone) {
+        const autoSendWhatsApp = async () => {
+          try {
+            Logger.info('Manual Registration: Starting auto-send process', { registrationId: registration.id });
+            
+            // Reload registration with associations for PDF generation
+            const registrationForPdf = await EventRegistration.findOne({
+              where: { id: registration.id },
+              include: [
+                {
+                  model: Member,
+                  as: 'member',
+                  required: true
+                },
+                {
+                  model: Event,
+                  as: 'event',
+                  required: true
+                }
+              ]
+            });
+
+            if (!registrationForPdf || !registrationForPdf.member || !registrationForPdf.event) {
+              Logger.error('Manual Registration: Registration or associations not found for WhatsApp send', { 
+                registrationId: registration.id,
+                hasRegistration: !!registrationForPdf,
+                hasMember: !!(registrationForPdf && registrationForPdf.member),
+                hasEvent: !!(registrationForPdf && registrationForPdf.event)
+              });
+              return;
+            }
+            
+            Logger.info('Manual Registration: Registration loaded with associations', {
+              registrationId: registration.id,
+              memberPhone: registrationForPdf.member?.phone || 'N/A',
+              memberName: registrationForPdf.member?.name || 'N/A',
+              eventTitle: registrationForPdf.event?.title || registrationForPdf.event?.name || 'N/A'
+            });
+
+            // NOTE: Don't acquire lock here when using queue - the worker will acquire it
+            // Only check if already sent to avoid unnecessary processing
+            const preCheck = await EventRegistration.findByPk(registration.id, {
+              attributes: ['id', 'pdfSentAt']
+            });
+            
+            if (preCheck && preCheck.pdfSentAt) {
+              Logger.info('Manual Registration: WhatsApp already sent, skipping', { 
+                registrationId: registration.id, 
+                pdfSentAt: preCheck.pdfSentAt 
+              });
+              return;
+            }
+            
+            Logger.info('Manual Registration: Pre-check passed, proceeding with WhatsApp send', { registrationId: registration.id });
+
+            // Validate and clean phone number
+            Logger.info('Manual Registration: Validating phone number', {
+              registrationId: registration.id,
+              rawPhone: registrationForPdf.member.phone,
+              phoneType: typeof registrationForPdf.member.phone,
+              hasPhone: !!registrationForPdf.member.phone
+            });
+
+            const phoneRegex = /^[6-9]\d{9}$/;
+            const cleanPhone = registrationForPdf.member.phone?.trim().replace(/^\+91|^91/, '') || '';
+            
+            Logger.info('Manual Registration: Phone number cleaned', {
+              registrationId: registration.id,
+              rawPhone: registrationForPdf.member.phone,
+              cleanPhone,
+              cleanPhoneLength: cleanPhone.length,
+              matchesRegex: phoneRegex.test(cleanPhone)
+            });
+
+            if (!phoneRegex.test(cleanPhone)) {
+              Logger.error('Manual Registration: Invalid phone number format', { 
+                registrationId: registration.id, 
+                rawPhone: registrationForPdf.member.phone,
+                cleanPhone,
+                cleanPhoneLength: cleanPhone.length
+              });
+              await releaseWhatsAppLock(registration.id);
+              return;
+            }
+            
+            const memberName = registrationForPdf.member.name || '';
+            const startTime = new Date();
+            Logger.info('Manual Registration: Starting WhatsApp send', { 
+              registrationId: registration.id, 
+              phone: cleanPhone, 
+              memberName,
+              timestamp: startTime.toISOString()
+            });
+            
+            // Generate PDF on-demand as buffer
+            Logger.info('Manual Registration: Starting PDF generation', {
+              registrationId: registration.id,
+              eventId: registrationForPdf.event?.id,
+              eventTitle: registrationForPdf.event?.title || registrationForPdf.event?.name,
+              memberId: registrationForPdf.member?.id,
+              memberName: registrationForPdf.member?.name,
+              baseUrl
+            });
+
+            let pdfBuffer = null;
+            try {
+              const pdfStartTime = Date.now();
+              pdfBuffer = await pdfService.generateVisitorPassPDFAsBuffer(
+                registrationForPdf,
+                registrationForPdf.event,
+                registrationForPdf.member,
+                baseUrl
+              );
+              const pdfTime = Date.now() - pdfStartTime;
+              Logger.info('Manual Registration: PDF generated successfully', { 
+                registrationId: registration.id, 
+                sizeKB: (pdfBuffer.length / 1024).toFixed(2), 
+                sizeBytes: pdfBuffer.length,
+                durationMs: pdfTime,
+                isBuffer: Buffer.isBuffer(pdfBuffer),
+                bufferType: typeof pdfBuffer
+              });
+            } catch (pdfError) {
+              Logger.error('Manual Registration: PDF generation failed', pdfError, { 
+                registrationId: registration.id,
+                errorMessage: pdfError.message,
+                errorStack: pdfError.stack
+              });
+              await releaseWhatsAppLock(registration.id);
+              return;
+            }
+            
+            // Use queue if available
+            if (whatsappQueue && typeof whatsappQueue.addWhatsAppJob === 'function') {
+              try {
+                Logger.info('Manual Registration: Adding job to queue', { registrationId: registration.id });
+                const job = await whatsappQueue.addWhatsAppJob({
+                  phoneNumber: cleanPhone,
+                  pdfBuffer: pdfBuffer,
+                  memberName: memberName,
+                  registrationId: registration.id,
+                  eventId: registration.eventId,
+                  userId: req.user.id // Manager/admin who created the registration
+                });
+                
+                Logger.info('Manual Registration: Job added to queue', { 
+                  registrationId: registration.id, 
+                  jobId: job.id,
+                  timestamp: new Date().toISOString()
+                });
+                return; // Queue will handle the rest
+              } catch (queueError) {
+                Logger.error('Manual Registration: Failed to add job to queue', queueError, { 
+                  registrationId: registration.id,
+                  errorMessage: queueError.message,
+                  errorStack: queueError.stack
+                });
+                Logger.info('Manual Registration: Falling back to direct call', { registrationId: registration.id });
+                // Fall through to direct call
+              }
+            } else {
+              Logger.info('Manual Registration: Queue not available, using direct call', { 
+                registrationId: registration.id,
+                hasQueue: !!whatsappQueue,
+                hasAddJob: !!(whatsappQueue && whatsappQueue.addWhatsAppJob)
+              });
+            }
+            
+            // Fallback: Direct WhatsApp call (async, single attempt, no retries)
+            // For direct call, we need to acquire lock here (worker doesn't handle it)
+            Logger.info('Manual Registration: Using direct WhatsApp call, acquiring lock', { 
+              registrationId: registration.id,
+              phone: cleanPhone,
+              memberName
+            });
+            
+            const lockResult = await acquireWhatsAppLock(registration.id);
+            
+            if (!lockResult.acquired) {
+              if (lockResult.reason === 'already_sent') {
+                Logger.info('Manual Registration: WhatsApp already sent (direct call)', { 
+                  registrationId: registration.id, 
+                  pdfSentAt: lockResult.pdfSentAt 
+                });
+              } else {
+                Logger.warn('Manual Registration: Could not acquire lock for direct call', { 
+                  registrationId: registration.id, 
+                  reason: lockResult.reason 
+                });
+              }
+              return;
+            }
+            
+            Logger.info('Manual Registration: Lock acquired for direct WhatsApp call', { registrationId: registration.id });
+            
+            const whatsappService = require('../services/whatsappService');
+            Logger.info('Manual Registration: Calling whatsappService.sendPdfViaWhatsApp', {
+              registrationId: registration.id,
+              phone: cleanPhone,
+              memberName,
+              pdfBufferSize: pdfBuffer.length,
+              pdfBufferSizeKB: (pdfBuffer.length / 1024).toFixed(2),
+              pdfBufferType: typeof pdfBuffer,
+              isBuffer: Buffer.isBuffer(pdfBuffer)
+            });
+            
+            whatsappService.sendPdfViaWhatsApp(
+              cleanPhone,
+              pdfBuffer,
+              memberName
+            ).then(async (result) => {
+              const endTime = new Date();
+              const duration = endTime.getTime() - startTime.getTime();
+              
+              Logger.info('Manual Registration: WhatsApp service call completed', {
+                registrationId: registration.id,
+                success: result.success,
+                hasError: !!result.error,
+                error: result.error || null,
+                durationMs: duration,
+                timestamp: endTime.toISOString()
+              });
+              
+              if (result.success) {
+                Logger.info('Manual Registration: WhatsApp sent successfully', { 
+                  registrationId: registration.id, 
+                  durationMs: duration,
+                  timestamp: endTime.toISOString()
+                });
+                
+                Logger.info('Manual Registration: Updating pdfSentAt', { registrationId: registration.id });
+                const updateResult = await updateLockToSentTime(registration.id);
+                
+                if (!updateResult.updated) {
+                  Logger.warn('Manual Registration: Lock was released by another process', { registrationId: registration.id });
+                } else {
+                  Logger.info('Manual Registration: pdfSentAt updated successfully', { 
+                    registrationId: registration.id, 
+                    pdfSentAt: updateResult.actualSentTime.toISOString()
+                  });
+                }
+
+                // Notify manager who created the registration
+                Logger.info('Manual Registration: Notifying manager', {
+                  registrationId: registration.id,
+                  userId: req.user.id
+                });
+                const { notifyManagerOnWhatsAppSent } = require('../routes/publicEventRoutes');
+                await notifyManagerOnWhatsAppSent(req.user.id, registrationForPdf, registrationForPdf.event, registrationForPdf.member);
+                Logger.info('Manual Registration: Manager notification sent', { registrationId: registration.id });
+              } else {
+                Logger.error('Manual Registration: WhatsApp send failed', null, { 
+                  registrationId: registration.id, 
+                  durationMs: duration,
+                  error: result.error || 'Unknown error',
+                  resultData: result
+                });
+                Logger.info('Manual Registration: Releasing lock due to failure', { registrationId: registration.id });
+                await releaseWhatsAppLock(registration.id);
+              }
+            }).catch(async (whatsappError) => {
+              const endTime = new Date();
+              const duration = endTime.getTime() - startTime.getTime();
+              Logger.error('Manual Registration: Exception sending WhatsApp', whatsappError, { 
+                registrationId: registration.id, 
+                durationMs: duration,
+                errorMessage: whatsappError.message,
+                errorStack: whatsappError.stack,
+                errorName: whatsappError.name
+              });
+              Logger.info('Manual Registration: Releasing lock due to exception', { registrationId: registration.id });
+              await releaseWhatsAppLock(registration.id);
+            });
+            
+            Logger.info('Manual Registration: WhatsApp send initiated asynchronously (non-blocking)', { 
+              registrationId: registration.id,
+              timestamp: new Date().toISOString()
+            });
+          } catch (error) {
+            Logger.error('Manual Registration: Error in auto-send function', error, { registrationId: registration.id });
+            await releaseWhatsAppLock(registration.id);
+          }
+        };
+        
+        // Run auto-send in background (don't await - non-blocking)
+        autoSendWhatsApp().catch((error) => {
+          Logger.error('Manual Registration: Exception in auto-send function', error, { registrationId: registration.id });
+        });
+      } else {
+        Logger.warn('Manual Registration: WhatsApp auto-send skipped', {
+          hasMember: !!freshMember,
+          hasPhone: !!(freshMember && freshMember.phone),
+          phone: freshMember?.phone || 'N/A',
+          registrationId: registration.id
+        });
+      }
+
+      const requestEndTime = new Date();
+      const totalDuration = requestEndTime.getTime() - requestStartTime.getTime();
+      
+      Logger.info('Manual Registration: ========== RESPONSE SENT ==========', {
+        timestamp: requestEndTime.toISOString(),
+        registrationId: registration.id,
+        memberId: freshMember.id,
+        memberPhone: freshMember.phone,
+        totalDurationMs: totalDuration,
+        whatsappAutoSendTriggered: !!(freshMember && freshMember.phone)
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'Manual registration created successfully with cash payment',
+        registration: {
+          id: registration.id,
+          eventId: registration.eventId,
+          memberId: registration.memberId,
+          status: registration.status,
+          paymentStatus: registration.paymentStatus,
+          paymentMethod: 'cash', // Hardcoded for now until column is added
+          amountPaid: registration.amountPaid,
+          registeredAt: registration.registeredAt
+        },
+        member: {
+          id: freshMember.id,
+          name: freshMember.name,
+          phone: freshMember.phone,
+          email: freshMember.email || null,
+          businessName: freshMember.businessName,
+          businessType: freshMember.businessType,
+          profileImage: profileMeta.stored || freshMember.profileImage || null,
+          profileImageURL: profileMeta.url,
+          isNew: isNewMember
+        },
+        qrDataURL
+      });
+
+    } catch (transactionError) {
+      Logger.error('Manual Registration: Transaction error', transactionError, {
+        eventId: req.params.id,
+        memberId: member?.id,
+        errorMessage: transactionError.message,
+        errorStack: transactionError.stack
+      });
+      await registrationTransaction.rollback();
+      Logger.info('Manual Registration: Transaction rolled back');
+      throw transactionError;
+    }
+
+  } catch (error) {
+    const requestEndTime = new Date();
+    const totalDuration = requestEndTime.getTime() - requestStartTime.getTime();
+    
+    Logger.error('Manual Registration: ========== ERROR ==========', {
+      timestamp: requestEndTime.toISOString(),
+      totalDurationMs: totalDuration,
+      errorMessage: error.message,
+      errorStack: error.stack,
+      errorName: error.name,
+      eventId: req.params.id,
+      userId: req.user?.id
+    });
+    
+    console.error('Manual registration error:', error);
+    const errorMessage = error.message || 'Server error while creating manual registration';
+    res.status(500).json({
+      success: false,
       message: errorMessage,
       error: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });

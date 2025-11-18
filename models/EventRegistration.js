@@ -56,6 +56,13 @@ const EventRegistration = sequelize.define('EventRegistration', {
     allowNull: true,
     field: 'payment_id'
   },
+  // paymentMethod: Temporarily commented out - column doesn't exist in DB yet
+  // Will be added via migration: ALTER TABLE event_registrations ADD COLUMN payment_method VARCHAR(20);
+  // paymentMethod: {
+  //   type: DataTypes.ENUM('razorpay', 'cash', 'free'),
+  //   allowNull: true,
+  //   field: 'payment_method'
+  // },
   registeredAt: {
     type: DataTypes.DATE,
     allowNull: false,

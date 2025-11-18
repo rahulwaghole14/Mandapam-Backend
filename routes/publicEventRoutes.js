@@ -5,10 +5,26 @@ const Member = require('../models/Member');
 const Association = require('../models/Association');
 const EventRegistration = require('../models/EventRegistration');
 const EventExhibitor = require('../models/EventExhibitor');
+const User = require('../models/User');
+const NotificationLog = require('../models/NotificationLog');
 const qrService = require('../services/qrService');
 const paymentService = require('../services/paymentService');
 const whatsappService = require('../services/whatsappService');
 const pdfService = require('../services/pdfService');
+const { WHATSAPP_LOCK_TIMESTAMP } = require('../utils/whatsappConstants');
+const { acquireWhatsAppLock, releaseWhatsAppLock, updateLockToSentTime } = require('../utils/whatsappLock');
+const { whatsappRateLimiter, paymentConfirmationRateLimiter } = require('../middleware/whatsappRateLimiter');
+const Logger = require('../utils/logger');
+
+// Import queue service (with fallback if Redis not available)
+let whatsappQueue = null;
+try {
+  whatsappQueue = require('../services/whatsappQueue');
+  console.log('[Public Event Routes] ✅ WhatsApp queue loaded');
+} catch (error) {
+  console.warn('[Public Event Routes] ⚠️ WhatsApp queue not available (Redis may not be configured):', error.message);
+  console.warn('[Public Event Routes] ⚠️ Will use direct WhatsApp calls');
+}
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 const fs = require('fs');
@@ -20,6 +36,60 @@ const {
 } = require('../config/multerConfig');
 
 const router = express.Router();
+
+/**
+ * Notify the user who sent the WhatsApp message (the manager who clicked "Send Pass")
+ * @param {Object} userId - The ID of the user who sent the WhatsApp (from authentication)
+ * @param {Object} registration - Registration object
+ * @param {Object} event - Event object
+ * @param {Object} member - Member object
+ */
+async function notifyManagerOnWhatsAppSent(userId, registration, event, member) {
+  try {
+    if (!userId) {
+      console.log('[Manager Notification] No user ID provided - skipping notification (likely auto-send)');
+      return;
+    }
+
+    // Find the user who sent the WhatsApp
+    const sender = await User.findByPk(userId);
+    
+    if (!sender) {
+      console.log(`[Manager Notification] User not found (ID: ${userId})`);
+      return;
+    }
+
+    // Only notify if user is active
+    if (!sender.isActive) {
+      console.log(`[Manager Notification] User is inactive (ID: ${userId})`);
+      return;
+    }
+
+    const memberName = member?.name || 'Guest';
+    const eventTitle = event?.title || event?.name || 'Event';
+    const phone = member?.phone || 'N/A';
+
+    // Create notification for the user who sent the WhatsApp
+    try {
+      await NotificationLog.create({
+        userId: sender.id,
+        title: 'WhatsApp Pass Sent',
+        message: `Visitor pass sent via WhatsApp to ${memberName} (${phone}) for event "${eventTitle}"`,
+        type: 'event',
+        eventId: event?.id || null,
+        status: 'sent',
+        sentAt: new Date()
+      });
+      console.log(`[Manager Notification] ✅ Notification created for user ${sender.name} (ID: ${sender.id})`);
+    } catch (notifError) {
+      console.error(`[Manager Notification] ❌ Failed to create notification for user ${sender.id}:`, notifError.message);
+      // Don't throw - this is a non-critical operation
+    }
+  } catch (error) {
+    console.error('[Manager Notification] ❌ Error notifying user:', error.message);
+    // Don't throw - this is a non-critical operation
+  }
+}
 
 // Helper function to generate QR code with retry logic
 async function generateQrWithRetry(registration, context = 'registration') {
@@ -815,12 +885,15 @@ router.post('/events/:id/register-payment',
 // @desc    Confirm payment and create registration (Public)
 // @route   POST /api/public/events/:id/confirm-payment
 // @access  Public
-router.post('/events/:id/confirm-payment', [
-  body('memberId', 'Member ID is required').isInt({ min: 1 }),
-  body('razorpay_order_id', 'Razorpay order ID is required').notEmpty(),
-  body('razorpay_payment_id', 'Razorpay payment ID is required').notEmpty(),
-  body('razorpay_signature', 'Razorpay signature is required').notEmpty()
-], async (req, res) => {
+router.post('/events/:id/confirm-payment', 
+  paymentConfirmationRateLimiter, // Rate limiting
+  [
+    body('memberId', 'Member ID is required').isInt({ min: 1 }),
+    body('razorpay_order_id', 'Razorpay order ID is required').notEmpty(),
+    body('razorpay_payment_id', 'Razorpay payment ID is required').notEmpty(),
+    body('razorpay_signature', 'Razorpay signature is required').notEmpty()
+  ], 
+  async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -997,148 +1070,322 @@ router.post('/events/:id/confirm-payment', [
 
     // Automatically trigger WhatsApp sending for new registrations OR existing registrations that never received WhatsApp
     // This runs asynchronously and does NOT block the payment confirmation response
+    Logger.info('Payment Confirmation: Checking WhatsApp auto-send conditions', {
+      shouldSendWhatsApp,
+      hasMember: !!member,
+      hasPhone: !!(member && member.phone),
+      phone: member?.phone || 'N/A',
+      registrationId: registration.id,
+      isNewRegistration
+    });
+
     if (shouldSendWhatsApp && member && member.phone) {
-      const registrationType = isNewRegistration ? 'NEW' : 'EXISTING (first payment/WhatsApp)';
-      console.log(`[Auto-Send] ${registrationType} registration - will send WhatsApp for registration ${registration.id}`);
-      console.log(`[Auto-Send] Member: ${member.name || 'N/A'}, Phone: ${member.phone}`);
+      // CRITICAL: Check pdfSentAt BEFORE starting auto-send to prevent duplicate triggers
+      // This is an additional safety check before the async function runs
+      Logger.info('Payment Confirmation: Pre-checking pdfSentAt', { registrationId: registration.id });
+      const preCheck = await EventRegistration.findByPk(registration.id, {
+        attributes: ['id', 'pdfSentAt']
+      });
       
-      // Call services directly (no HTTP overhead, no timeout issues)
-      // Run in background (don't await - non-blocking)
-      const autoSendWithRetry = async () => {
-        try {
-          const maxRetries = 3;
-          const retryDelays = [2000, 5000, 10000]; // 2s, 5s, 10s
+      if (preCheck && preCheck.pdfSentAt) {
+        Logger.warn('Payment Confirmation: WhatsApp already sent, skipping auto-send', {
+          registrationId: registration.id,
+          pdfSentAt: preCheck.pdfSentAt
+        });
+        // Update shouldSendWhatsApp flag to false for response
+        shouldSendWhatsApp = false;
+      } else {
+        const registrationType = isNewRegistration ? 'NEW' : 'EXISTING (first payment/WhatsApp)';
+        Logger.info(`Payment Confirmation: ${registrationType} registration - will send WhatsApp`, {
+          registrationId: registration.id,
+          memberName: member.name || 'N/A',
+          memberPhone: member.phone,
+          registrationType
+        });
+        
+        // CRITICAL: Use database-level lock to prevent concurrent sends
+        const autoSendWithRetry = async () => {
+          try {
+            // NOTE: Don't acquire lock here when using queue - the worker will acquire it
+            // Only check if already sent to avoid unnecessary processing
+            const preCheck = await EventRegistration.findByPk(registration.id, {
+              attributes: ['id', 'pdfSentAt']
+            });
+            
+            if (preCheck && preCheck.pdfSentAt) {
+              Logger.info('Auto-Send: WhatsApp already sent, skipping', { 
+                registrationId: registration.id, 
+                pdfSentAt: preCheck.pdfSentAt 
+              });
+              return;
+            }
+            
+            Logger.info('Auto-Send: Pre-check passed, proceeding with WhatsApp send', { registrationId: registration.id });
           
-          // Reload registration with associations to ensure we have fresh data
-          const registrationForPdf = await EventRegistration.findOne({
-            where: { id: registration.id },
-            include: [
-              {
-                model: Member,
-                as: 'member',
-                required: true
-              },
-              {
-                model: Event,
-                as: 'event',
-                required: true
-              }
-            ]
-          });
+          // Cache registration data - reuse the registration object we already have
+          // Only reload if we need fresh associations (member/event)
+          let registrationForPdf = registration;
+          
+          // Check if we already have member and event loaded
+          if (!registration.member || !registration.event) {
+            // Only reload if associations are missing
+            registrationForPdf = await EventRegistration.findOne({
+              where: { id: registration.id },
+              include: [
+                {
+                  model: Member,
+                  as: 'member',
+                  required: true
+                },
+                {
+                  model: Event,
+                  as: 'event',
+                  required: true
+                }
+              ]
+            });
+          }
           
           if (!registrationForPdf || !registrationForPdf.member || !registrationForPdf.event) {
-            console.error(`[Auto-Send] Registration or associations not found for registration ${registration.id}`);
-            return;
+            Logger.error('Auto-Send: Registration or associations not found', { registrationId: registration.id });
+            return; // No lock to release since we didn't acquire it
           }
           
           // Validate and clean phone number
+          Logger.info('Auto-Send: Validating phone number', {
+            registrationId: registration.id,
+            rawPhone: registrationForPdf.member.phone,
+            phoneType: typeof registrationForPdf.member.phone,
+            hasPhone: !!registrationForPdf.member.phone
+          });
+
           const phoneRegex = /^[6-9]\d{9}$/;
           const cleanPhone = registrationForPdf.member.phone?.trim().replace(/^\+91|^91/, '') || '';
+          
+          Logger.info('Auto-Send: Phone number cleaned', {
+            registrationId: registration.id,
+            rawPhone: registrationForPdf.member.phone,
+            cleanPhone,
+            cleanPhoneLength: cleanPhone.length,
+            matchesRegex: phoneRegex.test(cleanPhone)
+          });
+
           if (!phoneRegex.test(cleanPhone)) {
-            console.error(`[Auto-Send] Invalid phone number format: ${registrationForPdf.member.phone}`);
-            return;
+            Logger.error('Auto-Send: Invalid phone number format', { 
+              registrationId: registration.id, 
+              rawPhone: registrationForPdf.member.phone,
+              cleanPhone,
+              cleanPhoneLength: cleanPhone.length
+            });
+            return; // No lock to release - worker will handle it or we'll acquire for direct call
           }
           
           const memberName = registrationForPdf.member.name || '';
-          let pdfFilePath = null;
+          const startTime = new Date();
+          Logger.info('Auto-Send: Starting WhatsApp send', { 
+            registrationId: registration.id, 
+            phone: cleanPhone, 
+            memberName,
+            timestamp: startTime.toISOString()
+          });
           
-          for (let attempt = 0; attempt < maxRetries; attempt++) {
-            try {
-              console.log(`[Auto-Send] Attempt ${attempt + 1}/${maxRetries} for registration ${registration.id}`);
-            
-              // Generate PDF on-demand (only on first attempt or if previous attempt failed)
-              if (!pdfFilePath || attempt > 0) {
-                try {
-                  const pdfFileInfo = await pdfService.generateAndSavePDF(
-                    registrationForPdf,
-                    registrationForPdf.event,
-                    registrationForPdf.member,
-                    baseUrl
-                  );
-                  pdfFilePath = pdfFileInfo.filePath;
-                  console.log(`[Auto-Send] PDF generated: ${pdfFilePath} (${(pdfFileInfo.buffer.length / 1024).toFixed(2)} KB)`);
-                } catch (pdfError) {
-                  console.error(`[Auto-Send] PDF generation failed:`, pdfError.message);
-                  // If PDF generation fails, we can't send WhatsApp
-                  return;
-                }
-              }
-              
-              // Send via WhatsApp
-              const result = await whatsappService.sendPdfViaWhatsApp(
-                cleanPhone,
-                pdfFilePath,
-                memberName
-              );
-              
-              if (result.success) {
-                console.log(`[Auto-Send] ✅ Success on attempt ${attempt + 1} for registration ${registration.id}`);
-                
-                // Update registration to mark WhatsApp as sent
-                await registrationForPdf.update({
-                  pdfSentAt: new Date()
-                });
-                
-                // Delete PDF file after successful send
-                if (pdfFilePath) {
-                  pdfService.deletePDFFile(pdfFilePath);
-                  console.log(`[Auto-Send] ✅ PDF file deleted after successful send`);
-                }
-                
-                return; // Success, exit
-              } else {
-                console.error(`[Auto-Send] ❌ Attempt ${attempt + 1}/${maxRetries} failed:`, result.error);
-                
-                // If it's the last attempt, cleanup and exit
-                if (attempt === maxRetries - 1) {
-                  console.error(`[Auto-Send] ❌ All ${maxRetries} attempts failed for registration ${registration.id}`);
-                  // Cleanup PDF file on final failure
-                  if (pdfFilePath) {
-                    pdfService.deletePDFFile(pdfFilePath);
-                    console.log(`[Auto-Send] 🗑️ PDF file deleted after failed send (cleanup)`);
-                  }
-                  return;
-                }
-                
-                // Wait before retrying
-                const delay = retryDelays[attempt] || 10000;
-                console.log(`[Auto-Send] ⏳ Retrying in ${delay}ms...`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-              }
-            } catch (whatsappError) {
-              console.error(`[Auto-Send] ❌ Exception on attempt ${attempt + 1}/${maxRetries}:`, whatsappError.message);
-              
-              // If it's the last attempt, cleanup and exit
-              if (attempt === maxRetries - 1) {
-                console.error(`[Auto-Send] ❌ All ${maxRetries} attempts failed with exceptions for registration ${registration.id}`);
-                // Cleanup PDF file on final failure
-                if (pdfFilePath) {
-                  pdfService.deletePDFFile(pdfFilePath);
-                  console.log(`[Auto-Send] 🗑️ PDF file deleted after exception (cleanup)`);
-                }
-                return;
-              }
-              
-              // Wait before retrying
-              const delay = retryDelays[attempt] || 10000;
-              console.log(`[Auto-Send] ⏳ Retrying after exception in ${delay}ms...`);
-              await new Promise(resolve => setTimeout(resolve, delay));
-            }
+          // Generate PDF on-demand as buffer (no temp files - stream-based)
+          Logger.info('Auto-Send: Starting PDF generation', {
+            registrationId: registration.id,
+            eventId: registrationForPdf.event?.id,
+            eventTitle: registrationForPdf.event?.title || registrationForPdf.event?.name,
+            memberId: registrationForPdf.member?.id,
+            memberName: registrationForPdf.member?.name,
+            baseUrl
+          });
+
+          let pdfBuffer = null;
+          try {
+            const pdfStartTime = Date.now();
+            pdfBuffer = await pdfService.generateVisitorPassPDFAsBuffer(
+              registrationForPdf,
+              registrationForPdf.event,
+              registrationForPdf.member,
+              baseUrl
+            );
+            const pdfTime = Date.now() - pdfStartTime;
+            Logger.info('Auto-Send: PDF generated successfully', { 
+              registrationId: registration.id, 
+              sizeKB: (pdfBuffer.length / 1024).toFixed(2),
+              sizeBytes: pdfBuffer.length,
+              durationMs: pdfTime,
+              isBuffer: Buffer.isBuffer(pdfBuffer),
+              bufferType: typeof pdfBuffer
+            });
+          } catch (pdfError) {
+            Logger.error('Auto-Send: PDF generation failed', pdfError, { 
+              registrationId: registration.id,
+              errorMessage: pdfError.message,
+              errorStack: pdfError.stack
+            });
+            return; // No lock to release - worker will handle it or we'll acquire for direct call
           }
+          
+          // Use queue if available (single attempt, no retries)
+          // Worker will acquire lock when processing the job
+          if (whatsappQueue && typeof whatsappQueue.addWhatsAppJob === 'function') {
+            try {
+              Logger.info('Auto-Send: Adding job to queue (worker will acquire lock)', { 
+                registrationId: registration.id,
+                phone: cleanPhone,
+                memberName,
+                pdfBufferSize: pdfBuffer.length
+              });
+              const job = await whatsappQueue.addWhatsAppJob({
+                phoneNumber: cleanPhone,
+                pdfBuffer: pdfBuffer,
+                memberName: memberName,
+                registrationId: registration.id,
+                eventId: registration.eventId,
+                userId: null // Auto-send has no authenticated user
+              });
+              
+              Logger.info('Auto-Send: Job added to queue successfully', { 
+                registrationId: registration.id, 
+                jobId: job.id,
+                timestamp: new Date().toISOString()
+              });
+              // Worker will handle lock acquisition and sending
+              return; // Exit - queue will handle the rest asynchronously
+            } catch (queueError) {
+              Logger.error('Auto-Send: Failed to add job to queue', queueError, { 
+                registrationId: registration.id,
+                errorMessage: queueError.message,
+                errorStack: queueError.stack
+              });
+              Logger.info('Auto-Send: Falling back to direct WhatsApp call', { registrationId: registration.id });
+              // Fall through to direct call - will acquire lock here
+            }
+          } else {
+            Logger.info('Auto-Send: Queue not available, using direct call', { 
+              registrationId: registration.id,
+              hasQueue: !!whatsappQueue,
+              hasAddJob: !!(whatsappQueue && whatsappQueue.addWhatsAppJob)
+            });
+          }
+          
+          // Fallback: Direct WhatsApp call (async, single attempt, no retries)
+          // For direct call, we need to acquire lock here (worker doesn't handle it)
+          Logger.info('Auto-Send: Using direct WhatsApp call, acquiring lock', { 
+            registrationId: registration.id,
+            phone: cleanPhone,
+            memberName
+          });
+          
+          const lockResult = await acquireWhatsAppLock(registration.id);
+          
+          if (!lockResult.acquired) {
+            if (lockResult.reason === 'already_sent') {
+              Logger.info('Auto-Send: WhatsApp already sent (direct call)', { 
+                registrationId: registration.id, 
+                pdfSentAt: lockResult.pdfSentAt 
+              });
+            } else {
+              Logger.warn('Auto-Send: Could not acquire lock for direct call', { 
+                registrationId: registration.id, 
+                reason: lockResult.reason 
+              });
+            }
+            return;
+          }
+          
+          Logger.info('Auto-Send: Lock acquired for direct WhatsApp call', { registrationId: registration.id });
+          
+          Logger.info('Auto-Send: Calling whatsappService.sendPdfViaWhatsApp', {
+            registrationId: registration.id,
+            phone: cleanPhone,
+            memberName,
+            pdfBufferSize: pdfBuffer.length,
+            pdfBufferSizeKB: (pdfBuffer.length / 1024).toFixed(2),
+            pdfBufferType: typeof pdfBuffer,
+            isBuffer: Buffer.isBuffer(pdfBuffer)
+          });
+          
+          // Send via WhatsApp asynchronously (single attempt, no retries, no timeout)
+          // This runs in background and can take as long as needed
+          whatsappService.sendPdfViaWhatsApp(
+            cleanPhone,
+            pdfBuffer,
+            memberName
+          ).then(async (result) => {
+            const endTime = new Date();
+            const duration = endTime.getTime() - startTime.getTime();
+            
+            Logger.info('Auto-Send: WhatsApp service call completed', {
+              registrationId: registration.id,
+              success: result.success,
+              hasError: !!result.error,
+              error: result.error || null,
+              durationMs: duration,
+              timestamp: endTime.toISOString()
+            });
+            
+            if (result.success) {
+              Logger.info('Auto-Send: WhatsApp sent successfully', { 
+                registrationId: registration.id, 
+                durationMs: duration,
+                timestamp: endTime.toISOString()
+              });
+              
+              Logger.info('Auto-Send: Updating pdfSentAt', { registrationId: registration.id });
+              const updateResult = await updateLockToSentTime(registration.id);
+              
+              if (!updateResult.updated) {
+                Logger.warn('Auto-Send: Lock was released by another process', { registrationId: registration.id });
+              } else {
+                Logger.info('Auto-Send: pdfSentAt updated successfully', { 
+                  registrationId: registration.id, 
+                  pdfSentAt: updateResult.actualSentTime.toISOString()
+                });
+              }
+            } else {
+              Logger.error('Auto-Send: WhatsApp send failed', null, { 
+                registrationId: registration.id, 
+                durationMs: duration,
+                error: result.error || 'Unknown error',
+                resultData: result
+              });
+              Logger.info('Auto-Send: Releasing lock due to failure', { registrationId: registration.id });
+              await releaseWhatsAppLock(registration.id);
+            }
+          }).catch(async (whatsappError) => {
+            const endTime = new Date();
+            const duration = endTime.getTime() - startTime.getTime();
+            Logger.error('Auto-Send: Exception sending WhatsApp', whatsappError, { 
+              registrationId: registration.id, 
+              durationMs: duration,
+              errorMessage: whatsappError.message,
+              errorStack: whatsappError.stack,
+              errorName: whatsappError.name
+            });
+            Logger.info('Auto-Send: Releasing lock due to exception', { registrationId: registration.id });
+            await releaseWhatsAppLock(registration.id);
+          });
+          
+          // Return immediately - WhatsApp sending happens asynchronously
+          Logger.info('Auto-Send: WhatsApp send initiated asynchronously (non-blocking)', { 
+            registrationId: registration.id,
+            timestamp: new Date().toISOString()
+          });
+          return; // Exit immediately, send happens in background
         } catch (outerError) {
           // Catch any errors in the outer try block (e.g., database errors)
-          console.error(`[Auto-Send] ❌ Outer exception for registration ${registration.id}:`, outerError.message);
+          Logger.error('Auto-Send: Outer exception', outerError, { registrationId: registration.id });
+          await releaseWhatsAppLock(registration.id);
         }
       };
       
-      // Run auto-send in background (don't await - non-blocking)
-      // This ensures payment confirmation response is sent immediately
-      // No timeout issues because we're calling services directly, not making HTTP calls
-      autoSendWithRetry().catch((whatsappError) => {
-        console.error(`[Auto-Send] ❌ EXCEPTION for registration ${registration.id}`);
-        console.error(`[Auto-Send] Error: ${whatsappError.message || 'Unknown error'}`);
-        console.error(`[Auto-Send] ⚠️ WhatsApp sending failed. Can be retried via send-whatsapp endpoint.`);
-      });
+        // Run auto-send in background (don't await - non-blocking)
+        // This ensures payment confirmation response is sent immediately
+        autoSendWithRetry().catch((whatsappError) => {
+          Logger.error('Auto-Send: Exception in auto-send function', whatsappError, { registrationId: registration.id });
+        });
+      }
     }
 
     // Always return success if registration was created
@@ -1179,147 +1426,19 @@ router.post('/events/:id/confirm-payment', [
   }
 });
 
-// @desc    Trigger auto-send for new registrations (legacy endpoint - now triggers send-whatsapp)
+// @desc    DEPRECATED - save-pdf endpoint removed
 // @route   POST /api/public/events/:id/registrations/:registrationId/save-pdf
 // @access  Public
-// @deprecated This endpoint is kept for backward compatibility. PDFs are now generated on-demand.
+// @deprecated This endpoint has been removed. PDFs are now generated on-demand.
+// Use /send-whatsapp endpoint directly if needed.
 router.post('/events/:id/registrations/:registrationId/save-pdf', async (req, res) => {
-  try {
-    const eventId = parseInt(req.params.id, 10);
-    const registrationId = parseInt(req.params.registrationId, 10);
-
-    if (isNaN(eventId) || isNaN(registrationId)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid event ID or registration ID'
-      });
-    }
-
-    // Verify registration exists and belongs to event
-    const registration = await EventRegistration.findOne({
-      where: {
-        id: registrationId,
-        eventId: eventId
-      },
-      include: [
-        {
-          model: Member,
-          as: 'member',
-          required: true
-        },
-        {
-          model: Event,
-          as: 'event'
-        }
-      ]
-    });
-
-    if (!registration) {
-      return res.status(404).json({
-        success: false,
-        message: 'Registration not found'
-      });
-    }
-
-    // Get member for WhatsApp sending
-    const member = registration.member;
-
-    // Check if this is a new registration or existing one
-    // If pdfSentAt already exists, it means WhatsApp was sent before (existing registration)
-    // Only send WhatsApp for new registrations
-    const isNewRegistration = !registration.pdfSentAt;
-
-    // Automatically send WhatsApp for new registrations only
-    // This triggers the send-whatsapp endpoint which generates PDF on-demand
-    if (isNewRegistration && member && member.phone) {
-      console.log(`[WhatsApp Auto-Send] New registration detected - will send WhatsApp for registration ${registrationId}`);
-      console.log(`[WhatsApp Auto-Send] Member: ${member.name || 'N/A'}, Phone: ${member.phone}`);
-      
-      // Call send-whatsapp endpoint internally (generates PDF, sends, then deletes)
-      // Run in background (don't await - non-blocking)
-      const autoSendWithRetry = async () => {
-        const maxRetries = 3;
-        const retryDelays = [2000, 5000, 10000]; // 2s, 5s, 10s
-        
-        for (let attempt = 0; attempt < maxRetries; attempt++) {
-          try {
-            console.log(`[WhatsApp Auto-Send] Attempt ${attempt + 1}/${maxRetries} for registration ${registrationId}`);
-            
-            // Generate PDF, send via WhatsApp, then delete (all handled by send-whatsapp endpoint)
-            const axios = require('axios');
-            const baseUrl = req.protocol + '://' + req.get('host');
-            const sendWhatsAppUrl = `${baseUrl}/api/public/events/${eventId}/registrations/${registrationId}/send-whatsapp`;
-            
-            const response = await axios.post(sendWhatsAppUrl, {}, {
-              timeout: 60000 // 60 seconds timeout
-            });
-            
-            if (response.data.success) {
-              console.log(`[WhatsApp Auto-Send] ✅ Success on attempt ${attempt + 1} for registration ${registrationId}`);
-              return; // Success, exit
-            } else {
-              console.error(`[WhatsApp Auto-Send] ❌ Attempt ${attempt + 1}/${maxRetries} failed:`, response.data.message);
-              
-              // If it's the last attempt, log and exit
-              if (attempt === maxRetries - 1) {
-                console.error(`[WhatsApp Auto-Send] ❌ All ${maxRetries} attempts failed for registration ${registrationId}`);
-                return;
-              }
-              
-              // Wait before retrying
-              const delay = retryDelays[attempt] || 10000;
-              console.log(`[WhatsApp Auto-Send] ⏳ Retrying in ${delay}ms...`);
-              await new Promise(resolve => setTimeout(resolve, delay));
-            }
-          } catch (whatsappError) {
-            console.error(`[WhatsApp Auto-Send] ❌ Exception on attempt ${attempt + 1}/${maxRetries}:`, whatsappError.message);
-            
-            // If it's the last attempt, log and exit
-            if (attempt === maxRetries - 1) {
-              console.error(`[WhatsApp Auto-Send] ❌ All ${maxRetries} attempts failed with exceptions for registration ${registrationId}`);
-              return;
-            }
-            
-            // Wait before retrying
-            const delay = retryDelays[attempt] || 10000;
-            console.log(`[WhatsApp Auto-Send] ⏳ Retrying after exception in ${delay}ms...`);
-            await new Promise(resolve => setTimeout(resolve, delay));
-          }
-        }
-      };
-      
-      // Run auto-send in background (don't await - non-blocking)
-      autoSendWithRetry().catch((whatsappError) => {
-        console.error(`[WhatsApp Auto-Send] ❌ EXCEPTION for registration ${registrationId}`);
-        console.error(`[WhatsApp Auto-Send] Error: ${whatsappError.message || 'Unknown error'}`);
-        console.error(`[WhatsApp Auto-Send] ⚠️ WhatsApp sending failed. Can be retried via send-whatsapp endpoint.`);
-      });
-    } else if (!isNewRegistration) {
-      console.log(`[WhatsApp Auto-Send] ⚠️ Skipping auto-send for registration ${registrationId}: Existing registration (WhatsApp already sent)`);
-      console.log(`[WhatsApp Auto-Send] pdfSentAt: ${registration.pdfSentAt || 'N/A'}`);
-    } else {
-      console.warn(`[WhatsApp Auto-Send] ⚠️ Skipping auto-send for registration ${registrationId}: member or phone missing`);
-      console.warn(`[WhatsApp Auto-Send] Member exists: ${!!member}, Phone: ${member?.phone || 'N/A'}`);
-    }
-
-    // Different message based on whether it's new or existing registration
-    const responseMessage = isNewRegistration 
-      ? 'Registration confirmed. WhatsApp message will be sent automatically.'
-      : 'Registration confirmed. Download option available.';
-
-    res.status(200).json({
-      success: true,
-      message: responseMessage,
-      isNewRegistration: isNewRegistration
-    });
-
-  } catch (error) {
-    console.error('Save PDF error:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Server error while saving PDF'
-    });
-  }
+  // Endpoint removed - no longer needed since PDFs are generated on-demand
+  // This prevents duplicate WhatsApp sends
+  res.status(410).json({
+    success: false,
+    message: 'This endpoint has been removed. PDFs are now generated on-demand. Use /send-whatsapp endpoint if needed.',
+    deprecated: true
+  });
 });
 
 // @desc    Generate and download PDF on-demand
@@ -1366,9 +1485,9 @@ router.get('/events/:id/registrations/:registrationId/download-pdf', async (req,
     const baseUrl = req.protocol + '://' + req.get('host');
     const fileName = `mandapam-visitor-pass-${registrationId}.pdf`;
 
-    // Generate PDF on-demand
+    // Generate PDF on-demand as buffer (stream-based, no temp files)
     console.log(`[PDF Download] Generating PDF for registration ${registrationId}`);
-    const pdfBuffer = await pdfService.generateVisitorPassPDF(
+    const pdfBuffer = await pdfService.generateVisitorPassPDFAsBuffer(
       registration,
       registration.event,
       registration.member,
@@ -1393,13 +1512,31 @@ router.get('/events/:id/registrations/:registrationId/download-pdf', async (req,
 
 // @desc    Send WhatsApp message with PDF
 // @route   POST /api/public/events/:id/registrations/:registrationId/send-whatsapp
-// @access  Public
-router.post('/events/:id/registrations/:registrationId/send-whatsapp', async (req, res) => {
+// @access  Public (but can accept authentication for manager notifications)
+router.post('/events/:id/registrations/:registrationId/send-whatsapp', 
+  whatsappRateLimiter, // Rate limiting
+  async (req, res) => {
   try {
     const eventId = parseInt(req.params.id, 10);
     const registrationId = parseInt(req.params.registrationId, 10);
 
     console.log(`[WhatsApp Send] Request received - Event ID: ${eventId}, Registration ID: ${registrationId}`);
+
+    // Get authenticated user (if any) - for manager notifications
+    let authenticatedUserId = null;
+    try {
+      // Try to get user from token if Authorization header is present
+      if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+        const jwt = require('jsonwebtoken');
+        const token = req.headers.authorization.split(' ')[1];
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        authenticatedUserId = decoded.id;
+        console.log(`[WhatsApp Send] Authenticated user detected: ${authenticatedUserId}`);
+      }
+    } catch (authError) {
+      // Not authenticated or invalid token - that's okay, this endpoint is public
+      console.log(`[WhatsApp Send] No authentication or invalid token - proceeding as public request`);
+    }
 
     // Validate IDs
     if (isNaN(eventId) || eventId <= 0) {
@@ -1476,156 +1613,174 @@ router.post('/events/:id/registrations/:registrationId/send-whatsapp', async (re
       });
     }
 
+    // CRITICAL: Acquire database lock to prevent concurrent sends
+    const lockResult = await acquireWhatsAppLock(registrationId);
+    
+    if (!lockResult.acquired) {
+      if (lockResult.reason === 'already_sent') {
+        Logger.info('WhatsApp Send: Already sent', { 
+          registrationId, 
+          pdfSentAt: lockResult.pdfSentAt 
+        });
+        return res.status(200).json({
+          success: true,
+          message: 'WhatsApp message was already sent for this registration',
+          phone: registration.member?.phone || 'N/A',
+          alreadySent: true
+        });
+      } else if (lockResult.reason === 'lock_held') {
+        Logger.info('WhatsApp Send: Lock held by another process', { registrationId });
+        return res.status(200).json({
+          success: true,
+          message: 'WhatsApp message is currently being sent. Please wait a moment.',
+          phone: registration.member?.phone || 'N/A',
+          alreadySent: false,
+          inProgress: true
+        });
+      } else {
+        Logger.warn('WhatsApp Send: Could not acquire lock', { 
+          registrationId, 
+          reason: lockResult.reason 
+        });
+        return res.status(500).json({
+          success: false,
+          message: 'Could not process WhatsApp send request. Please try again.'
+        });
+      }
+    }
+    
+    Logger.info('WhatsApp Send: Lock acquired', { registrationId });
+
     // Get member name for personalized message
     const memberName = registration.member?.name || '';
 
-    // Generate PDF on-demand
+    // Generate PDF on-demand as buffer (no temp files - stream-based)
     const baseUrl = req.protocol + '://' + req.get('host');
-    console.log(`[WhatsApp Send] Generating PDF for registration ${registrationId}`);
+    Logger.info('WhatsApp Send: Generating PDF', { registrationId });
     
-    let pdfFilePath = null;
-    let pdfFileInfo = null;
+    let pdfBuffer = null;
     
     try {
-      pdfFileInfo = await pdfService.generateAndSavePDF(
+      pdfBuffer = await pdfService.generateVisitorPassPDFAsBuffer(
         registration,
         registration.event,
         registration.member,
         baseUrl
       );
-      pdfFilePath = pdfFileInfo.filePath;
-      console.log(`[WhatsApp Send] PDF generated successfully: ${pdfFilePath}`);
-      console.log(`[WhatsApp Send] PDF Size: ${(pdfFileInfo.buffer.length / 1024).toFixed(2)} KB`);
+      Logger.info('WhatsApp Send: PDF generated', { 
+        registrationId, 
+        sizeKB: (pdfBuffer.length / 1024).toFixed(2) 
+      });
     } catch (pdfError) {
-      console.error(`[WhatsApp Send] Error generating PDF:`, pdfError);
+      Logger.error('WhatsApp Send: PDF generation failed', pdfError, { registrationId });
+      await releaseWhatsAppLock(registrationId);
       return res.status(500).json({
         success: false,
         message: 'Failed to generate visitor pass PDF'
       });
     }
 
-    // Send PDF via WhatsApp with retry logic
-    console.log(`[WhatsApp Send] Starting send for registration ${registrationId}`);
-    console.log(`[WhatsApp Send] Member: ${memberName || 'N/A'}, Phone: ${cleanPhone}`);
-    console.log(`[WhatsApp Send] PDF Path: ${pdfFilePath}`);
-    
-    // Retry logic for WhatsApp sending (important for pass delivery)
-    const maxRetries = 3;
-    const retryDelays = [2000, 5000, 10000]; // 2s, 5s, 10s
-    let result = null;
-    let lastError = null;
-    
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
+    // Use queue if available, otherwise fall back to direct call
+    if (whatsappQueue && whatsappQueue.addWhatsAppJob) {
       try {
-        console.log(`[WhatsApp Send] Attempt ${attempt + 1}/${maxRetries} for registration ${registrationId}`);
+        const job = await whatsappQueue.addWhatsAppJob({
+          phoneNumber: cleanPhone,
+          pdfBuffer: pdfBuffer,
+          memberName: memberName,
+          registrationId: registrationId,
+          eventId: eventId,
+          userId: authenticatedUserId
+        });
         
-        result = await whatsappService.sendPdfViaWhatsApp(
-          cleanPhone, // Use cleaned phone number
-          pdfFilePath,
-          memberName
-        );
+        Logger.info('WhatsApp Send: Job added to queue', { registrationId, jobId: job.id });
         
-        if (result.success) {
-          console.log(`[WhatsApp Send] ✅ Success on attempt ${attempt + 1} for registration ${registrationId}`);
-          break; // Success, exit retry loop
-        } else {
-          lastError = result.error;
-          console.error(`[WhatsApp Send] ❌ Attempt ${attempt + 1}/${maxRetries} failed:`, result.error);
-          
-          // If it's the last attempt, break and return error
-          if (attempt === maxRetries - 1) {
-            break;
-          }
-          
-          // Wait before retrying
-          const delay = retryDelays[attempt] || 10000;
-          console.log(`[WhatsApp Send] ⏳ Retrying in ${delay}ms...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-      } catch (whatsappError) {
-        lastError = whatsappError;
-        console.error(`[WhatsApp Send] ❌ Exception on attempt ${attempt + 1}/${maxRetries}:`, whatsappError.message);
-        
-        // If it's the last attempt, break and return error
-        if (attempt === maxRetries - 1) {
-          result = {
-            success: false,
-            error: whatsappError.message || 'WhatsApp sending failed after all retries'
-          };
-          break;
-        }
-        
-        // Wait before retrying
-        const delay = retryDelays[attempt] || 10000;
-        console.log(`[WhatsApp Send] ⏳ Retrying after exception in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        return res.status(200).json({
+          success: true,
+          message: 'PDF queued for sending via WhatsApp',
+          phone: cleanPhone,
+          jobId: job.id,
+          queued: true
+        });
+      } catch (queueError) {
+        Logger.error('WhatsApp Send: Failed to add job to queue', queueError, { registrationId });
+        Logger.info('WhatsApp Send: Falling back to direct call', { registrationId });
+        // Fall through to direct call
       }
     }
 
-    console.log(`[WhatsApp Send] Final result for registration ${registrationId}:`, {
-      success: result?.success,
-      message: result?.message,
-      error: result?.error || lastError
+    // Fallback: Direct WhatsApp call (async, single attempt, no retries)
+    const sendStartTime = new Date();
+    Logger.info('WhatsApp Send: Using direct call', { 
+      registrationId, 
+      phone: cleanPhone, 
+      memberName,
+      timestamp: sendStartTime.toISOString()
+    });
+    
+    // Send asynchronously (single attempt, no retries, no timeout)
+    // This can take as long as needed
+    whatsappService.sendPdfViaWhatsApp(
+      cleanPhone,
+      pdfBuffer,
+      memberName
+    ).then(async (result) => {
+      const sendEndTime = new Date();
+      const sendDuration = sendEndTime.getTime() - sendStartTime.getTime();
+      
+      if (result.success) {
+        Logger.info('WhatsApp Send: Sent successfully', { 
+          registrationId, 
+          durationMs: sendDuration,
+          timestamp: sendEndTime.toISOString()
+        });
+        
+        const updateResult = await updateLockToSentTime(registrationId);
+        
+        if (!updateResult.updated) {
+          Logger.warn('WhatsApp Send: Lock was released by another process', { registrationId });
+        } else {
+          Logger.info('WhatsApp Send: pdfSentAt updated', { 
+            registrationId, 
+            pdfSentAt: updateResult.actualSentTime.toISOString()
+          });
+        }
+
+        await notifyManagerOnWhatsAppSent(authenticatedUserId, registration, registration.event, registration.member);
+      } else {
+        Logger.error('WhatsApp Send: Failed', null, { 
+          registrationId, 
+          durationMs: sendDuration,
+          error: result.error || 'Unknown error'
+        });
+        await releaseWhatsAppLock(registrationId);
+      }
+    }).catch(async (whatsappError) => {
+      const sendEndTime = new Date();
+      const sendDuration = sendEndTime.getTime() - sendStartTime.getTime();
+      Logger.error('WhatsApp Send: Exception', whatsappError, { 
+        registrationId, 
+        durationMs: sendDuration
+      });
+      await releaseWhatsAppLock(registrationId);
+    });
+    
+    // Return immediately - send happens asynchronously
+    Logger.info('WhatsApp Send: Initiated asynchronously', { registrationId });
+    return res.status(200).json({
+      success: true,
+      message: 'WhatsApp message is being sent asynchronously',
+      phone: cleanPhone,
+      queued: false,
+      async: true
     });
 
-    if (result.success) {
-      console.log(`[WhatsApp Send] ✅ Successfully sent to ${cleanPhone}`);
-      
-      // Delete PDF file after successful send
-      if (pdfFilePath) {
-        const deleted = pdfService.deletePDFFile(pdfFilePath);
-        if (deleted) {
-          console.log(`[WhatsApp Send] ✅ PDF file deleted after successful send`);
-        } else {
-          console.warn(`[WhatsApp Send] ⚠️ Failed to delete PDF file: ${pdfFilePath}`);
-        }
-      }
-      
-      // Update registration to mark PDF as sent
-      try {
-        await registration.update({
-          pdfSentAt: new Date()
-        });
-        console.log(`[WhatsApp Send] ✅ Updated pdfSentAt for registration ${registrationId}`);
-      } catch (updateError) {
-        console.error(`[WhatsApp Send] ⚠️ Failed to update pdfSentAt:`, updateError);
-        // Don't fail the request if update fails - message was sent successfully
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: result.message || 'PDF sent via WhatsApp successfully',
-        phone: cleanPhone
-      });
-    } else {
-      console.error(`[WhatsApp Send] ❌ Failed for registration ${registrationId}:`, result.error);
-      
-      // Delete PDF file even on failure (cleanup)
-      if (pdfFilePath) {
-        pdfService.deletePDFFile(pdfFilePath);
-        console.log(`[WhatsApp Send] 🗑️ PDF file deleted after failed send (cleanup)`);
-      }
-      
-      // Provide more specific error message
-      let errorMessage = 'Failed to send PDF via WhatsApp';
-      if (result.error) {
-        if (typeof result.error === 'string') {
-          errorMessage = result.error;
-        } else if (result.error.message) {
-          errorMessage = result.error.message;
-        }
-      }
-      
-      return res.status(500).json({
-        success: false,
-        message: errorMessage,
-        error: result.error
-      });
-    }
+    // OLD RETRY LOGIC REMOVED - Now using async single attempt (no retries)
 
   } catch (error) {
-    console.error('[WhatsApp Send] Exception caught:', error);
-    console.error('[WhatsApp Send] Error stack:', error.stack);
+    Logger.error('WhatsApp Send: Exception caught', error, { 
+      eventId: req.params.id, 
+      registrationId: req.params.registrationId 
+    });
     
     // Provide more specific error messages
     let errorMessage = 'Server error while sending WhatsApp message';

@@ -2,6 +2,7 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
+const sharp = require('sharp');
 const qrService = require('./qrService');
 const { getFileUrl } = require('../config/multerConfig');
 
@@ -29,6 +30,42 @@ async function fetchImageAsBuffer(imageUrl) {
   } catch (error) {
     console.error('[PDF Service] Error fetching image:', imageUrl, error.message);
     return null;
+  }
+}
+
+/**
+ * Crop image to square (center crop) - matches frontend cropImageToSquare logic
+ */
+async function cropImageToSquare(imageBuffer, size = 132) {
+  try {
+    if (!imageBuffer) return null;
+    
+    const image = sharp(imageBuffer);
+    const metadata = await image.metadata();
+    
+    const width = metadata.width;
+    const height = metadata.height;
+    
+    // Calculate square crop (center crop)
+    const minDimension = Math.min(width, height);
+    const left = Math.floor((width - minDimension) / 2);
+    const top = Math.floor((height - minDimension) / 2);
+    
+    // Crop to square, then resize to target size
+    const croppedBuffer = await image
+      .extract({ left, top, width: minDimension, height: minDimension })
+      .resize(size, size, {
+        fit: 'cover',
+        position: 'center'
+      })
+      .png()
+      .toBuffer();
+    
+    return croppedBuffer;
+  } catch (error) {
+    console.error('[PDF Service] Error cropping image to square:', error.message);
+    // Return original buffer if cropping fails
+    return imageBuffer;
   }
 }
 
@@ -106,7 +143,7 @@ function resolveProfileImageUrl(registration, member, baseUrl) {
 }
 
 /**
- * Generate visitor pass PDF
+ * Generate visitor pass PDF as a buffer (stream-based internally, no temp files)
  * @param {Object} registration - Registration object
  * @param {Object} event - Event object
  * @param {Object} member - Member object
@@ -116,11 +153,14 @@ function resolveProfileImageUrl(registration, member, baseUrl) {
 async function generateVisitorPassPDF(registration, event, member, baseUrl = '') {
   return new Promise(async (resolve, reject) => {
     try {
+      // A4 size: 595.28 x 841.89 points (8.27 x 11.69 inches)
       const doc = new PDFDocument({
         size: 'A4',
-        margin: 60
+        margin: 0, // We'll handle margins manually for precise control
+        autoFirstPage: true
       });
       
+      // Collect PDF data into buffer (stream-based internally, no temp files)
       const buffers = [];
       doc.on('data', buffers.push.bind(buffers));
       doc.on('end', () => {
@@ -130,8 +170,10 @@ async function generateVisitorPassPDF(registration, event, member, baseUrl = '')
       doc.on('error', reject);
       
       const pageWidth = 595.28; // A4 width in points
-      const marginX = 60;
-      let cursorY = 72;
+      const pageHeight = 841.89; // A4 height in points
+      const marginX = 60; // 60 points = ~21mm
+      const topMargin = 72; // 72 points = ~25mm
+      let cursorY = topMargin;
       
       // Logo - try multiple possible locations
       try {
@@ -145,8 +187,10 @@ async function generateVisitorPassPDF(registration, event, member, baseUrl = '')
         let logoAdded = false;
         for (const logoPath of possibleLogoPaths) {
           if (fs.existsSync(logoPath)) {
-            doc.image(logoPath, (pageWidth - 150) / 2, cursorY, { width: 150, height: 66 });
-            cursorY += 66 + 28;
+            const logoWidth = 150;
+            const logoHeight = 66;
+            doc.image(logoPath, (pageWidth - logoWidth) / 2, cursorY, { width: logoWidth, height: logoHeight });
+            cursorY += logoHeight + 15; // Reduced from 28 to 15
             logoAdded = true;
             break;
           }
@@ -164,25 +208,40 @@ async function generateVisitorPassPDF(registration, event, member, baseUrl = '')
       doc.fontSize(20)
          .font('Helvetica-Bold')
          .fillColor('#111827')
-         .text(eventTitle, { align: 'center', y: cursorY });
+         .text(eventTitle, marginX, cursorY, {
+           width: pageWidth - marginX * 2,
+           align: 'center'
+         });
       cursorY += 30;
       
       // Visitor Pass Label
       doc.fontSize(16)
          .fillColor('#2563eb')
-         .text('VISITOR PASS', { align: 'center', y: cursorY });
-      cursorY += 24;
+         .text('VISITOR PASS', marginX, cursorY, {
+           width: pageWidth - marginX * 2,
+           align: 'center'
+         });
+      cursorY += 36; // Increased from 24 to 36
       
-      // Profile Image
+      // Profile Image - crop to square like frontend
       const profileImageUrl = resolveProfileImageUrl(registration, member, baseUrl);
       if (profileImageUrl) {
         try {
           const profileBuffer = await fetchImageAsBuffer(profileImageUrl);
           if (profileBuffer) {
             const photoSize = 132;
-            const photoX = (pageWidth - photoSize) / 2;
-            doc.image(profileBuffer, photoX, cursorY, { width: photoSize, height: photoSize, fit: [photoSize, photoSize] });
-            cursorY += photoSize + 26;
+            // Crop image to square (center crop) - matches frontend behavior
+            const croppedBuffer = await cropImageToSquare(profileBuffer, photoSize);
+            if (croppedBuffer) {
+              const photoX = (pageWidth - photoSize) / 2;
+              doc.image(croppedBuffer, photoX, cursorY, { width: photoSize, height: photoSize });
+              cursorY += photoSize + 20; // Increased from 12 to 20 (space before name)
+            } else {
+              // Fallback to original if cropping fails
+              const photoX = (pageWidth - photoSize) / 2;
+              doc.image(profileBuffer, photoX, cursorY, { width: photoSize, height: photoSize, fit: [photoSize, photoSize] });
+              cursorY += photoSize + 20; // Increased from 12 to 20 (space before name)
+            }
           }
         } catch (imgError) {
           console.warn('[PDF Service] Failed to add profile image:', imgError.message);
@@ -197,8 +256,11 @@ async function generateVisitorPassPDF(registration, event, member, baseUrl = '')
       doc.fontSize(18)
          .font('Helvetica-Bold')
          .fillColor('#111827')
-         .text(displayName, { align: 'center', y: cursorY });
-      cursorY += 32;
+         .text(displayName, marginX, cursorY, {
+           width: pageWidth - marginX * 2,
+           align: 'center'
+         });
+      cursorY += 42; // Increased from 32 to 42 (space after name)
       
       // Divider
       doc.moveTo(marginX, cursorY)
@@ -219,12 +281,22 @@ async function generateVisitorPassPDF(registration, event, member, baseUrl = '')
       const amountValue = isFinite(amountPaid) ? amountPaid.toFixed(2) : '0.00';
       const registeredOn = formatDateTime(registration?.registeredAt);
       
+      // Left column
       doc.text(`Registration ID: ${registrationId}`, marginX, cursorY);
-      doc.text(`Payment Status: ${paymentStatus}`, { align: 'right', x: pageWidth - marginX, y: cursorY });
+      // Right column - use align: 'right' with x position
+      const paymentStatusText = `Payment Status: ${paymentStatus}`;
+      doc.text(paymentStatusText, pageWidth - marginX, cursorY, {
+        align: 'right',
+        width: pageWidth - marginX * 2
+      });
       cursorY += 18;
       
       doc.text(`Amount Paid: Rs. ${amountValue}`, marginX, cursorY);
-      doc.text(`Registered On: ${registeredOn}`, { align: 'right', x: pageWidth - marginX, y: cursorY });
+      const registeredOnText = `Registered On: ${registeredOn}`;
+      doc.text(registeredOnText, pageWidth - marginX, cursorY, {
+        align: 'right',
+        width: pageWidth - marginX * 2
+      });
       cursorY += 22;
       
       // QR Code
@@ -234,17 +306,34 @@ async function generateVisitorPassPDF(registration, event, member, baseUrl = '')
           const qrSize = 168;
           const qrX = (pageWidth - qrSize) / 2;
           doc.image(qrBuffer, qrX, cursorY, { width: qrSize, height: qrSize });
-          cursorY += qrSize + 30;
+          cursorY += qrSize + 50; // Increased from 30 to 50
         } catch (qrError) {
           console.warn('[PDF Service] Failed to add QR code:', qrError.message);
         }
+      }
+      
+      // Calculate remaining space to ensure everything fits on one page
+      const bottomMargin = 60;
+      const maxY = pageHeight - bottomMargin;
+      // Estimate instructions height (title + 5 items, each potentially 1-2 lines)
+      const estimatedInstructionsHeight = 18 + (5 * 18); // Conservative estimate
+      const footerHeight = 22 + 18; // Divider + text
+      const totalRemainingHeight = estimatedInstructionsHeight + footerHeight;
+      
+      // If content would overflow, reduce spacing before instructions
+      if (cursorY + totalRemainingHeight > maxY) {
+        const overflow = (cursorY + totalRemainingHeight) - maxY;
+        cursorY = Math.max(cursorY - overflow - 10, cursorY - 30); // Reduce spacing but don't go too negative
       }
       
       // Important Instructions
       doc.fontSize(14)
          .font('Helvetica-Bold')
          .fillColor('#111827')
-         .text('Important Instructions', { align: 'center', y: cursorY });
+         .text('Important Instructions', marginX, cursorY, {
+           width: pageWidth - marginX * 2,
+           align: 'center'
+         });
       cursorY += 18;
       
       doc.fontSize(12)
@@ -259,12 +348,43 @@ async function generateVisitorPassPDF(registration, event, member, baseUrl = '')
         'For assistance, contact the Mandapam helpdesk at +91-98765-43210.'
       ];
       
+      // Instructions - match jsPDF's splitTextToSize behavior
       instructions.forEach((item) => {
-        doc.text(`• ${item}`, marginX, cursorY, {
-          width: pageWidth - marginX * 2,
-          align: 'left'
+        const text = `• ${item}`;
+        const maxWidth = pageWidth - marginX * 2;
+        
+        // Split text to fit width (similar to jsPDF's splitTextToSize)
+        // PDFKit doesn't have splitTextToSize, so we manually split
+        const words = text.split(' ');
+        const lines = [];
+        let currentLine = '';
+        
+        words.forEach((word) => {
+          const testLine = currentLine ? `${currentLine} ${word}` : word;
+          const testWidth = doc.widthOfString(testLine);
+          
+          if (testWidth <= maxWidth) {
+            currentLine = testLine;
+          } else {
+            if (currentLine) {
+              lines.push(currentLine);
+            }
+            currentLine = word;
+          }
         });
-        cursorY += 18;
+        
+        if (currentLine) {
+          lines.push(currentLine);
+        }
+        
+        // Render each line
+        lines.forEach((line) => {
+          doc.text(line, marginX, cursorY, {
+            width: maxWidth,
+            align: 'left'
+          });
+          cursorY += 18;
+        });
       });
       
       cursorY += 18;
@@ -280,27 +400,54 @@ async function generateVisitorPassPDF(registration, event, member, baseUrl = '')
       // Footer Text
       doc.fontSize(11)
          .fillColor('#6b7280')
-         .text('Thank you for registering with the Mandapam Event Team.', {
-           align: 'center',
-           y: cursorY
+         .text('Thank you for registering with the Mandapam Event Team.', marginX, cursorY, {
+           width: pageWidth - marginX * 2,
+           align: 'center'
          });
       
+      // End the document to finalize and trigger 'end' event
+      // The buffer will be resolved in the 'end' event handler above
       doc.end();
     } catch (error) {
+      console.error('[PDF Service] Error in generateVisitorPassPDF:', error);
+      console.error('[PDF Service] Error stack:', error.stack);
       reject(error);
     }
   });
 }
 
 /**
- * Generate PDF and save to temporary file
+ * Generate visitor pass PDF as a buffer (alias for generateVisitorPassPDF)
+ * @param {Object} registration - Registration object
+ * @param {Object} event - Event object
+ * @param {Object} member - Member object
+ * @param {string} baseUrl - Base URL for image resolution
+ * @returns {Promise<Buffer>} PDF buffer
+ */
+async function generateVisitorPassPDFAsBuffer(registration, event, member, baseUrl = '') {
+  // generateVisitorPassPDF already returns a buffer
+  return await generateVisitorPassPDF(registration, event, member, baseUrl);
+}
+
+/**
+ * Generate PDF as a buffer (preferred method - no temp files, stream-based internally)
+ * @returns {Promise<Buffer>} PDF buffer
+ */
+async function generatePDFStream(registration, event, member, baseUrl) {
+  // Alias for generateVisitorPassPDF - returns buffer (no temp files)
+  return await generateVisitorPassPDF(registration, event, member, baseUrl);
+}
+
+/**
+ * Generate PDF and save to temporary file (DEPRECATED - use generatePDFStream instead)
  * @returns {Promise<{filePath: string, buffer: Buffer}>}
+ * @deprecated Use generatePDFStream for better performance and no temp files
  */
 async function generateAndSavePDF(registration, event, member, baseUrl) {
-  const pdfBuffer = await generateVisitorPassPDF(registration, event, member, baseUrl);
+  const pdfBuffer = await generateVisitorPassPDFAsBuffer(registration, event, member, baseUrl);
   
-  // Save to temporary file
-  const pdfsDir = path.join(process.cwd(), 'uploads', 'pdfs');
+  // Save to temporary file (use temp-pdfs directory for consistency)
+  const pdfsDir = path.join(process.cwd(), 'uploads', 'temp-pdfs');
   if (!fs.existsSync(pdfsDir)) {
     fs.mkdirSync(pdfsDir, { recursive: true });
   }
@@ -333,8 +480,10 @@ function deletePDFFile(filePath) {
 }
 
 module.exports = {
-  generateVisitorPassPDF,
-  generateAndSavePDF,
-  deletePDFFile
+  generateVisitorPassPDF, // Returns buffer (stream-based internally, no temp files)
+  generateVisitorPassPDFAsBuffer, // Alias for generateVisitorPassPDF
+  generatePDFStream, // Alias for generateVisitorPassPDF
+  generateAndSavePDF, // DEPRECATED - saves to temp file (use generateVisitorPassPDF instead)
+  deletePDFFile // Still needed for cleanup of any remaining temp files
 };
 

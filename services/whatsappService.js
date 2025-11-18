@@ -51,16 +51,16 @@ function buildMessage(memberName) {
 }
 
 /**
- * Send PDF file via WhatsApp
+ * Send PDF via WhatsApp (supports file path, buffer, or stream)
  * @param {string} phoneNumber - Phone number (will be formatted to 91XXXXXXXXXX)
- * @param {string} pdfFilePath - Path to PDF file
+ * @param {string|Buffer|Stream} pdfSource - Path to PDF file, PDF buffer, or PDF stream
  * @param {string} memberName - Member name for personalized message
  * @returns {Promise<{success: boolean, message?: string, error?: string}>}
  */
-async function sendPdfViaWhatsApp(phoneNumber, pdfFilePath, memberName = '') {
+async function sendPdfViaWhatsApp(phoneNumber, pdfSource, memberName = '') {
   try {
     console.log(`[WhatsApp Service] sendPdfViaWhatsApp called`);
-    console.log(`[WhatsApp Service] Phone: ${phoneNumber}, File: ${pdfFilePath}, Name: ${memberName}`);
+    console.log(`[WhatsApp Service] Phone: ${phoneNumber}, Source type: ${typeof pdfSource}, Name: ${memberName}`);
     console.log(`[WhatsApp Service] DEVICE_UID: ${DEVICE_UID}, DEVICE_NAME: ${DEVICE_NAME}`);
     
     const formattedPhone = formatPhoneNumber(phoneNumber);
@@ -74,31 +74,57 @@ async function sendPdfViaWhatsApp(phoneNumber, pdfFilePath, memberName = '') {
       };
     }
 
-    if (!pdfFilePath || !fs.existsSync(pdfFilePath)) {
-      console.error(`[WhatsApp Service] ❌ PDF file not found: ${pdfFilePath}`);
-      console.error(`[WhatsApp Service] File exists check: ${fs.existsSync(pdfFilePath)}`);
-      return {
-        success: false,
-        error: 'PDF file not found'
-      };
-    }
-
-    const fileStats = fs.statSync(pdfFilePath);
-    console.log(`[WhatsApp Service] PDF file size: ${fileStats.size} bytes (${(fileStats.size / 1024 / 1024).toFixed(2)} MB)`);
-
     const message = buildMessage(memberName);
     console.log(`[WhatsApp Service] Message length: ${message.length} characters`);
 
     // Create FormData for file upload
     const formData = new FormData();
-    formData.append('file', fs.createReadStream(pdfFilePath));
+    
+    // Handle different PDF source types
+    if (typeof pdfSource === 'string') {
+      // File path (legacy support)
+      if (!fs.existsSync(pdfSource)) {
+        console.error(`[WhatsApp Service] ❌ PDF file not found: ${pdfSource}`);
+        return {
+          success: false,
+          error: 'PDF file not found'
+        };
+      }
+      const fileStats = fs.statSync(pdfSource);
+      console.log(`[WhatsApp Service] PDF file size: ${fileStats.size} bytes (${(fileStats.size / 1024 / 1024).toFixed(2)} MB)`);
+      formData.append('file', fs.createReadStream(pdfSource));
+    } else if (Buffer.isBuffer(pdfSource)) {
+      // Buffer (preferred - no temp files)
+      console.log(`[WhatsApp Service] PDF buffer size: ${pdfSource.length} bytes (${(pdfSource.length / 1024 / 1024).toFixed(2)} MB)`);
+      formData.append('file', pdfSource, {
+        filename: 'visitor-pass.pdf',
+        contentType: 'application/pdf'
+      });
+    } else if (pdfSource && typeof pdfSource.pipe === 'function') {
+      // Stream (preferred - most memory efficient)
+      console.log(`[WhatsApp Service] PDF stream detected`);
+      formData.append('file', pdfSource, {
+        filename: 'visitor-pass.pdf',
+        contentType: 'application/pdf'
+      });
+    } else {
+      console.error(`[WhatsApp Service] ❌ Invalid PDF source type: ${typeof pdfSource}`);
+      return {
+        success: false,
+        error: 'Invalid PDF source. Expected file path, buffer, or stream.'
+      };
+    }
+    
     formData.append('phone', formattedPhone);
     formData.append('message', message);
 
     const apiUrl = `https://messagesapi.co.in/chat/sendMessageFile/${DEVICE_UID}/${encodeURIComponent(DEVICE_NAME)}`;
     console.log(`[WhatsApp Service] Sending to API: ${apiUrl}`);
 
-    // Send via WhatsApp API
+    // Send via WhatsApp API (no timeout - async, can take as long as needed)
+    const sendStartTime = Date.now();
+    console.log(`[WhatsApp Service] 📤 Sending to API at ${new Date().toISOString()}`);
+    
     const response = await axios.post(
       apiUrl,
       formData,
@@ -106,9 +132,13 @@ async function sendPdfViaWhatsApp(phoneNumber, pdfFilePath, memberName = '') {
         headers: {
           ...formData.getHeaders()
         },
-        timeout: 30000 // 30 seconds timeout
+        timeout: 0 // No timeout - can take as long as needed (async)
       }
     );
+    
+    const sendEndTime = Date.now();
+    const sendDuration = sendEndTime - sendStartTime;
+    console.log(`[WhatsApp Service] ⏱️ API call completed in ${sendDuration}ms at ${new Date().toISOString()}`);
 
     console.log(`[WhatsApp Service] API Response status: ${response.status}`);
     console.log(`[WhatsApp Service] API Response data:`, JSON.stringify(response.data).substring(0, 200));
@@ -249,7 +279,7 @@ async function sendPdfBase64ViaWhatsApp(phoneNumber, pdfBase64, fileName, member
         headers: {
           ...formData.getHeaders()
         },
-        timeout: 30000 // 30 seconds timeout
+        timeout: 0 // No timeout - can take as long as needed (async)
       }
     );
 
