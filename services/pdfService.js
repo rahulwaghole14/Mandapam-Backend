@@ -175,40 +175,50 @@ async function generateVisitorPassPDF(registration, event, member, baseUrl = '')
       const topMargin = 72; // 72 points = ~25mm
       let cursorY = topMargin;
       
-      // Logo - try multiple possible locations
+      // Logo - try multiple possible locations (MUST be at top)
+      let logoAdded = false;
       try {
         const possibleLogoPaths = [
+          path.join(__dirname, '..', '..', 'Mandap-Web-Frontend', 'public', 'mandapam-logo.png'),
           path.join(process.cwd(), 'public', 'mandapam-logo.png'),
           path.join(process.cwd(), 'mandapam-logo.png'),
           path.join(__dirname, '..', 'public', 'mandapam-logo.png'),
-          path.join(__dirname, '..', '..', 'Mandap-Web-Frontend', 'public', 'mandapam-logo.png')
+          path.join(process.cwd(), '..', 'Mandap-Web-Frontend', 'public', 'mandapam-logo.png')
         ];
         
-        let logoAdded = false;
         for (const logoPath of possibleLogoPaths) {
           if (fs.existsSync(logoPath)) {
-            const logoWidth = 150;
-            const logoHeight = 66;
-            doc.image(logoPath, (pageWidth - logoWidth) / 2, cursorY, { width: logoWidth, height: logoHeight });
-            cursorY += logoHeight + 15; // Reduced from 28 to 15
-            logoAdded = true;
-            break;
+            try {
+              const logoWidth = 150;
+              const logoHeight = 66;
+              doc.image(logoPath, (pageWidth - logoWidth) / 2, cursorY, { width: logoWidth, height: logoHeight });
+              cursorY += logoHeight + 28; // Space after logo
+              logoAdded = true;
+              console.log(`[PDF Service] Logo added successfully from: ${logoPath}`);
+              break;
+            } catch (imgError) {
+              console.warn(`[PDF Service] Error loading logo from ${logoPath}:`, imgError.message);
+              continue;
+            }
           }
         }
         
         if (!logoAdded) {
-          console.warn('[PDF Service] Logo not found in any expected location, skipping');
+          console.error('[PDF Service] Logo not found in any expected location. Checked paths:', possibleLogoPaths);
+          // Don't skip - add spacing even if logo not found to maintain layout
+          cursorY += 94; // Space for logo (66) + margin (28)
         }
       } catch (logoError) {
-        console.warn('[PDF Service] Error adding logo, skipping:', logoError.message);
+        console.error('[PDF Service] Error adding logo:', logoError.message);
+        // Add spacing even if logo fails
+        cursorY += 94;
       }
       
-      // Event Title
-      const eventTitle = event?.title || event?.name || 'Mandapam Event';
+      // Mandapam Title (always show, not event title)
       doc.fontSize(20)
          .font('Helvetica-Bold')
          .fillColor('#111827')
-         .text(eventTitle, marginX, cursorY, {
+         .text('Mandapam', marginX, cursorY, {
            width: pageWidth - marginX * 2,
            align: 'center'
          });
