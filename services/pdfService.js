@@ -6,6 +6,20 @@ const sharp = require('sharp');
 const qrService = require('./qrService');
 const { getFileUrl } = require('../config/multerConfig');
 
+// Font paths for Devanagari (Marathi, Hindi) support
+const FONTS_DIR = path.join(__dirname, '..', 'assets', 'fonts');
+const DEVANAGARI_REGULAR = path.join(FONTS_DIR, 'NotoSansDevanagari-Regular.ttf');
+const DEVANAGARI_BOLD = path.join(FONTS_DIR, 'NotoSansDevanagari-Bold.ttf');
+
+/**
+ * Check if text contains Devanagari characters (used for Marathi, Hindi, etc.)
+ */
+function containsDevanagari(text) {
+  if (!text) return false;
+  // Devanagari Unicode range: U+0900 to U+097F
+  return /[\u0900-\u097F]/.test(text);
+}
+
 /**
  * Convert image URL to buffer
  */
@@ -160,6 +174,28 @@ async function generateVisitorPassPDF(registration, event, member, baseUrl = '')
         autoFirstPage: true
       });
       
+      // Register Devanagari fonts if they exist (for Marathi/Hindi support)
+      const hasDevanagariRegular = fs.existsSync(DEVANAGARI_REGULAR);
+      const hasDevanagariBold = fs.existsSync(DEVANAGARI_BOLD);
+      
+      if (hasDevanagariRegular) {
+        doc.registerFont('Devanagari', DEVANAGARI_REGULAR);
+        console.log('[PDF Service] Registered Devanagari regular font');
+      }
+      if (hasDevanagariBold) {
+        doc.registerFont('Devanagari-Bold', DEVANAGARI_BOLD);
+        console.log('[PDF Service] Registered Devanagari bold font');
+      }
+      
+      // Helper function to select appropriate font based on text content
+      const selectFont = (text, isBold = false) => {
+        if (containsDevanagari(text)) {
+          if (isBold && hasDevanagariBold) return 'Devanagari-Bold';
+          if (hasDevanagariRegular) return 'Devanagari';
+        }
+        return isBold ? 'Helvetica-Bold' : 'Helvetica';
+      };
+      
       // Collect PDF data into buffer (stream-based internally, no temp files)
       const buffers = [];
       doc.on('data', buffers.push.bind(buffers));
@@ -214,11 +250,12 @@ async function generateVisitorPassPDF(registration, event, member, baseUrl = '')
         cursorY += 94;
       }
       
-      // Mandapam Title (always show, not event title)
+      // Mandapam Title (always show, not event title) - use Devanagari-compatible font
+      const mandapamTitle = 'Mandapam';
       doc.fontSize(20)
-         .font('Helvetica-Bold')
+         .font(selectFont(mandapamTitle, true))
          .fillColor('#111827')
-         .text('Mandapam', marginX, cursorY, {
+         .text(mandapamTitle, marginX, cursorY, {
            width: pageWidth - marginX * 2,
            align: 'center'
          });
@@ -261,10 +298,12 @@ async function generateVisitorPassPDF(registration, event, member, baseUrl = '')
         cursorY += 16;
       }
       
-      // Member Name
+      // Member Name - use Devanagari font if name contains Marathi/Hindi characters
       const displayName = member?.name || registration?.memberName || registration?.name || 'Guest';
+      const nameFont = selectFont(displayName, true);
+      console.log(`[PDF Service] Rendering name "${displayName}" with font: ${nameFont}`);
       doc.fontSize(18)
-         .font('Helvetica-Bold')
+         .font(nameFont)
          .fillColor('#111827')
          .text(displayName, marginX, cursorY, {
            width: pageWidth - marginX * 2,
