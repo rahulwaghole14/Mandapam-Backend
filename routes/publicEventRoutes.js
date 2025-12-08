@@ -1160,7 +1160,13 @@ router.post('/events/:id/confirm-payment',
           });
 
           const phoneRegex = /^[6-9]\d{9}$/;
-          const cleanPhone = registrationForPdf.member.phone?.trim().replace(/^\+91|^91/, '') || '';
+          // Smart phone cleaning: only strip country code if length confirms it's a prefix
+          let cleanPhone = registrationForPdf.member.phone?.trim() || '';
+          if (cleanPhone.startsWith('+91') && cleanPhone.length === 13) {
+            cleanPhone = cleanPhone.substring(3);
+          } else if (cleanPhone.startsWith('91') && cleanPhone.length === 12) {
+            cleanPhone = cleanPhone.substring(2);
+          }
           
           Logger.info('Auto-Send: Phone number cleaned', {
             registrationId: registration.id,
@@ -1245,13 +1251,21 @@ router.post('/events/:id/confirm-payment',
                 userId: null // Auto-send has no authenticated user
               });
               
-              Logger.info('Auto-Send: Job added to queue successfully', { 
-                registrationId: registration.id, 
-                jobId: job.id,
-                timestamp: new Date().toISOString()
-              });
-              // Worker will handle lock acquisition and sending
-              return; // Exit - queue will handle the rest asynchronously
+              // Check if job was actually created (queue might be disabled and return null)
+              if (job && job.id) {
+                Logger.info('Auto-Send: Job added to queue successfully', { 
+                  registrationId: registration.id, 
+                  jobId: job.id,
+                  timestamp: new Date().toISOString()
+                });
+                // Worker will handle lock acquisition and sending
+                return; // Exit - queue will handle the rest asynchronously
+              } else {
+                Logger.info('Auto-Send: Queue not available, falling back to direct send', { 
+                  registrationId: registration.id 
+                });
+                // Fall through to direct send below
+              }
             } catch (queueError) {
               Logger.error('Auto-Send: Failed to add job to queue', queueError, { 
                 registrationId: registration.id,
@@ -1605,7 +1619,13 @@ router.post('/events/:id/registrations/:registrationId/send-whatsapp',
 
     // Validate phone number format (should be 10 digits)
     const phoneRegex = /^[6-9]\d{9}$/;
-    const cleanPhone = memberPhone.trim().replace(/^\+91|^91/, ''); // Remove country code if present
+    // Smart phone cleaning: only strip country code if length confirms it's a prefix
+    let cleanPhone = memberPhone.trim();
+    if (cleanPhone.startsWith('+91') && cleanPhone.length === 13) {
+      cleanPhone = cleanPhone.substring(3);
+    } else if (cleanPhone.startsWith('91') && cleanPhone.length === 12) {
+      cleanPhone = cleanPhone.substring(2);
+    }
     if (!phoneRegex.test(cleanPhone)) {
       console.error(`[WhatsApp Send] Invalid phone number format: ${memberPhone}`);
       return res.status(400).json({
@@ -1614,20 +1634,27 @@ router.post('/events/:id/registrations/:registrationId/send-whatsapp',
       });
     }
 
+    // Check if this is a manual send (force resend) - allow resending even if already sent
+    // Manual sends come from the registrations table/view details page
+    const isManualSend = req.query.force === 'true' || req.query.manual === 'true' || req.body.force === true || req.body.manual === true;
+    
     // CRITICAL: Acquire database lock to prevent concurrent sends
-    const lockResult = await acquireWhatsAppLock(registrationId);
+    // Pass forceResend=true for manual sends to allow resending
+    const lockResult = await acquireWhatsAppLock(registrationId, isManualSend);
     
     if (!lockResult.acquired) {
       if (lockResult.reason === 'already_sent') {
-        Logger.info('WhatsApp Send: Already sent', { 
+        // This shouldn't happen if isManualSend is true, but handle it just in case
+        Logger.info('WhatsApp Send: Already sent (auto-send blocked)', { 
           registrationId, 
           pdfSentAt: lockResult.pdfSentAt 
         });
         return res.status(200).json({
-          success: true,
-          message: 'WhatsApp message was already sent for this registration',
+          success: false,
+          message: 'WhatsApp message was already sent for this registration. Use "Send Pass" button to resend.',
           phone: registration.member?.phone || 'N/A',
-          alreadySent: true
+          alreadySent: true,
+          canResend: isManualSend
         });
       } else if (lockResult.reason === 'lock_held') {
         Logger.info('WhatsApp Send: Lock held by another process', { registrationId });
@@ -1648,6 +1675,10 @@ router.post('/events/:id/registrations/:registrationId/send-whatsapp',
           message: 'Could not process WhatsApp send request. Please try again.'
         });
       }
+    }
+    
+    if (lockResult.wasAlreadySent) {
+      Logger.info('WhatsApp Send: Manual resend - clearing previous sent time', { registrationId });
     }
     
     Logger.info('WhatsApp Send: Lock acquired', { registrationId });
@@ -1693,15 +1724,21 @@ router.post('/events/:id/registrations/:registrationId/send-whatsapp',
           userId: authenticatedUserId
         });
         
-        Logger.info('WhatsApp Send: Job added to queue', { registrationId, jobId: job.id });
-        
-        return res.status(200).json({
-          success: true,
-          message: 'PDF queued for sending via WhatsApp',
-          phone: cleanPhone,
-          jobId: job.id,
-          queued: true
-        });
+        // Check if job was actually created (queue might be disabled and return null)
+        if (job && job.id) {
+          Logger.info('WhatsApp Send: Job added to queue', { registrationId, jobId: job.id });
+          
+          return res.status(200).json({
+            success: true,
+            message: 'PDF queued for sending via WhatsApp',
+            phone: cleanPhone,
+            jobId: job.id,
+            queued: true
+          });
+        } else {
+          // Queue returned null (disabled) - fall through to direct call
+          Logger.info('WhatsApp Send: Queue not available, using direct call', { registrationId });
+        }
       } catch (queueError) {
         Logger.error('WhatsApp Send: Failed to add job to queue', queueError, { registrationId });
         Logger.info('WhatsApp Send: Falling back to direct call', { registrationId });
@@ -1709,7 +1746,7 @@ router.post('/events/:id/registrations/:registrationId/send-whatsapp',
       }
     }
 
-    // Fallback: Direct WhatsApp call (async, single attempt, no retries)
+    // Fallback: Direct WhatsApp call (synchronous - wait for result to return proper response)
     const sendStartTime = new Date();
     Logger.info('WhatsApp Send: Using direct call', { 
       registrationId, 
@@ -1718,13 +1755,14 @@ router.post('/events/:id/registrations/:registrationId/send-whatsapp',
       timestamp: sendStartTime.toISOString()
     });
     
-    // Send asynchronously (single attempt, no retries, no timeout)
-    // This can take as long as needed
-    whatsappService.sendPdfViaWhatsApp(
-      cleanPhone,
-      pdfBuffer,
-      memberName
-    ).then(async (result) => {
+    try {
+      // Send synchronously to get actual result before responding
+      const result = await whatsappService.sendPdfViaWhatsApp(
+        cleanPhone,
+        pdfBuffer,
+        memberName
+      );
+      
       const sendEndTime = new Date();
       const sendDuration = sendEndTime.getTime() - sendStartTime.getTime();
       
@@ -1747,15 +1785,33 @@ router.post('/events/:id/registrations/:registrationId/send-whatsapp',
         }
 
         await notifyManagerOnWhatsAppSent(authenticatedUserId, registration, registration.event, registration.member);
+        
+        return res.status(200).json({
+          success: true,
+          message: 'Visitor pass sent via WhatsApp successfully',
+          phone: cleanPhone,
+          registrationId: registrationId
+        });
       } else {
         Logger.error('WhatsApp Send: Failed', null, { 
           registrationId, 
           durationMs: sendDuration,
           error: result.error || 'Unknown error'
         });
+        
+        // Don't update pdfSentAt if send failed - allow retry
         await releaseWhatsAppLock(registrationId);
+        
+        // Return error response to frontend so user knows what happened
+        return res.status(500).json({
+          success: false,
+          message: result.error || 'Failed to send WhatsApp message. Please try again.',
+          error: result.error,
+          phone: cleanPhone,
+          canRetry: true
+        });
       }
-    }).catch(async (whatsappError) => {
+    } catch (whatsappError) {
       const sendEndTime = new Date();
       const sendDuration = sendEndTime.getTime() - sendStartTime.getTime();
       Logger.error('WhatsApp Send: Exception', whatsappError, { 
@@ -1763,17 +1819,15 @@ router.post('/events/:id/registrations/:registrationId/send-whatsapp',
         durationMs: sendDuration
       });
       await releaseWhatsAppLock(registrationId);
-    });
-    
-    // Return immediately - send happens asynchronously
-    Logger.info('WhatsApp Send: Initiated asynchronously', { registrationId });
-    return res.status(200).json({
-      success: true,
-      message: 'WhatsApp message is being sent asynchronously',
-      phone: cleanPhone,
-      queued: false,
-      async: true
-    });
+      
+      return res.status(500).json({
+        success: false,
+        message: whatsappError.message || 'Failed to send WhatsApp message. Please try again.',
+        error: whatsappError.message,
+        phone: cleanPhone,
+        canRetry: true
+      });
+    }
 
     // OLD RETRY LOGIC REMOVED - Now using async single attempt (no retries)
 

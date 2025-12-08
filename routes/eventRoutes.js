@@ -1998,7 +1998,13 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
             });
 
             const phoneRegex = /^[6-9]\d{9}$/;
-            const cleanPhone = registrationForPdf.member.phone?.trim().replace(/^\+91|^91/, '') || '';
+            // Smart phone cleaning: only strip country code if length confirms it's a prefix
+            let cleanPhone = registrationForPdf.member.phone?.trim() || '';
+            if (cleanPhone.startsWith('+91') && cleanPhone.length === 13) {
+              cleanPhone = cleanPhone.substring(3);
+            } else if (cleanPhone.startsWith('91') && cleanPhone.length === 12) {
+              cleanPhone = cleanPhone.substring(2);
+            }
             
             Logger.info('Manual Registration: Phone number cleaned', {
               registrationId: registration.id,
