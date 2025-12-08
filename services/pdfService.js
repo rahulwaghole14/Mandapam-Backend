@@ -7,10 +7,10 @@ const qrService = require('./qrService');
 const { getFileUrl } = require('../config/multerConfig');
 
 // Font paths for Devanagari (Marathi, Hindi) support
-// Using Mukta fonts - more stable with pdfkit/fontkit than Noto Sans Devanagari
+// Using FreeSans fonts which have good Devanagari support and work reliably with pdfkit
 const FONTS_DIR = path.join(__dirname, '..', 'assets', 'fonts');
-const DEVANAGARI_REGULAR = path.join(FONTS_DIR, 'Mukta-Regular.ttf');
-const DEVANAGARI_BOLD = path.join(FONTS_DIR, 'Mukta-Bold.ttf');
+const DEVANAGARI_REGULAR = path.join(FONTS_DIR, 'Devanagari-Regular.ttf');
+const DEVANAGARI_BOLD = path.join(FONTS_DIR, 'Devanagari-Bold.ttf');
 
 /**
  * Check if text contains Devanagari characters (used for Marathi, Hindi, etc.)
@@ -197,6 +197,25 @@ async function generateVisitorPassPDF(registration, event, member, baseUrl = '')
         return isBold ? 'Helvetica-Bold' : 'Helvetica';
       };
       
+      // Safe text rendering function that catches fontkit errors for complex scripts
+      const safeText = (doc, text, x, y, options = {}) => {
+        try {
+          doc.text(text, x, y, options);
+          return true;
+        } catch (fontError) {
+          console.warn(`[PDF Service] Font rendering error for "${text}": ${fontError.message}`);
+          // Fall back to Helvetica and try again
+          try {
+            doc.font(options.fallbackBold ? 'Helvetica-Bold' : 'Helvetica');
+            doc.text(text, x, y, options);
+            return true;
+          } catch (fallbackError) {
+            console.error(`[PDF Service] Fallback font also failed: ${fallbackError.message}`);
+            return false;
+          }
+        }
+      };
+      
       // Collect PDF data into buffer (stream-based internally, no temp files)
       const buffers = [];
       doc.on('data', buffers.push.bind(buffers));
@@ -303,13 +322,27 @@ async function generateVisitorPassPDF(registration, event, member, baseUrl = '')
       const displayName = member?.name || registration?.memberName || registration?.name || 'Guest';
       const nameFont = selectFont(displayName, true);
       console.log(`[PDF Service] Rendering name "${displayName}" with font: ${nameFont}`);
-      doc.fontSize(18)
-         .font(nameFont)
-         .fillColor('#111827')
-         .text(displayName, marginX, cursorY, {
-           width: pageWidth - marginX * 2,
-           align: 'center'
-         });
+      
+      // Use try-catch for Devanagari text which may fail with certain character combinations
+      try {
+        doc.fontSize(18)
+           .font(nameFont)
+           .fillColor('#111827')
+           .text(displayName, marginX, cursorY, {
+             width: pageWidth - marginX * 2,
+             align: 'center'
+           });
+      } catch (fontError) {
+        console.warn(`[PDF Service] Devanagari font failed for "${displayName}": ${fontError.message}`);
+        // Fall back to Helvetica-Bold
+        doc.fontSize(18)
+           .font('Helvetica-Bold')
+           .fillColor('#111827')
+           .text(displayName, marginX, cursorY, {
+             width: pageWidth - marginX * 2,
+             align: 'center'
+           });
+      }
       cursorY += 42; // Increased from 32 to 42 (space after name)
       
       // Divider
