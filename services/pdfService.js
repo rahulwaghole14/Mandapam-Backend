@@ -7,9 +7,10 @@ const qrService = require('./qrService');
 const { getFileUrl } = require('../config/multerConfig');
 
 // Font paths for Devanagari (Marathi, Hindi) support
+// Using Mukta fonts - more stable with pdfkit/fontkit than Noto Sans Devanagari
 const FONTS_DIR = path.join(__dirname, '..', 'assets', 'fonts');
-const DEVANAGARI_REGULAR = path.join(FONTS_DIR, 'NotoSansDevanagari-Regular.ttf');
-const DEVANAGARI_BOLD = path.join(FONTS_DIR, 'NotoSansDevanagari-Bold.ttf');
+const DEVANAGARI_REGULAR = path.join(FONTS_DIR, 'Mukta-Regular.ttf');
+const DEVANAGARI_BOLD = path.join(FONTS_DIR, 'Mukta-Bold.ttf');
 
 /**
  * Check if text contains Devanagari characters (used for Marathi, Hindi, etc.)
