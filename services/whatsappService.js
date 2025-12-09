@@ -140,20 +140,47 @@ async function sendPdfViaWhatsApp(phoneNumber, pdfSource, memberName = '') {
     const sendDuration = sendEndTime - sendStartTime;
     console.log(`[WhatsApp Service] ⏱️ API call completed in ${sendDuration}ms at ${new Date().toISOString()}`);
 
-    console.log(`[WhatsApp Service] API Response status: ${response.status}`);
-    console.log(`[WhatsApp Service] API Response data:`, JSON.stringify(response.data).substring(0, 200));
+    const Logger = require('../utils/logger');
+    Logger.info('WhatsApp Service: API Response received', {
+      status: response.status,
+      statusText: response.statusText,
+      responseData: typeof response.data === 'object' ? JSON.stringify(response.data).substring(0, 500) : String(response.data).substring(0, 500),
+      phone: formattedPhone,
+      memberName
+    });
 
-    if (response.status === 200) {
-      console.log(`[WhatsApp Service] ✅ Successfully sent to ${formattedPhone}`);
+    // Check if response indicates success
+    const responseData = response.data;
+    const isSuccess = response.status === 200 && (
+      (typeof responseData === 'object' && (responseData.success === true || responseData.status === 'success' || responseData.message?.toLowerCase().includes('success'))) ||
+      (typeof responseData === 'string' && responseData.toLowerCase().includes('success'))
+    );
+
+    if (isSuccess) {
+      Logger.info('WhatsApp Service: Successfully sent to WhatsApp API', {
+        phone: formattedPhone,
+        memberName,
+        responseStatus: response.status
+      });
       return {
         success: true,
         message: 'PDF sent via WhatsApp successfully'
       };
     } else {
-      console.error(`[WhatsApp Service] ❌ API returned status ${response.status}`);
+      // Even if status is 200, check if the response indicates failure
+      const errorMsg = typeof responseData === 'object' 
+        ? (responseData.error || responseData.message || 'Unknown error')
+        : (typeof responseData === 'string' ? responseData : `WhatsApp API returned status ${response.status}`);
+      
+      Logger.error('WhatsApp Service: API returned error response', new Error(errorMsg), {
+        phone: formattedPhone,
+        status: response.status,
+        responseData: typeof responseData === 'object' ? JSON.stringify(responseData) : String(responseData)
+      });
+      
       return {
         success: false,
-        error: `WhatsApp API returned status ${response.status}`
+        error: errorMsg
       };
     }
   } catch (error) {
@@ -339,9 +366,109 @@ async function sendPdfBase64ViaWhatsApp(phoneNumber, pdfBase64, fileName, member
   }
 }
 
+/**
+ * Send OTP via WhatsApp
+ * @param {string} phoneNumber - Phone number (will be formatted to 91XXXXXXXXXX)
+ * @param {string} otp - 6-digit OTP code
+ * @returns {Promise<{success: boolean, message?: string, error?: string}>}
+ */
+async function sendOTP(phoneNumber, otp) {
+  try {
+    const formattedPhone = formatPhoneNumber(phoneNumber);
+    
+    if (!formattedPhone) {
+      return {
+        success: false,
+        error: 'Invalid phone number format'
+      };
+    }
+
+    if (!otp || otp.length !== 6 || !/^\d{6}$/.test(otp)) {
+      return {
+        success: false,
+        error: 'Invalid OTP format. Must be 6 digits.'
+      };
+    }
+
+    // Build OTP message
+    const message = `🔐 MANDAPAM Login OTP\n\nYour OTP is: ${otp}\n\nThis OTP is valid for 10 minutes.\n\nDo not share this OTP with anyone.\n\n— MANDAPAM Team`;
+
+    console.log(`[WhatsApp Service] 📤 Sending OTP to ${formattedPhone} at ${new Date().toISOString()}`);
+
+    // Send via WhatsApp API (no timeout - async, can take as long as needed)
+    const sendStartTime = Date.now();
+    const response = await axios.post(
+      `https://messagesapi.co.in/chat/sendMessage/${DEVICE_UID}/${encodeURIComponent(DEVICE_NAME)}`,
+      {
+        phone: formattedPhone,
+        message: message
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: 0 // No timeout - async, can take as long as needed (same as PDF sending)
+      }
+    );
+
+    const sendEndTime = Date.now();
+    const sendDuration = sendEndTime - sendStartTime;
+    console.log(`[WhatsApp Service] ⏱️ OTP API call completed in ${sendDuration}ms at ${new Date().toISOString()}`);
+
+    // Check if response indicates success (similar to PDF sending logic)
+    const responseData = response.data;
+    const isSuccess = response.status === 200 && (
+      (typeof responseData === 'object' && (responseData.success === true || responseData.status === 'success' || responseData.message?.toLowerCase().includes('success'))) ||
+      (typeof responseData === 'string' && responseData.toLowerCase().includes('success'))
+    );
+
+    if (isSuccess) {
+      console.log(`✅ WhatsApp OTP sent successfully to ${formattedPhone}`);
+      return {
+        success: true,
+        message: 'OTP sent via WhatsApp successfully'
+      };
+    } else {
+      // Even if status is 200, check if the response indicates failure
+      const errorMsg = typeof responseData === 'object' 
+        ? (responseData.error || responseData.message || 'Unknown error')
+        : (typeof responseData === 'string' ? responseData : `WhatsApp API returned status ${response.status}`);
+      
+      console.error(`⚠️ WhatsApp OTP API returned error response: ${errorMsg}`);
+      return {
+        success: false,
+        error: errorMsg
+      };
+    }
+  } catch (error) {
+    console.error(`[WhatsApp Service] ❌ Error sending OTP to ${phoneNumber}:`, error.message);
+    
+    let errorMessage = 'Failed to send OTP via WhatsApp';
+    if (error.response?.data) {
+      if (typeof error.response.data === 'string') {
+        errorMessage = error.response.data;
+      } else if (error.response.data.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response.data.error) {
+        errorMessage = error.response.data.error;
+      }
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    
+    return {
+      success: false,
+      error: errorMessage,
+      errorCode: error.code,
+      errorStatus: error.response?.status
+    };
+  }
+}
+
 module.exports = {
   sendPdfViaWhatsApp,
   sendPdfBase64ViaWhatsApp,
+  sendOTP,
   formatPhoneNumber,
   buildMessage
 };

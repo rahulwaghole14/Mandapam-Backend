@@ -5,9 +5,10 @@ const { WHATSAPP_LOCK_TIMESTAMP } = require('./whatsappConstants');
 /**
  * Acquire a database lock for WhatsApp sending to prevent duplicate sends
  * @param {number} registrationId - The registration ID to lock
+ * @param {boolean} forceResend - If true, allow resending even if already sent (for manual sends)
  * @returns {Promise<{acquired: boolean, reason?: string, pdfSentAt?: Date}>}
  */
-async function acquireWhatsAppLock(registrationId) {
+async function acquireWhatsAppLock(registrationId, forceResend = false) {
   try {
     const lockResult = await sequelize.transaction(async (transaction) => {
       // Lock the row for update (SELECT FOR UPDATE)
@@ -25,11 +26,17 @@ async function acquireWhatsAppLock(registrationId) {
       if (lockedRegistration.pdfSentAt) {
         // Check if it's a real timestamp (already sent) or lock value (currently sending)
         if (lockedRegistration.pdfSentAt.getTime() > WHATSAPP_LOCK_TIMESTAMP.getTime()) {
-          return { 
-            acquired: false, 
-            reason: 'already_sent', 
-            pdfSentAt: lockedRegistration.pdfSentAt 
-          };
+          // If forceResend is true, clear the pdfSentAt to allow resending
+          if (forceResend) {
+            await lockedRegistration.update({ pdfSentAt: WHATSAPP_LOCK_TIMESTAMP }, { transaction });
+            return { acquired: true, wasAlreadySent: true };
+          } else {
+            return { 
+              acquired: false, 
+              reason: 'already_sent', 
+              pdfSentAt: lockedRegistration.pdfSentAt 
+            };
+          }
         } else {
           // Lock value - another process is currently sending
           return { acquired: false, reason: 'lock_held' };

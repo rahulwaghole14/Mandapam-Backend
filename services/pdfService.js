@@ -335,13 +335,13 @@ async function generateVisitorPassPDF(registration, event, member, baseUrl = '')
       } catch (fontError) {
         console.warn(`[PDF Service] Devanagari font failed for "${displayName}": ${fontError.message}`);
         // Fall back to Helvetica-Bold
-        doc.fontSize(18)
-           .font('Helvetica-Bold')
-           .fillColor('#111827')
-           .text(displayName, marginX, cursorY, {
-             width: pageWidth - marginX * 2,
-             align: 'center'
-           });
+      doc.fontSize(18)
+         .font('Helvetica-Bold')
+         .fillColor('#111827')
+         .text(displayName, marginX, cursorY, {
+           width: pageWidth - marginX * 2,
+           align: 'center'
+         });
       }
       cursorY += 42; // Increased from 32 to 42 (space after name)
       

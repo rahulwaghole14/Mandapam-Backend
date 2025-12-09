@@ -28,24 +28,28 @@ const generateMemberToken = (member) => {
   });
 };
 
-// Generate OTP (Default: "123456" for compatibility with existing app)
+// Generate random 6-digit OTP
 const generateOTP = () => {
-  // For compatibility with existing app: Always return "123456"
-  return "123456";
-  
-  // For future: Generate random 6-digit OTP when app is updated
-  // return Math.floor(100000 + Math.random() * 900000).toString();
+  return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
 // Send OTP via WhatsApp or fallback to console
 const sendOTP = async (mobileNumber, otp) => {
   try {
     // Try to send via WhatsApp first
-    await whatsappService.sendOTP(mobileNumber, otp);
-    console.log(`✅ WhatsApp OTP sent successfully to ${mobileNumber}`);
-    return { success: true, method: 'whatsapp' };
+    const whatsappResult = await whatsappService.sendOTP(mobileNumber, otp);
+    if (whatsappResult.success) {
+      console.log(`✅ WhatsApp OTP sent successfully to ${mobileNumber}`);
+      return { success: true, method: 'whatsapp' };
+    } else {
+      // WhatsApp service returned failure
+      console.log(`⚠️ WhatsApp OTP failed for ${mobileNumber}:`, whatsappResult.error);
+      console.log(`📱 Fallback: OTP for ${mobileNumber}: ${otp}`);
+      console.log(`🔗 Console OTP: OTP sent successfully to ${mobileNumber}`);
+      return { success: true, method: 'console', error: whatsappResult.error };
+    }
   } catch (whatsappError) {
-    console.log(`⚠️ WhatsApp OTP failed for ${mobileNumber}:`, whatsappError.message);
+    console.log(`⚠️ WhatsApp OTP exception for ${mobileNumber}:`, whatsappError.message);
     console.log(`📱 Fallback: OTP for ${mobileNumber}: ${otp}`);
     console.log(`🔗 Console OTP: OTP sent successfully to ${mobileNumber}`);
     return { success: true, method: 'console', error: whatsappError.message };
