@@ -59,6 +59,10 @@ const requestLogger = require('./middleware/requestLogger');
 
 const app = express();
 
+// Trust proxy for accurate IP detection behind reverse proxy (Render.com, etc.)
+// This is required for express-rate-limit to work correctly
+app.set('trust proxy', true);
+
 const cspImgSrc = [
   "'self'",
   'data:',

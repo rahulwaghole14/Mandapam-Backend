@@ -5,6 +5,7 @@ const path = require('path');
 
 const DEVICE_UID = process.env.WHATSAPP_DEVICE_UID || 'a8bec8c820614d8ba084a55429716a78';
 const DEVICE_NAME = process.env.WHATSAPP_DEVICE_NAME || 'Mandapam';
+const WHATSAPP_API_KEY = process.env.WHATSAPP_API_KEY || '';
 const COUNTRY_CODE = '91';
 
 const WHATSAPP_MESSAGE_TEMPLATE = `
@@ -32,13 +33,36 @@ MANDAPAM App डाउनलोड करा 👇
 
 /**
  * Format phone number to 91XXXXXXXXXX
+ * Ensures country code 91 is always present
  */
 function formatPhoneNumber(value) {
-  const digits = (value || '').replace(/\D/g, '');
+  if (!value) return '';
+  
+  // Remove all non-digit characters
+  const digits = String(value).replace(/\D/g, '');
   if (!digits) return '';
-  if (digits.length === 10) return `${COUNTRY_CODE}${digits}`;
-  if (digits.length === 12 && digits.startsWith(COUNTRY_CODE)) return digits;
-  if (digits.length > 10) return `${COUNTRY_CODE}${digits.slice(-10)}`;
+  
+  // If already 12 digits and starts with 91, return as is
+  if (digits.length === 12 && digits.startsWith(COUNTRY_CODE)) {
+    return digits;
+  }
+  
+  // If 10 digits, add 91 prefix
+  if (digits.length === 10) {
+    return `${COUNTRY_CODE}${digits}`;
+  }
+  
+  // If 11 digits and starts with 0, remove 0 and add 91
+  if (digits.length === 11 && digits.startsWith('0')) {
+    return `${COUNTRY_CODE}${digits.substring(1)}`;
+  }
+  
+  // If more than 10 digits, take last 10 and add 91
+  if (digits.length > 10) {
+    return `${COUNTRY_CODE}${digits.slice(-10)}`;
+  }
+  
+  // If less than 10 digits, it's invalid
   return '';
 }
 
@@ -394,20 +418,42 @@ async function sendOTP(phoneNumber, otp) {
     const message = `🔐 MANDAPAM Login OTP\n\nYour OTP is: ${otp}\n\nThis OTP is valid for 10 minutes.\n\nDo not share this OTP with anyone.\n\n— MANDAPAM Team`;
 
     console.log(`[WhatsApp Service] 📤 Sending OTP to ${formattedPhone} at ${new Date().toISOString()}`);
+    console.log(`[WhatsApp Service] Original phone: ${phoneNumber}, Formatted phone: ${formattedPhone}`);
 
-    // Send via WhatsApp API (no timeout - async, can take as long as needed)
+    // Use JSON format as per API documentation
     const sendStartTime = Date.now();
+    const apiUrl = `https://messagesapi.co.in/chat/sendMessage`;
+    console.log(`[WhatsApp Service] API URL: ${apiUrl}`);
+    console.log(`[WhatsApp Service] Phone: ${formattedPhone}, Message length: ${message.length} chars`);
+    
+    // Prepare request body according to API documentation
+    const requestBody = {
+      id: DEVICE_UID,
+      name: DEVICE_NAME,
+      phone: formattedPhone,
+      message: message
+    };
+
+    // Prepare headers according to API documentation
+    const headers = {
+      'Content-Type': 'application/json',
+      'Hello': 'Hello2'
+    };
+    
+    // Add API key if available
+    if (WHATSAPP_API_KEY) {
+      headers['x-api-key'] = WHATSAPP_API_KEY;
+    }
+
+    console.log(`[WhatsApp Service] Request body:`, JSON.stringify(requestBody));
+    console.log(`[WhatsApp Service] Headers:`, JSON.stringify(headers));
+    
     const response = await axios.post(
-      `https://messagesapi.co.in/chat/sendMessage/${DEVICE_UID}/${encodeURIComponent(DEVICE_NAME)}`,
+      apiUrl,
+      requestBody,
       {
-        phone: formattedPhone,
-        message: message
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        timeout: 0 // No timeout - async, can take as long as needed (same as PDF sending)
+        headers: headers,
+        timeout: 0 // No timeout - async, can take as long as needed
       }
     );
 
