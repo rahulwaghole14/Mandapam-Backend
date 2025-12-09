@@ -147,7 +147,7 @@ class MemberImportService {
       }
 
       // Validate business type
-      const validBusinessTypes = ['catering', 'sound', 'mandap', 'madap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other'];
+      const validBusinessTypes = ['catering', 'sound', 'mandap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other'];
       if (member.businessType && !validBusinessTypes.includes(member.businessType)) {
         errors.push('Invalid business type');
       }

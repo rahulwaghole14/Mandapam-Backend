@@ -344,7 +344,7 @@ router.get('/:id/members', [
   query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
   query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100'),
   query('search').optional().isString().trim(),
-  query('businessType').optional().isIn(['catering', 'sound', 'mandap', 'madap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
+  query('businessType').optional().isIn(['catering', 'sound', 'mandap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
   query('sortBy').optional().isIn(['name', 'businessName', 'city', 'businessType', 'created_at']),
   query('sortOrder').optional().isIn(['asc', 'desc'])
 ], protect, async (req, res) => {

@@ -16,7 +16,7 @@ router.post('/import-csv', [
   body('members.*.businessName').notEmpty().withMessage('Business name is required'),
   body('members.*.businessType').optional().custom((value) => {
     if (!value) return true; // Allow empty/null values
-    const validTypes = ['catering', 'sound', 'mandap', 'madap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other'];
+    const validTypes = ['catering', 'sound', 'mandap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other'];
     return validTypes.includes(value);
   }).withMessage('Invalid business type'),
   body('members.*.phone').matches(/^[0-9+\-\s()]{10,15}$/).withMessage('Invalid phone number format'),

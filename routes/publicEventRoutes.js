@@ -562,7 +562,7 @@ router.post('/events/:id/register-payment',
     body('name', 'Name is required').notEmpty().trim(),
     body('phone', 'Phone number is required').notEmpty().matches(/^[0-9]{10}$/).withMessage('Phone must be 10 digits'),
     body('businessName', 'Business name is required').notEmpty().trim(),
-    body('businessType', 'Business type is required').isIn(['catering', 'sound', 'mandap', 'madap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
+    body('businessType', 'Business type is required').isIn(['catering', 'sound', 'mandap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
     body('associationId').optional({ checkFalsy: true }).custom((value) => {
       const num = parseInt(value, 10);
       if (isNaN(num) || num < 1) {

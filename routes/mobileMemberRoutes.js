@@ -46,7 +46,7 @@ router.get('/profile', protectMobile, async (req, res) => {
 router.put('/profile', protectMobile, [
   body('name', 'Name is required').notEmpty().trim(),
   body('businessName', 'Business name is required').notEmpty().trim(),
-  body('businessType', 'Business type is required').isIn(['sound', 'decorator', 'catering', 'generator', 'madap', 'light']),
+  body('businessType', 'Business type is required').isIn(['catering', 'sound', 'mandap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
   body('city', 'City is required').notEmpty().trim(),
   body('pincode').optional().matches(/^[0-9]{6}$/).withMessage('Please enter a valid 6-digit pincode'),
   body('associationName', 'Association name is required').notEmpty().trim(),
