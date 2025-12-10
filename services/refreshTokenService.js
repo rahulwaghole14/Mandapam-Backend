@@ -45,7 +45,8 @@ class RefreshTokenService {
   static async createRefreshToken(memberId, deviceInfo = null, ipAddress = null, userAgent = null) {
     try {
       const refreshToken = this.generateRefreshToken();
-      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+      // Set expiration to 1 year (365 days) - login persists until logout, data cleared, or app reinstalled
+      const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // 365 days (1 year)
 
       const tokenRecord = await RefreshToken.create({
         token: refreshToken,
@@ -213,7 +214,7 @@ class RefreshTokenService {
         accessToken,
         refreshToken: refreshTokenRecord.token,
         expiresIn: 15 * 60, // 15 minutes in seconds
-        refreshExpiresIn: 30 * 24 * 60 * 60, // 30 days in seconds
+        refreshExpiresIn: 365 * 24 * 60 * 60, // 365 days (1 year) in seconds - persists until logout
         member: {
           id: member.id,
           name: member.name,

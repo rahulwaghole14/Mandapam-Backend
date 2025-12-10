@@ -305,7 +305,10 @@ class FCMService {
 
   async registerToken(userId, token, deviceType, userType = 'user') {
     try {
-      console.log('🔍 FCM Service - registerToken called with:', { userId, token: token.substring(0, 20) + '...', deviceType, userType });
+      // Only log in development
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔍 FCM Service - registerToken called with:', { userId, token: token.substring(0, 20) + '...', deviceType, userType });
+      }
       
       // Check if token already exists
       const existingToken = await FCMToken.findOne({
@@ -323,22 +326,30 @@ class FCMService {
       if (userType === 'member') {
         tokenData.memberId = userId;
         tokenData.userId = null;
-        console.log('🔍 FCM Service - Setting memberId:', userId, 'userId: null');
+        // Only log in development
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔍 FCM Service - Setting memberId:', userId, 'userId: null');
+        }
       } else {
         tokenData.userId = userId;
         tokenData.memberId = null;
-        console.log('🔍 FCM Service - Setting userId:', userId, 'memberId: null');
+        // Only log in development
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔍 FCM Service - Setting userId:', userId, 'memberId: null');
+        }
       }
 
       if (existingToken) {
         // Update existing token
         await existingToken.update(tokenData);
-        console.log(`✅ FCM token updated for ${userType} ${userId}`);
+        // Simplified log - only show success
+        console.log(`[FCM] Token updated: ${userType} ${userId}`);
         return { success: true, message: 'Token updated successfully' };
       } else {
         // Create new token
         await FCMToken.create(tokenData);
-        console.log(`✅ FCM token registered for ${userType} ${userId}`);
+        // Simplified log - only show success
+        console.log(`[FCM] Token registered: ${userType} ${userId}`);
         return { success: true, message: 'Token registered successfully' };
       }
     } catch (error) {
@@ -356,7 +367,8 @@ class FCMService {
       );
       
       if (updatedRows > 0) {
-        console.log(`✅ FCM token deactivated: ${token.substring(0, 20)}...`);
+        // Simplified log
+        console.log(`[FCM] Token deactivated: ${token.substring(0, 20)}...`);
       } else {
         console.log(`⚠️ FCM token not found for deactivation: ${token.substring(0, 20)}...`);
       }

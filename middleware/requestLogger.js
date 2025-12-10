@@ -12,35 +12,42 @@ const requestLogger = (req, res, next) => {
   // Attach request ID to request object for use in routes
   req.requestId = requestId;
 
-  // Log request start
-  Logger.info('Request started', {
-    requestId,
-    method: req.method,
-    url: req.url,
-    path: req.path,
-    ip: req.ip || req.connection.remoteAddress,
-    userAgent: req.get('user-agent')
-  });
-
-  // Override res.json to log response
+  // Override res.json to log response (simplified format)
   const originalJson = res.json.bind(res);
   res.json = function(data) {
     const responseTime = Date.now() - startTime;
     
-    // Log response
-    Logger.request(req, res, responseTime);
+    // Simplified log format: [METHOD] path | status | time | data
+    const logData = {
+      method: req.method,
+      path: req.path,
+      status: res.statusCode,
+      time: `${responseTime}ms`
+    };
     
-    // Log errors in response
-    if (data.success === false) {
-      Logger.warn('API Error Response', {
-        requestId,
-        method: req.method,
-        path: req.path,
-        statusCode: res.statusCode,
-        error: data.message || data.error,
-        responseTime: `${responseTime}ms`
-      });
+    // Only include request body for POST/PUT/PATCH and errors
+    if ((req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') && req.body && Object.keys(req.body).length > 0) {
+      // Exclude sensitive fields
+      const sanitizedBody = { ...req.body };
+      if (sanitizedBody.password) delete sanitizedBody.password;
+      if (sanitizedBody.token) delete sanitizedBody.token;
+      if (sanitizedBody.refreshToken) delete sanitizedBody.refreshToken;
+      logData.body = sanitizedBody;
     }
+    
+    // Include error message if present
+    if (data.success === false) {
+      logData.error = data.message || data.error || 'Unknown error';
+      if (data.errors) logData.errors = data.errors;
+    }
+    
+    // Include response data for errors or small responses
+    if (data.success === false || (data.data && JSON.stringify(data.data).length < 500)) {
+      logData.response = data;
+    }
+    
+    // Clean, single-line log format
+    console.log(`[${req.method}] ${req.path} | ${res.statusCode} | ${responseTime}ms`, JSON.stringify(logData));
     
     return originalJson(data);
   };
@@ -49,15 +56,9 @@ const requestLogger = (req, res, next) => {
   res.on('finish', () => {
     const responseTime = Date.now() - startTime;
     
-    // Log slow requests
+    // Log slow requests only
     if (responseTime > 5000) {
-      Logger.warn('Slow request detected', {
-        requestId,
-        method: req.method,
-        path: req.path,
-        responseTime: `${responseTime}ms`,
-        statusCode: res.statusCode
-      });
+      console.log(`⚠️ Slow request: ${req.method} ${req.path} | ${responseTime}ms`);
     }
   });
 

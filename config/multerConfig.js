@@ -25,8 +25,17 @@ const createStorage = (subDir) => multer.diskStorage({
     const fileExtension = path.extname(file.originalname);
     const baseName = path.basename(file.originalname, fileExtension);
     
-    // Create filename: basename-timestamp-random.extension
-    const filename = `${baseName}-${uniqueSuffix}${fileExtension}`;
+    // Sanitize baseName: remove spaces, special characters, and replace with hyphens
+    const sanitizedName = baseName
+      .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .replace(/[^a-zA-Z0-9\-_]/g, '') // Remove special characters except hyphens and underscores
+      .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
+      .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
+    
+    // Create filename: sanitized-basename-timestamp-random.extension
+    // If sanitized name is empty, use 'file' as default
+    const finalBaseName = sanitizedName || 'file';
+    const filename = `${finalBaseName}-${uniqueSuffix}${fileExtension}`;
     
     cb(null, filename);
   }
@@ -188,11 +197,36 @@ const handleMulterError = (error, req, res, next) => {
   });
 };
 
+// Utility function to check if file exists
+const fileExists = (filename, defaultSubDir = 'event-images') => {
+  if (!filename) return false;
+  
+  const cleanFilename = filename.replace(/^\/+/, '').replace(/\\/g, '/');
+  const pathParts = cleanFilename.split('/');
+  
+  let filePath;
+  if (pathParts.length > 1) {
+    const actualFilename = pathParts[pathParts.length - 1];
+    const subDir = pathParts[0];
+    const knownSubDirs = ['event-images', 'profile-images', 'business-images', 'gallery-images', 'documents', 'images', 'general'];
+    if (knownSubDirs.includes(subDir)) {
+      filePath = path.join(UPLOADS_BASE_DIR, cleanFilename);
+    } else {
+      filePath = path.join(UPLOADS_BASE_DIR, defaultSubDir, actualFilename);
+    }
+  } else {
+    filePath = path.join(UPLOADS_BASE_DIR, defaultSubDir, cleanFilename);
+  }
+  
+  return fs.existsSync(filePath);
+};
+
 // Utility function to get file URL
 // @param {string} filename - Filename (may include path)
 // @param {string} baseUrl - Base URL for the file
 // @param {string} defaultSubDir - Default subdirectory if filename has no path (e.g., 'event-images', 'profile-images')
-const getFileUrl = (filename, baseUrl = '', defaultSubDir = 'event-images') => {
+// @param {boolean} checkExists - Whether to check if file exists before returning URL (default: false for performance)
+const getFileUrl = (filename, baseUrl = '', defaultSubDir = 'event-images', checkExists = false) => {
   if (!filename) return null;
   
   // Handle filenames that might already contain a path
@@ -202,6 +236,7 @@ const getFileUrl = (filename, baseUrl = '', defaultSubDir = 'event-images') => {
   // Check if filename already contains a subdirectory path
   const pathParts = cleanFilename.split('/');
   
+  let fileUrl;
   if (pathParts.length > 1) {
     // Filename contains a path like "mandap-events/image.jpg"
     const actualFilename = pathParts[pathParts.length - 1];
@@ -210,16 +245,26 @@ const getFileUrl = (filename, baseUrl = '', defaultSubDir = 'event-images') => {
     // Known subdirectories - use as-is
     const knownSubDirs = ['event-images', 'profile-images', 'business-images', 'gallery-images', 'documents', 'images', 'general'];
     if (knownSubDirs.includes(subDir)) {
-      return `${baseUrl}/uploads/${cleanFilename}`;
+      // URL encode the filename to handle spaces and special characters
+      const encodedPath = cleanFilename.split('/').map(part => encodeURIComponent(part)).join('/');
+      fileUrl = `${baseUrl}/uploads/${encodedPath}`;
+    } else {
+      // Unknown subdirectory - extract filename and use default subdirectory
+      // This handles cases like "mandap-events/image.jpg" -> "/uploads/event-images/image.jpg"
+      fileUrl = `${baseUrl}/uploads/${defaultSubDir}/${encodeURIComponent(actualFilename)}`;
     }
-    
-    // Unknown subdirectory - extract filename and use default subdirectory
-    // This handles cases like "mandap-events/image.jpg" -> "/uploads/event-images/image.jpg"
-    return `${baseUrl}/uploads/${defaultSubDir}/${actualFilename}`;
+  } else {
+    // No path in filename - use default subdirectory
+    // URL encode the filename to handle spaces and special characters
+    fileUrl = `${baseUrl}/uploads/${defaultSubDir}/${encodeURIComponent(cleanFilename)}`;
   }
   
-  // No path in filename - use default subdirectory
-  return `${baseUrl}/uploads/${defaultSubDir}/${cleanFilename}`;
+  // If checkExists is true, verify file exists before returning URL
+  if (checkExists && !fileExists(filename, defaultSubDir)) {
+    return null; // Return null if file doesn't exist
+  }
+  
+  return fileUrl;
 };
 
 // Utility function to delete file
@@ -294,23 +339,6 @@ const deleteFile = (filename) => {
       resolve(false);
     }
   });
-};
-
-// Utility function to check if file exists
-const fileExists = (filename) => {
-  const subDirs = ['profile-images', 'business-images', 'gallery-images', 'event-images', 'documents', 'images', 'general'];
-  
-  // Check if file exists in any subdirectory
-  for (const subDir of subDirs) {
-    const filePath = path.join(UPLOADS_BASE_DIR, subDir, filename);
-    if (fs.existsSync(filePath)) {
-      return true;
-    }
-  }
-  
-  // Fallback to flat structure
-  const filePath = path.join(UPLOADS_BASE_DIR, filename);
-  return fs.existsSync(filePath);
 };
 
 // Utility function to get file info

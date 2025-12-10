@@ -968,6 +968,80 @@ router.post('/events/:id/confirm-payment',
       });
     }
 
+    // CRITICAL: Check if this payment was already processed (idempotent operation)
+    // This prevents duplicate payment processing and ensures payment is never lost
+    const existingPaidByPaymentId = await EventRegistration.findOne({
+      where: { 
+        paymentId: razorpay_payment_id
+      },
+      include: [
+        {
+          model: Member,
+          as: 'member',
+          required: false
+        },
+        {
+          model: Event,
+          as: 'event',
+          required: false
+        }
+      ]
+    });
+
+    if (existingPaidByPaymentId) {
+      // Payment already processed - return existing registration (idempotent)
+      console.log('✅ Payment already processed, returning existing registration:', existingPaidByPaymentId.id);
+      
+      // Generate QR if needed
+      let qrDataURL = null;
+      try {
+        qrDataURL = await generateQrWithRetry(existingPaidByPaymentId, 'duplicate payment confirmation');
+      } catch (qrError) {
+        console.error('⚠️ QR generation failed (non-critical):', qrError.message);
+      }
+
+      const baseUrl = req.protocol + '://' + req.get('host');
+      let profileImageURL = null;
+      let profileImage = null;
+      try {
+        if (existingPaidByPaymentId.member) {
+          const profileMeta = ensureProfileImageUrl(
+            existingPaidByPaymentId.member.profileImageURL || existingPaidByPaymentId.member.profileImage || null,
+            baseUrl
+          );
+          profileImageURL = profileMeta.url;
+          profileImage = profileMeta.stored || existingPaidByPaymentId.member.profileImage || null;
+        }
+      } catch (profileError) {
+        console.error('⚠️ Profile image URL generation failed (non-critical):', profileError.message);
+      }
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Payment already confirmed',
+        registrationId: existingPaidByPaymentId.id,
+        qrDataURL,
+        isNewRegistration: false,
+        shouldSendWhatsApp: false, // Already processed, WhatsApp should have been sent
+        registration: {
+          id: existingPaidByPaymentId.id,
+          eventId: existingPaidByPaymentId.eventId,
+          memberId: existingPaidByPaymentId.memberId,
+          status: existingPaidByPaymentId.status,
+          paymentStatus: existingPaidByPaymentId.paymentStatus,
+          amountPaid: existingPaidByPaymentId.amountPaid,
+          registeredAt: existingPaidByPaymentId.registeredAt
+        },
+        member: {
+          id: member.id,
+          name: member.name,
+          phone: member.phone,
+          profileImage,
+          profileImageURL
+        }
+      });
+    }
+
     const amountPaid = fee;
 
     // Create or update registration with transaction
@@ -983,7 +1057,115 @@ router.post('/events/:id/confirm-payment',
       console.log('🔄 Starting transaction for payment confirmation');
       console.log(`[Payment Confirmation] Registration type: ${isNewRegistration ? 'NEW' : 'EXISTING'}, WhatsApp sent: ${wasWhatsAppSent}, Should send: ${shouldSendWhatsApp}`);
       
+      // CRITICAL: Double-check paymentId inside transaction (prevents race conditions)
+      // This ensures that even if two requests pass the initial check, only one will succeed
+      const existingPaymentInTx = await EventRegistration.findOne({
+        where: { 
+          paymentId: razorpay_payment_id
+        },
+        transaction: paymentTransaction,
+        lock: paymentTransaction.LOCK.UPDATE // Lock for update to prevent concurrent access
+      });
+
+      if (existingPaymentInTx) {
+        // Payment was processed by another concurrent request
+        console.log('⚠️ Payment ID found inside transaction - another request processed it concurrently');
+        await paymentTransaction.rollback();
+        
+        // Reload the existing registration with associations
+        const existingWithAssociations = await EventRegistration.findOne({
+          where: { paymentId: razorpay_payment_id },
+          include: [
+            {
+              model: Member,
+              as: 'member',
+              required: false
+            },
+            {
+              model: Event,
+              as: 'event',
+              required: false
+            }
+          ]
+        });
+
+        if (existingWithAssociations) {
+          // Generate QR if needed
+          let qrDataURL = null;
+          try {
+            qrDataURL = await generateQrWithRetry(existingWithAssociations, 'concurrent payment confirmation');
+          } catch (qrError) {
+            console.error('⚠️ QR generation failed (non-critical):', qrError.message);
+          }
+
+          const baseUrl = req.protocol + '://' + req.get('host');
+          let profileImageURL = null;
+          let profileImage = null;
+          try {
+            if (existingWithAssociations.member) {
+              const profileMeta = ensureProfileImageUrl(
+                existingWithAssociations.member.profileImageURL || existingWithAssociations.member.profileImage || null,
+                baseUrl
+              );
+              profileImageURL = profileMeta.url;
+              profileImage = profileMeta.stored || existingWithAssociations.member.profileImage || null;
+            }
+          } catch (profileError) {
+            console.error('⚠️ Profile image URL generation failed (non-critical):', profileError.message);
+          }
+          
+          return res.status(200).json({
+            success: true,
+            message: 'Payment already confirmed (processed by concurrent request)',
+            registrationId: existingWithAssociations.id,
+            qrDataURL,
+            isNewRegistration: false,
+            shouldSendWhatsApp: false,
+            registration: {
+              id: existingWithAssociations.id,
+              eventId: existingWithAssociations.eventId,
+              memberId: existingWithAssociations.memberId,
+              status: existingWithAssociations.status,
+              paymentStatus: existingWithAssociations.paymentStatus,
+              amountPaid: existingWithAssociations.amountPaid,
+              registeredAt: existingWithAssociations.registeredAt
+            },
+            member: {
+              id: member.id,
+              name: member.name,
+              phone: member.phone,
+              profileImage,
+              profileImageURL
+            }
+          });
+        } else {
+          // This should never happen, but handle it just in case
+          // Payment ID was found in transaction but not found after rollback
+          console.error('❌ Payment ID found in transaction but not found after rollback - potential data inconsistency', {
+            paymentId: razorpay_payment_id,
+            eventId,
+            memberId
+          });
+          return res.status(500).json({
+            success: false,
+            message: 'Payment processing error. Please contact support with payment ID: ' + razorpay_payment_id
+          });
+        }
+      }
+      
       if (existingRegistration) {
+        // Check if this registration already has a different payment ID
+        if (existingRegistration.paymentId && 
+            existingRegistration.paymentId !== razorpay_payment_id &&
+            existingRegistration.paymentStatus === 'paid') {
+          console.error('❌ Registration already has a different paid payment ID');
+          await paymentTransaction.rollback();
+          return res.status(400).json({
+            success: false,
+            message: 'This registration is already associated with a different payment. Please contact support.'
+          });
+        }
+        
         // Update existing registration
         const wasPaid = existingRegistration.paymentStatus === 'paid';
         await existingRegistration.update({
@@ -1005,30 +1187,189 @@ router.post('/events/:id/confirm-payment',
           });
         }
       } else {
-        // Create new registration
-        registration = await EventRegistration.create({
-          eventId,
-          memberId,
-          status: 'registered',
-          paymentStatus: 'paid',
-          amountPaid: amountPaid,
-          paymentOrderId: razorpay_order_id,
-          paymentId: razorpay_payment_id,
-          notes: notes || null,
-          registeredAt: new Date()
-        }, { transaction: paymentTransaction });
+        // Create new registration with error handling for race conditions
+        try {
+          registration = await EventRegistration.create({
+            eventId,
+            memberId,
+            status: 'registered',
+            paymentStatus: 'paid',
+            amountPaid: amountPaid,
+            paymentOrderId: razorpay_order_id,
+            paymentId: razorpay_payment_id,
+            notes: notes || null,
+            registeredAt: new Date()
+          }, { transaction: paymentTransaction });
 
-        // Verify registration was created
-        const verifyRegistration = await EventRegistration.findByPk(registration.id, { transaction: paymentTransaction });
-        if (!verifyRegistration) {
-          throw new Error('Registration creation verification failed');
+          // Verify registration was created
+          const verifyRegistration = await EventRegistration.findByPk(registration.id, { transaction: paymentTransaction });
+          if (!verifyRegistration) {
+            throw new Error('Registration creation verification failed');
+          }
+
+          // Update event attendee count
+          await Event.increment('currentAttendees', {
+            where: { id: eventId },
+            transaction: paymentTransaction
+          });
+        } catch (createError) {
+          // Handle unique constraint violation (race condition)
+          // This happens when two requests try to create registration simultaneously
+          if (createError.name === 'SequelizeUniqueConstraintError' || 
+              createError.message?.includes('unique') ||
+              createError.message?.includes('duplicate') ||
+              createError.original?.code === '23505') { // PostgreSQL unique violation code
+            
+            console.log('⚠️ Unique constraint violation detected - registration may have been created by concurrent request');
+            console.log('Error details:', {
+              name: createError.name,
+              message: createError.message,
+              code: createError.original?.code,
+              constraint: createError.original?.constraint
+            });
+            
+            // Check if it's a payment_id constraint violation
+            const isPaymentIdConstraint = createError.original?.constraint?.includes('payment_id') || 
+                                         createError.message?.includes('payment_id');
+            
+            if (isPaymentIdConstraint) {
+              // Payment ID conflict - another request processed this payment
+              console.log('⚠️ Payment ID unique constraint violation - payment already processed');
+              await paymentTransaction.rollback();
+              
+              // Find the registration with this payment ID
+              const existingWithPayment = await EventRegistration.findOne({
+                where: { paymentId: razorpay_payment_id },
+                include: [
+                  {
+                    model: Member,
+                    as: 'member',
+                    required: false
+                  },
+                  {
+                    model: Event,
+                    as: 'event',
+                    required: false
+                  }
+                ]
+              });
+
+              if (existingWithPayment) {
+                // Generate QR if needed
+                let qrDataURL = null;
+                try {
+                  qrDataURL = await generateQrWithRetry(existingWithPayment, 'payment id constraint violation');
+                } catch (qrError) {
+                  console.error('⚠️ QR generation failed (non-critical):', qrError.message);
+                }
+
+                const baseUrl = req.protocol + '://' + req.get('host');
+                let profileImageURL = null;
+                let profileImage = null;
+                try {
+                  if (existingWithPayment.member) {
+                    const profileMeta = ensureProfileImageUrl(
+                      existingWithPayment.member.profileImageURL || existingWithPayment.member.profileImage || null,
+                      baseUrl
+                    );
+                    profileImageURL = profileMeta.url;
+                    profileImage = profileMeta.stored || existingWithPayment.member.profileImage || null;
+                  }
+                } catch (profileError) {
+                  console.error('⚠️ Profile image URL generation failed (non-critical):', profileError.message);
+                }
+                
+                return res.status(200).json({
+                  success: true,
+                  message: 'Payment already confirmed',
+                  registrationId: existingWithPayment.id,
+                  qrDataURL,
+                  isNewRegistration: false,
+                  shouldSendWhatsApp: false,
+                  registration: {
+                    id: existingWithPayment.id,
+                    eventId: existingWithPayment.eventId,
+                    memberId: existingWithPayment.memberId,
+                    status: existingWithPayment.status,
+                    paymentStatus: existingWithPayment.paymentStatus,
+                    amountPaid: existingWithPayment.amountPaid,
+                    registeredAt: existingWithPayment.registeredAt
+                  },
+                  member: {
+                    id: member.id,
+                    name: member.name,
+                    phone: member.phone,
+                    profileImage,
+                    profileImageURL
+                  }
+                });
+              } else {
+                // This should never happen, but handle it just in case
+                // Payment ID constraint violation but registration not found after rollback
+                console.error('❌ Payment ID constraint violation but registration not found after rollback', {
+                  paymentId: razorpay_payment_id,
+                  eventId,
+                  memberId,
+                  error: createError.message
+                });
+                return res.status(500).json({
+                  success: false,
+                  message: 'Payment processing error. Please contact support with payment ID: ' + razorpay_payment_id
+                });
+              }
+            }
+            
+            // Try to find the registration that was created by the other request (event_id + member_id constraint)
+            const concurrentRegistration = await EventRegistration.findOne({
+              where: { eventId, memberId },
+              transaction: paymentTransaction,
+              lock: paymentTransaction.LOCK.UPDATE // Lock it to prevent further conflicts
+            });
+            
+            if (concurrentRegistration) {
+              console.log('✅ Found concurrent registration, updating with payment info');
+              
+              // Check if this registration already has a different payment ID
+              if (concurrentRegistration.paymentId && concurrentRegistration.paymentId !== razorpay_payment_id) {
+                console.error('❌ Registration exists with different payment ID - potential conflict');
+                await paymentTransaction.rollback();
+                return res.status(400).json({
+                  success: false,
+                  message: 'Registration already exists with a different payment. Please contact support.'
+                });
+              }
+              
+              // Use the existing registration
+              registration = concurrentRegistration;
+              
+              // Update it with payment info (in case it was created without payment)
+              await registration.update({
+                paymentStatus: 'paid',
+                amountPaid: amountPaid,
+                paymentOrderId: razorpay_order_id,
+                paymentId: razorpay_payment_id,
+                status: 'registered'
+              }, { transaction: paymentTransaction });
+              
+              // Only increment if not already paid
+              if (concurrentRegistration.paymentStatus !== 'paid') {
+                await Event.increment('currentAttendees', {
+                  where: { id: eventId },
+                  transaction: paymentTransaction
+                });
+              }
+            } else {
+              // Couldn't find it - rollback and rethrow the error
+              console.error('❌ Unique constraint error but registration not found');
+              await paymentTransaction.rollback();
+              throw createError;
+            }
+          } else {
+            // Other errors - rollback and rethrow
+            await paymentTransaction.rollback();
+            throw createError;
+          }
         }
-
-        // Update event attendee count
-        await Event.increment('currentAttendees', {
-          where: { id: eventId },
-          transaction: paymentTransaction
-        });
       }
       
       // Commit transaction

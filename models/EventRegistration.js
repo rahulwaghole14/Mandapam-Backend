@@ -100,7 +100,10 @@ const EventRegistration = sequelize.define('EventRegistration', {
       name: 'unique_event_member_registration'
     },
     { fields: ['payment_status'] },
-    { fields: ['status'] }
+    { fields: ['status'] },
+    { fields: ['payment_id'] }
+    // Note: Unique index on payment_id is created via migration script
+    // to support WHERE payment_id IS NOT NULL clause
   ],
   validate: {
     // Custom validation to ensure only one active registration per member per event

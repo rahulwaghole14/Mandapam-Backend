@@ -139,25 +139,31 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    // Log all incoming origins for debugging
-    console.log('CORS request from origin:', origin);
-    console.log('Allowed origins:', allowedOrigins);
+    // Only log CORS in development or when blocked
+    const isAllowed = allowedOrigins.indexOf(origin) !== -1;
+    const isRenderDomain = origin.includes('.onrender.com') || origin.includes('.vercel.app') || origin.includes('.netlify.app');
+    const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
     
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      console.log('✅ CORS allowed for origin:', origin);
+    if (isAllowed) {
+      // Only log in development
+      if (isDevelopment) {
+        console.log(`✅ CORS allowed: ${origin}`);
+      }
+      callback(null, true);
+    } else if (isRenderDomain) {
+      // Only log in development
+      if (isDevelopment) {
+        console.log(`⚠️ CORS allowing Render/Vercel/Netlify: ${origin}`);
+      }
+      callback(null, true);
+    } else if (isDevelopment) {
+      // Only log in development
+      console.log(`⚠️ CORS allowing unknown origin in development: ${origin}`);
       callback(null, true);
     } else {
-      // For production, check if it's a Render frontend (be more permissive)
-      if (origin.includes('.onrender.com') || origin.includes('.vercel.app') || origin.includes('.netlify.app')) {
-        console.log('⚠️ CORS allowing Render/Vercel/Netlify origin:', origin);
-        callback(null, true);
-      } else if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
-        console.log('⚠️ CORS allowing unknown origin in development:', origin);
-        callback(null, true);
-      } else {
-        console.log('❌ CORS blocked origin:', origin);
-        callback(new Error('Not allowed by CORS'));
-      }
+      // Always log blocked requests
+      console.log(`❌ CORS blocked: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,

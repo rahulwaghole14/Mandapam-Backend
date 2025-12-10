@@ -46,20 +46,31 @@ router.get('/profile', protectMobile, async (req, res) => {
 router.put('/profile', protectMobile, [
   body('name', 'Name is required').notEmpty().trim(),
   body('businessName', 'Business name is required').notEmpty().trim(),
-  body('businessType', 'Business type is required').isIn(['catering', 'sound', 'mandap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
+  body('businessType', 'Business type is required').notEmpty().isIn(['catering', 'sound', 'mandap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']).withMessage('Business type must be one of: catering, sound, mandap, light, decorator, photography, videography, transport, other'),
   body('city', 'City is required').notEmpty().trim(),
-  body('pincode').optional().matches(/^[0-9]{6}$/).withMessage('Please enter a valid 6-digit pincode'),
   body('associationName', 'Association name is required').notEmpty().trim(),
+  body('pincode').optional().matches(/^[0-9]{6}$/).withMessage('Please enter a valid 6-digit pincode'),
   body('birthDate').optional().isISO8601().withMessage('Birth date must be a valid date'),
-  body('email').optional().isEmail().withMessage('Please provide a valid email')
+  body('email').optional().isEmail().withMessage('Please provide a valid email'),
+  body('profileImage').optional().custom((value) => {
+    if (!value || value === '' || value === null || value === undefined) return true;
+    // Accept Cloudinary URL, local file path, or HTTP URL
+    if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('file://') || value.startsWith('content://'))) {
+      return value.length <= 500;
+    }
+    return value.length <= 255;
+  }).withMessage('Profile image must be a valid URL or filename')
 ], async (req, res) => {
   try {
+    // Validate request - express-validator will ensure required fields are present
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      console.error('Profile update validation errors:', JSON.stringify(errors.array(), null, 2));
-      console.error('Request body:', JSON.stringify(req.body, null, 2));
+      // Simplified error logging
+      const errorSummary = errors.array().map(e => `${e.path}: ${e.msg}`).join(', ');
+      console.error(`[VALIDATION] PUT /profile | ${errorSummary}`);
       return res.status(400).json({
         success: false,
+        message: 'Validation failed',
         errors: errors.array()
       });
     }
@@ -73,15 +84,57 @@ router.put('/profile', protectMobile, [
       });
     }
 
+    // Build update object - all required fields are guaranteed by validation
+    const updateData = {
+      name: req.body.name.trim(),
+      businessName: req.body.businessName.trim(),
+      businessType: req.body.businessType,
+      city: req.body.city.trim(),
+      associationName: req.body.associationName.trim(),
+    };
+
+    // Phone should not change, but allow if provided
+    if (req.body.phone) {
+      updateData.phone = req.body.phone;
+    }
+
+    // Optional fields - only update if provided
+    if (req.body.pincode !== undefined && req.body.pincode) {
+      updateData.pincode = req.body.pincode.trim();
+    }
+    if (req.body.email !== undefined && req.body.email) {
+      updateData.email = req.body.email.trim();
+    }
+    if (req.body.birthDate !== undefined && req.body.birthDate) {
+      updateData.birthDate = req.body.birthDate;
+    }
+    if (req.body.profileImage !== undefined) {
+      // Only update profileImage if provided and not a local URI (file:// or content://)
+      // Local URIs should be uploaded first via upload endpoint
+      if (req.body.profileImage && 
+          !req.body.profileImage.startsWith('file://') && 
+          !req.body.profileImage.startsWith('content://')) {
+        updateData.profileImage = req.body.profileImage;
+      }
+    }
+
     // Update member fields
-    await member.update({
-      ...req.body
+    await member.update(updateData);
+
+    // Reload member to get updated associations
+    const updatedMember = await Member.findByPk(member.id, {
+      include: [{
+        model: Association,
+        as: 'association',
+        attributes: ['id', 'name'],
+        required: false
+      }]
     });
 
     res.status(200).json({
       success: true,
       message: 'Profile updated successfully',
-      member
+      member: updatedMember
     });
 
   } catch (error) {

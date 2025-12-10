@@ -345,9 +345,17 @@ router.get('/', [
         if (event.image.startsWith('http://') || event.image.startsWith('https://')) {
           event.imageURL = event.image;
         } else {
-          // Legacy local file - generate URL
-          event.imageURL = getFileUrl(event.image, baseUrl, 'event-images');
+          // Legacy local file - generate URL and check if file exists
+          // If file doesn't exist, set imageURL to null (frontend will handle gracefully)
+          event.imageURL = getFileUrl(event.image, baseUrl, 'event-images', true);
+          // If imageURL is null, also set image to null to indicate missing file
+          if (!event.imageURL) {
+            console.warn(`Event ${event.id}: Image file not found: ${event.image}`);
+            event.image = null; // Clear the image field if file doesn't exist
+          }
         }
+      } else {
+        event.imageURL = null;
       }
     });
 
@@ -404,8 +412,13 @@ router.get('/upcoming', async (req, res) => {
         if (event.image.startsWith('http://') || event.image.startsWith('https://')) {
           event.imageURL = event.image;
         } else {
-          // Legacy local file - generate URL
-          event.imageURL = getFileUrl(event.image, baseUrl, 'event-images');
+          // Legacy local file - generate URL and check if file exists
+          event.imageURL = getFileUrl(event.image, baseUrl, 'event-images', true);
+          if (!event.imageURL) {
+            console.warn(`Upcoming Event ${event.id}: Image file not found: ${event.image}`);
+            event.image = null;
+            event.imageURL = null;
+          }
         }
       }
     });
@@ -459,9 +472,17 @@ router.get('/:id', async (req, res) => {
       if (event.image.startsWith('http://') || event.image.startsWith('https://')) {
         event.imageURL = event.image;
       } else {
-        // Legacy local file - generate URL
-        event.imageURL = getFileUrl(event.image, baseUrl, 'event-images');
+        // Legacy local file - generate URL and check if file exists
+        event.imageURL = getFileUrl(event.image, baseUrl, 'event-images', true);
+        // If file doesn't exist, set imageURL to null
+        if (!event.imageURL) {
+          console.warn(`Event ${event.id}: Image file not found: ${event.image}`);
+          event.image = null; // Clear the image field if file doesn't exist
+          event.imageURL = null;
+        }
       }
+    } else {
+      event.imageURL = null;
     }
 
     res.status(200).json({
@@ -1015,10 +1036,17 @@ router.put('/:id', protect, [
       if (eventResponse.image.startsWith('http://') || eventResponse.image.startsWith('https://')) {
         eventResponse.imageURL = eventResponse.image;
       } else {
-        // Legacy local file - generate URL
-        eventResponse.imageURL = getFileUrl(eventResponse.image, baseUrl, 'event-images');
+        // Legacy local file - generate URL and check if file exists
+        eventResponse.imageURL = getFileUrl(eventResponse.image, baseUrl, 'event-images', true);
+        if (!eventResponse.imageURL) {
+          console.warn(`Event ${eventResponse.id}: Image file not found: ${eventResponse.image}`);
+          eventResponse.image = null;
+          eventResponse.imageURL = null;
+        }
       }
       console.log('📸 Generated image URL:', eventResponse.imageURL);
+    } else {
+      eventResponse.imageURL = null;
     }
 
     // Send notification for event update
