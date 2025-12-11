@@ -66,9 +66,33 @@ router.get('/events', async (req, res) => {
       include: includeArray
     });
 
+    // Calculate actual registration counts for all events (same as manager page logic)
+    // Count ALL registrations regardless of status (matching manager page behavior)
+    const eventIds = events.rows.map(e => e.id);
+    const countMap = {};
+    
+    // Count registrations for all events in parallel (count ALL registrations, not just 'registered' status)
+    if (eventIds.length > 0) {
+      const countPromises = eventIds.map(async (eventId) => {
+        const count = await EventRegistration.count({
+          where: { eventId }
+        });
+        return { eventId, count };
+      });
+      
+      const counts = await Promise.all(countPromises);
+      counts.forEach(({ eventId, count }) => {
+        countMap[eventId] = count;
+      });
+    }
+
     // Transform events to include RSVP status
     const eventsWithRSVP = events.rows.map(event => {
       const eventData = event.toJSON();
+      
+      // Replace currentAttendees with actual count from database (same as manager page)
+      const actualCount = countMap[event.id] || 0;
+      eventData.currentAttendees = actualCount;
       
       // Only show RSVP status if user is authenticated
       if (req.user && req.user.id) {
@@ -84,7 +108,7 @@ router.get('/events', async (req, res) => {
           registrationStatus: registration ? registration.status : null,
           registeredAt: registration ? registration.registeredAt : null,
           canRegister: RSVPService.isEventUpcoming(event) && 
-                       (!event.maxAttendees || event.currentAttendees < event.maxAttendees)
+                       (!event.maxAttendees || actualCount < event.maxAttendees)
         };
       } else {
         // No user authentication - return basic event data
@@ -386,9 +410,19 @@ router.get('/events/:id', async (req, res) => {
       });
     }
 
+    // Calculate actual registration count from database (same as manager page logic)
+    // Count ALL registrations regardless of status
+    const actualRegistrationCount = await EventRegistration.count({
+      where: { eventId: id }
+    });
+
+    // Replace currentAttendees with actual count
+    const eventData = event.toJSON();
+    eventData.currentAttendees = actualRegistrationCount;
+
     res.status(200).json({
       success: true,
-      event
+      event: eventData
     });
 
   } catch (error) {
@@ -945,6 +979,24 @@ router.get('/events/my-registrations', protectMobile, async (req, res) => {
       includeEvent: true
     });
 
+    // Calculate actual registration counts for events (same as manager page logic)
+    const eventIds = [...new Set(result.rows.map(r => r.eventId).filter(id => id))];
+    const countMap = {};
+    
+    if (eventIds.length > 0) {
+      const countPromises = eventIds.map(async (eventId) => {
+        const count = await EventRegistration.count({
+          where: { eventId }
+        });
+        return { eventId, count };
+      });
+      
+      const counts = await Promise.all(countPromises);
+      counts.forEach(({ eventId, count }) => {
+        countMap[eventId] = count;
+      });
+    }
+
     // Transform data for mobile app
     const transformedRegistrations = result.rows.map(registration => ({
       id: registration.id,
@@ -961,7 +1013,7 @@ router.get('/events/my-registrations', protectMobile, async (req, res) => {
         location: registration.event.location,
         status: registration.event.status,
         maxAttendees: registration.event.maxAttendees,
-        currentAttendees: registration.event.currentAttendees
+        currentAttendees: countMap[registration.event.id] || 0 // Use actual count from database
       } : null
     }));
 
