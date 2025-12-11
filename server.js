@@ -61,7 +61,8 @@ const app = express();
 
 // Trust proxy for accurate IP detection behind reverse proxy (Render.com, etc.)
 // This is required for express-rate-limit to work correctly
-app.set('trust proxy', true);
+// Set to 1 to trust only the first proxy (Render.com uses one proxy)
+app.set('trust proxy', 1);
 
 const cspImgSrc = [
   "'self'",
