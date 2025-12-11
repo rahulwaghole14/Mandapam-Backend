@@ -234,7 +234,12 @@ router.post('/', protect, [
   body('businessName', 'Business name is required').notEmpty().trim(),
   body('phone', 'Phone number is required').matches(/^[0-9]{10}$/).withMessage('Phone number must be exactly 10 digits'),
   body('state', 'State is required').notEmpty().trim(),
-  body('businessType', 'Business type is required').isIn(['catering', 'sound', 'mandap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
+  body('businessType', 'Business type is required')
+    .customSanitizer((value) => {
+      // Normalize 'madap' to 'mandap' (common typo from frontend)
+      return value === 'madap' ? 'mandap' : value;
+    })
+    .isIn(['catering', 'sound', 'mandap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
   body('city', 'City is required').notEmpty().trim(),
   body('pincode', 'Pincode is required').matches(/^[0-9]{6}$/),
   body('associationName', 'Association name is required').notEmpty().trim(),
@@ -447,7 +452,12 @@ router.put('/:id', protect, [
   body('businessName').optional().notEmpty().trim().withMessage('Business name cannot be empty'),
   body('phone').optional().matches(/^[0-9]{10}$/).withMessage('Invalid phone number'),
   body('state').optional().notEmpty().trim().withMessage('State cannot be empty'),
-  body('businessType').optional().isIn(['catering', 'sound', 'mandap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']).withMessage('Invalid business type'),
+  body('businessType').optional()
+    .customSanitizer((value) => {
+      // Normalize 'madap' to 'mandap' (common typo from frontend)
+      return value === 'madap' ? 'mandap' : value;
+    })
+    .isIn(['catering', 'sound', 'mandap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']).withMessage('Invalid business type'),
   body('city').optional().notEmpty().trim().withMessage('City cannot be empty'),
   body('pincode').optional().matches(/^[0-9]{6}$/).withMessage('Invalid pincode'),
   body('associationName').optional().notEmpty().trim().withMessage('Association name cannot be empty'),

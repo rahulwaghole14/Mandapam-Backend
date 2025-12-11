@@ -275,7 +275,12 @@ router.post('/verify-otp', [
 router.post('/register', [
   body('name', 'Name is required').notEmpty().trim(),
   body('businessName', 'Business name is required').notEmpty().trim(),
-  body('businessType', 'Business type is required').isIn(['catering', 'sound', 'mandap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
+  body('businessType', 'Business type is required')
+    .customSanitizer((value) => {
+      // Normalize 'madap' to 'mandap' (common typo from frontend)
+      return value === 'madap' ? 'mandap' : value;
+    })
+    .isIn(['catering', 'sound', 'mandap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
   body('phone', 'Please add a valid phone number').matches(/^[0-9]{10}$/),
   body('city', 'City is required').notEmpty().trim(),
   body('pincode', 'Pincode is required').matches(/^[0-9]{6}$/),
@@ -322,11 +327,17 @@ router.post('/register', [
 
     console.log('✅ No existing member found, proceeding with registration');
 
+    // Normalize businessType: convert 'madap' to 'mandap' (common typo from frontend)
+    const normalizedBusinessType = businessType === 'madap' ? 'mandap' : businessType;
+    if (businessType === 'madap') {
+      console.log('🔄 Normalized businessType from "madap" to "mandap"');
+    }
+
     // Create new member
     const member = await Member.create({
       name,
       businessName,
-      businessType,
+      businessType: normalizedBusinessType,
       phone,
       city,
       pincode,

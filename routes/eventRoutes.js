@@ -114,7 +114,13 @@ async function resolveAssociation(associationId, transaction = null) {
 
 // Helper function to find or create member
 async function findOrCreateMember(memberData, transaction = null) {
-  const { phone, name, email, businessName, businessType, city, associationId, profileImage } = memberData;
+  let { phone, name, email, businessName, businessType, city, associationId, profileImage } = memberData;
+  
+  // Normalize businessType: convert 'madap' to 'mandap' (common typo from frontend)
+  if (businessType === 'madap') {
+    businessType = 'mandap';
+    console.log('🔄 Normalized businessType from "madap" to "mandap"');
+  }
   
   // Validate phone format
   if (!phone || !/^[0-9]{10}$/.test(phone)) {
@@ -1723,7 +1729,12 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
   body('name', 'Name is required').notEmpty().trim(),
   body('phone', 'Phone number is required').notEmpty().matches(/^[0-9]{10}$/).withMessage('Phone must be 10 digits'),
   body('businessName', 'Business name is required').notEmpty().trim(),
-  body('businessType', 'Business type is required').isIn(['catering', 'sound', 'mandap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
+  body('businessType', 'Business type is required')
+    .customSanitizer((value) => {
+      // Normalize 'madap' to 'mandap' (common typo from frontend)
+      return value === 'madap' ? 'mandap' : value;
+    })
+    .isIn(['catering', 'sound', 'mandap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
   body('associationId').optional({ checkFalsy: true }).isInt({ min: 1 }).withMessage('Association ID must be a valid positive integer'),
   body('photo').optional().custom((value) => {
     if (!value || value === '' || value === null || value === undefined) return true;

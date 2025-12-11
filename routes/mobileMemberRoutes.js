@@ -46,7 +46,13 @@ router.get('/profile', protectMobile, async (req, res) => {
 router.put('/profile', protectMobile, [
   body('name', 'Name is required').notEmpty().trim(),
   body('businessName', 'Business name is required').notEmpty().trim(),
-  body('businessType', 'Business type is required').notEmpty().isIn(['catering', 'sound', 'mandap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']).withMessage('Business type must be one of: catering, sound, mandap, light, decorator, photography, videography, transport, other'),
+  body('businessType', 'Business type is required')
+    .notEmpty()
+    .customSanitizer((value) => {
+      // Normalize 'madap' to 'mandap' (common typo from frontend)
+      return value === 'madap' ? 'mandap' : value;
+    })
+    .isIn(['catering', 'sound', 'mandap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']).withMessage('Business type must be one of: catering, sound, mandap, light, decorator, photography, videography, transport, other'),
   body('city', 'City is required').notEmpty().trim(),
   body('associationName', 'Association name is required').notEmpty().trim(),
   body('pincode').optional().matches(/^[0-9]{6}$/).withMessage('Please enter a valid 6-digit pincode'),
