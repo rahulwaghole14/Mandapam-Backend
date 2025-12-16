@@ -1,5 +1,6 @@
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
+const Logger = require('../utils/logger');
 
 const key_id = (process.env.RAZORPAY_KEY_ID || '').trim();
 const key_secret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
@@ -39,6 +40,17 @@ async function createOrder(amountInRupees, receipt) {
     console.error('Razorpay order creation failed:', {
       statusCode: error.statusCode,
       error: error.error,
+      keyIdPrefix: key_id.substring(0, 15) + '...',
+      keySecretLength: key_secret.length
+    });
+    
+    // Log to Logger for Render visibility
+    Logger.error('Payment Service: Razorpay order creation failed', error, {
+      statusCode: error.statusCode,
+      errorCode: error.error?.code,
+      errorDescription: error.error?.description,
+      receipt: receipt,
+      amount: amountInRupees,
       keyIdPrefix: key_id.substring(0, 15) + '...',
       keySecretLength: key_secret.length
     });

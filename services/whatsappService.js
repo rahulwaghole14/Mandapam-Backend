@@ -236,6 +236,20 @@ async function sendPdfViaWhatsApp(phoneNumber, pdfSource, memberName = '') {
     console.error(`[WhatsApp Service] DEVICE_UID: ${DEVICE_UID}`);
     console.error(`[WhatsApp Service] DEVICE_NAME: ${DEVICE_NAME}`);
     
+    // Log to Logger for Render visibility
+    Logger.error('WhatsApp Service: Exception sending PDF via WhatsApp', error, {
+      phone: safeFormattedPhone,
+      originalPhone: phoneNumber,
+      memberName: memberName || 'N/A',
+      pdfSource: pdfSourceInfo,
+      errorType: error.name,
+      errorCode: error.code,
+      errorMessage: error.message,
+      hasResponse: !!error.response,
+      responseStatus: error.response?.status,
+      hasRequest: !!error.request
+    });
+    
     if (error.response) {
       console.error(`[WhatsApp Service] ⚠️ API RESPONSE ERROR`);
       console.error(`[WhatsApp Service] Response Status: ${error.response.status}`);
@@ -388,6 +402,20 @@ async function sendPdfBase64ViaWhatsApp(phoneNumber, pdfBase64, fileName, member
     console.error(`[WhatsApp Service] File Name: ${fileName || 'N/A'}`);
     console.error(`[WhatsApp Service] PDF Base64 Length: ${pdfBase64?.length || 0}`);
     console.error(`[WhatsApp Service] Member Name: ${memberName || 'N/A'}`);
+    
+    // Log to Logger for Render visibility
+    Logger.error('WhatsApp Service: Exception sending PDF (Base64) via WhatsApp', error, {
+      phone: safeFormattedPhone,
+      originalPhone: phoneNumber,
+      memberName: memberName || 'N/A',
+      fileName: fileName || 'N/A',
+      pdfBase64Length: pdfBase64?.length || 0,
+      errorType: error.name,
+      errorCode: error.code,
+      errorMessage: error.message,
+      hasResponse: !!error.response,
+      responseStatus: error.response?.status
+    });
     
     if (error.response) {
       console.error(`[WhatsApp Service] ⚠️ API RESPONSE ERROR (Base64)`);

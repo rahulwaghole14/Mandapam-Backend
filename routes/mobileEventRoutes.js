@@ -477,6 +477,15 @@ router.post('/events/:id/register-payment', protectMobile, async (req, res) => {
     // Check if Razorpay is configured
     if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
       console.error('Razorpay not configured: Missing RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET');
+      const Logger = require('../utils/logger');
+      Logger.error('Event Registration: Razorpay not configured', new Error('Missing RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET'), {
+        registrationType: 'mobile',
+        eventId: event.id,
+        eventTitle: event.title,
+        memberId: memberId,
+        hasKeyId: !!process.env.RAZORPAY_KEY_ID,
+        hasKeySecret: !!process.env.RAZORPAY_KEY_SECRET
+      });
       return res.status(500).json({ 
         success: false, 
         message: 'Payment gateway is not configured. Please contact administrator.' 
@@ -596,6 +605,14 @@ router.post('/events/:id/confirm-payment', protectMobile, async (req, res) => {
     }
 
     if (!paymentService.verifySignature({ razorpay_order_id, razorpay_payment_id, razorpay_signature })) {
+      const Logger = require('../utils/logger');
+      Logger.error('Event Registration: Payment signature verification failed', new Error('Invalid payment signature'), {
+        registrationType: 'mobile',
+        eventId: eventId,
+        memberId: memberId,
+        orderId: razorpay_order_id,
+        paymentId: razorpay_payment_id
+      });
       return res.status(400).json({ 
         success: false, 
         message: 'Invalid payment signature' 
