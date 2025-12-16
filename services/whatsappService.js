@@ -82,12 +82,15 @@ function buildMessage(memberName) {
  * @returns {Promise<{success: boolean, message?: string, error?: string}>}
  */
 async function sendPdfViaWhatsApp(phoneNumber, pdfSource, memberName = '') {
+  // Declare formattedPhone outside try block so it's available in catch
+  let formattedPhone;
+  
   try {
     console.log(`[WhatsApp Service] sendPdfViaWhatsApp called`);
     console.log(`[WhatsApp Service] Phone: ${phoneNumber}, Source type: ${typeof pdfSource}, Name: ${memberName}`);
     console.log(`[WhatsApp Service] DEVICE_UID: ${DEVICE_UID}, DEVICE_NAME: ${DEVICE_NAME}`);
     
-    const formattedPhone = formatPhoneNumber(phoneNumber);
+    formattedPhone = formatPhoneNumber(phoneNumber);
     console.log(`[WhatsApp Service] Formatted phone: ${formattedPhone}`);
     
     if (!formattedPhone) {
@@ -213,8 +216,14 @@ async function sendPdfViaWhatsApp(phoneNumber, pdfSource, memberName = '') {
     console.error(`[WhatsApp Service] Error Type: ${error.name || 'Unknown'}`);
     console.error(`[WhatsApp Service] Error Message: ${error.message || 'No message'}`);
     console.error(`[WhatsApp Service] Error Code: ${error.code || 'No code'}`);
-    console.error(`[WhatsApp Service] Phone Number: ${phoneNumber} (formatted: ${formattedPhone})`);
-    console.error(`[WhatsApp Service] PDF File Path: ${pdfFilePath}`);
+    // Format phone if not already formatted (in case error occurred before formatting)
+    const safeFormattedPhone = formattedPhone || formatPhoneNumber(phoneNumber);
+    console.error(`[WhatsApp Service] Phone Number: ${phoneNumber} (formatted: ${safeFormattedPhone})`);
+    // Fix: Use pdfSource instead of pdfFilePath, and handle different types
+    const pdfSourceInfo = typeof pdfSource === 'string' 
+      ? pdfSource 
+      : (Buffer.isBuffer(pdfSource) ? `Buffer(${pdfSource.length} bytes)` : (pdfSource && typeof pdfSource.pipe === 'function' ? 'Stream' : 'Unknown'));
+    console.error(`[WhatsApp Service] PDF Source: ${pdfSourceInfo}`);
     console.error(`[WhatsApp Service] Member Name: ${memberName || 'N/A'}`);
     console.error(`[WhatsApp Service] DEVICE_UID: ${DEVICE_UID}`);
     console.error(`[WhatsApp Service] DEVICE_NAME: ${DEVICE_NAME}`);
@@ -291,8 +300,11 @@ async function sendPdfViaWhatsApp(phoneNumber, pdfSource, memberName = '') {
  * @returns {Promise<{success: boolean, message?: string, error?: string}>}
  */
 async function sendPdfBase64ViaWhatsApp(phoneNumber, pdfBase64, fileName, memberName = '') {
+  // Declare formattedPhone outside try block so it's available in catch
+  let formattedPhone;
+  
   try {
-    const formattedPhone = formatPhoneNumber(phoneNumber);
+    formattedPhone = formatPhoneNumber(phoneNumber);
     
     if (!formattedPhone) {
       return {
@@ -351,7 +363,9 @@ async function sendPdfBase64ViaWhatsApp(phoneNumber, pdfBase64, fileName, member
     console.error(`[WhatsApp Service] Error Type: ${error.name || 'Unknown'}`);
     console.error(`[WhatsApp Service] Error Message: ${error.message || 'No message'}`);
     console.error(`[WhatsApp Service] Error Code: ${error.code || 'No code'}`);
-    console.error(`[WhatsApp Service] Phone Number: ${phoneNumber} (formatted: ${formattedPhone})`);
+    // Format phone if not already formatted (in case error occurred before formatting)
+    const safeFormattedPhone = formattedPhone || formatPhoneNumber(phoneNumber);
+    console.error(`[WhatsApp Service] Phone Number: ${phoneNumber} (formatted: ${safeFormattedPhone})`);
     console.error(`[WhatsApp Service] File Name: ${fileName || 'N/A'}`);
     console.error(`[WhatsApp Service] PDF Base64 Length: ${pdfBase64?.length || 0}`);
     console.error(`[WhatsApp Service] Member Name: ${memberName || 'N/A'}`);
