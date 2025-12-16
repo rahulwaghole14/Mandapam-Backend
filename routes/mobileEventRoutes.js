@@ -488,6 +488,20 @@ router.post('/events/:id/register-payment', protectMobile, async (req, res) => {
     
     const order = await paymentService.createOrder(fee, `evt_${eventId}_mem_${memberId}_${Date.now()}`);
     
+    // Log payment order creation
+    const Logger = require('../utils/logger');
+    Logger.info('Event Registration: Payment order created', {
+      registrationType: 'mobile',
+      eventId: event.id,
+      eventTitle: event.title,
+      memberId: memberId,
+      memberName: member?.name || 'N/A',
+      memberPhone: member?.phone || 'N/A',
+      orderId: order.id,
+      amount: fee,
+      currency: 'INR'
+    });
+    
     // Prepare payment options for frontend (Razorpay Checkout)
     const paymentOptions = {
       key: process.env.RAZORPAY_KEY_ID,
@@ -521,6 +535,12 @@ router.post('/events/:id/register-payment', protectMobile, async (req, res) => {
     });
   } catch (error) {
     console.error('Create order error:', error);
+    const Logger = require('../utils/logger');
+    Logger.error('Event Registration: Payment order creation failed', error, {
+      registrationType: 'mobile',
+      eventId: req.params.id,
+      memberId: req.user?.id
+    });
     const errorMessage = error.message || 'Server error while creating order';
     res.status(500).json({ 
       success: false, 
@@ -627,6 +647,20 @@ router.post('/events/:id/confirm-payment', protectMobile, async (req, res) => {
       });
     }
 
+    // Log successful payment confirmation
+    const Logger = require('../utils/logger');
+    Logger.info('Event Registration: Payment confirmed and registration created', {
+      registrationType: 'mobile',
+      registrationId: registration.id,
+      eventId: event.id,
+      eventTitle: event.title,
+      memberId: memberId,
+      isNewRegistration: isNewRegistration,
+      amountPaid: amountPaid,
+      paymentId: razorpay_payment_id,
+      orderId: razorpay_order_id
+    });
+
     // Generate QR on the fly
     const qrDataURL = await qrService.generateQrDataURL(registration);
     
@@ -671,6 +705,14 @@ router.post('/events/:id/confirm-payment', protectMobile, async (req, res) => {
     });
   } catch (error) {
     console.error('Confirm payment error:', error);
+    const Logger = require('../utils/logger');
+    Logger.error('Event Registration: Payment confirmation failed', error, {
+      registrationType: 'mobile',
+      eventId: req.params.id,
+      memberId: req.user?.id,
+      paymentId: req.body?.razorpay_payment_id,
+      orderId: req.body?.razorpay_order_id
+    });
     const errorMessage = error.message || 'Server error while confirming payment';
     res.status(500).json({ 
       success: false, 
@@ -801,6 +843,16 @@ router.post('/events/:id/rsvp', protectMobile, async (req, res) => {
     // Register for event using RSVP service
     const registration = await RSVPService.registerForEvent(eventId, memberId, notes);
 
+    // Log successful RSVP registration
+    const Logger = require('../utils/logger');
+    Logger.info('Event Registration: RSVP registration successful', {
+      registrationType: 'mobile-rsvp',
+      registrationId: registration.id,
+      eventId: parseInt(eventId, 10),
+      memberId: memberId,
+      hasNotes: !!notes
+    });
+
     // Fetch member data for name and image
     const member = await Member.findByPk(memberId);
     const baseUrl = req.protocol + '://' + req.get('host');
@@ -841,15 +893,27 @@ router.post('/events/:id/rsvp', protectMobile, async (req, res) => {
 
   } catch (error) {
     console.error('RSVP registration error:', error);
+    const Logger = require('../utils/logger');
     
     if (error.message.includes('not found') || error.message.includes('Cannot register') || 
         error.message.includes('already registered') || error.message.includes('full capacity')) {
+      Logger.warn('Event Registration: RSVP registration validation failed', {
+        registrationType: 'mobile-rsvp',
+        eventId: req.params.id,
+        memberId: req.user?.id,
+        error: error.message
+      });
       return res.status(400).json({
         success: false,
         message: error.message
       });
     }
 
+    Logger.error('Event Registration: RSVP registration failed', error, {
+      registrationType: 'mobile-rsvp',
+      eventId: req.params.id,
+      memberId: req.user?.id
+    });
     res.status(500).json({
       success: false,
       message: 'Server error while registering for event'

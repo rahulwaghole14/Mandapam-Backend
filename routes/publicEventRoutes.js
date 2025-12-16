@@ -794,6 +794,18 @@ router.post('/events/:id/register-payment',
         // Generate QR code with retry logic (QR is important for pass) - outside transaction
         const qrDataURL = await generateQrWithRetry(registration, 'free event registration');
         
+        // Log successful free event registration
+        Logger.info('Event Registration: Free event registration successful', {
+          registrationId: registration.id,
+          eventId: event.id,
+          eventTitle: event.title,
+          memberId: member.id,
+          memberName: member.name,
+          memberPhone: member.phone,
+          isNewMember: isNew,
+          qrGenerated: qrDataURL !== null
+        });
+        
       } catch (freeEventError) {
         // Rollback transaction on error
         await freeEventTransaction.rollback();
@@ -838,6 +850,20 @@ router.post('/events/:id/register-payment',
 
     // Create Razorpay order
     const order = await paymentService.createOrder(fee, `evt_${eventId}_mem_${member.id}_${Date.now()}`);
+
+    // Log payment order creation
+    Logger.info('Event Registration: Payment order created', {
+      registrationType: 'public',
+      eventId: event.id,
+      eventTitle: event.title,
+      memberId: member.id,
+      memberName: member.name,
+      memberPhone: member.phone,
+      isNewMember: isNew,
+      orderId: order.id,
+      amount: fee,
+      currency: 'INR'
+    });
 
     // Prepare payment options for frontend
     const paymentOptions = {
@@ -884,6 +910,12 @@ router.post('/events/:id/register-payment',
 
   } catch (error) {
     console.error('Register payment error:', error);
+    Logger.error('Event Registration: Registration payment initiation failed', error, {
+      registrationType: 'public',
+      eventId: req.params.id,
+      phone: req.body?.phone,
+      name: req.body?.name
+    });
     const errorMessage = error.message || 'Server error while initiating registration';
     res.status(500).json({
       success: false,
@@ -1755,6 +1787,23 @@ router.post('/events/:id/confirm-payment',
       }
     }
 
+    // Log successful payment confirmation
+    Logger.info('Event Registration: Payment confirmed and registration created', {
+      registrationType: 'public',
+      registrationId: registration.id,
+      eventId: event.id,
+      eventTitle: event.title,
+      memberId: member.id,
+      memberName: member.name,
+      memberPhone: member.phone,
+      isNewRegistration: isNewRegistration,
+      amountPaid: amountPaid,
+      paymentId: razorpay_payment_id,
+      orderId: razorpay_order_id,
+      qrGenerated: qrDataURL !== null,
+      shouldSendWhatsApp: shouldSendWhatsApp
+    });
+
     // Always return success if registration was created
     // QR code and profile image are optional enhancements
     res.status(201).json({
@@ -1784,6 +1833,13 @@ router.post('/events/:id/confirm-payment',
 
   } catch (error) {
     console.error('Confirm payment error:', error);
+    Logger.error('Event Registration: Payment confirmation failed', error, {
+      registrationType: 'public',
+      eventId: req.params.id,
+      memberId: req.body?.memberId,
+      paymentId: req.body?.razorpay_payment_id,
+      orderId: req.body?.razorpay_order_id
+    });
     const errorMessage = error.message || 'Server error while confirming payment';
     res.status(500).json({
       success: false,

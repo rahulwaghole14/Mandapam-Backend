@@ -184,11 +184,19 @@ async function sendPdfViaWhatsApp(phoneNumber, pdfSource, memberName = '') {
     );
 
     if (isSuccess) {
-      Logger.info('WhatsApp Service: Successfully sent to WhatsApp API', {
+      // Log success with comprehensive details
+      Logger.info('WhatsApp Service: ✅ PDF sent via WhatsApp successfully', {
         phone: formattedPhone,
-        memberName,
-        responseStatus: response.status
+        originalPhone: phoneNumber,
+        memberName: memberName || 'N/A',
+        responseStatus: response.status,
+        apiDuration: sendDuration,
+        pdfSize: typeof pdfSource === 'string' 
+          ? (fs.existsSync(pdfSource) ? fs.statSync(pdfSource).size : 'unknown')
+          : (Buffer.isBuffer(pdfSource) ? pdfSource.length : 'stream'),
+        timestamp: new Date().toISOString()
       });
+      console.log(`[WhatsApp Service] ✅ SUCCESS: PDF sent to ${formattedPhone} (${memberName || 'N/A'}) in ${sendDuration}ms`);
       return {
         success: true,
         message: 'PDF sent via WhatsApp successfully'
@@ -347,6 +355,17 @@ async function sendPdfBase64ViaWhatsApp(phoneNumber, pdfBase64, fileName, member
     );
 
     if (response.status === 200) {
+      // Log success for base64 sending
+      const Logger = require('../utils/logger');
+      Logger.info('WhatsApp Service: ✅ PDF (Base64) sent via WhatsApp successfully', {
+        phone: formattedPhone,
+        originalPhone: phoneNumber,
+        memberName: memberName || 'N/A',
+        fileName: fileName || 'visitor-pass.pdf',
+        pdfBase64Length: pdfBase64?.length || 0,
+        timestamp: new Date().toISOString()
+      });
+      console.log(`[WhatsApp Service] ✅ SUCCESS (Base64): PDF sent to ${formattedPhone} (${memberName || 'N/A'})`);
       return {
         success: true,
         message: 'PDF sent via WhatsApp successfully'
