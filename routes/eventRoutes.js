@@ -2790,6 +2790,121 @@ router.delete('/:eventId/exhibitors/:exhibitorId', protect, async (req, res) => 
   }
 });
 
+// @desc    Get single registration details
+// @route   GET /api/events/:eventId/registrations/:registrationId
+// @access  Private (admin)
+router.get('/:eventId/registrations/:registrationId', protect, async (req, res) => {
+  try {
+    const { eventId, registrationId } = req.params;
+
+    const registration = await EventRegistration.findOne({
+      where: { 
+        id: registrationId,
+        eventId: eventId
+      },
+      include: [{ model: Member, as: 'member' }]
+    });
+
+    if (!registration) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Registration not found' 
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      registration: registration.toJSON()
+    });
+  } catch (error) {
+    Logger.error('Error fetching registration details', {
+      eventId: req.params.eventId,
+      registrationId: req.params.registrationId,
+      error: error.message
+    });
+    console.error('Get registration details error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error while fetching registration details' 
+    });
+  }
+});
+
+// @desc    Update registration image
+// @route   PUT /api/events/:eventId/registrations/:registrationId/image
+// @access  Private (admin)
+router.put('/:eventId/registrations/:registrationId/image', protect, [
+  body('imageUrl').notEmpty().withMessage('Image URL is required')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
+
+    const { eventId, registrationId } = req.params;
+    const { imageUrl } = req.body;
+
+    // Find the registration
+    const registration = await EventRegistration.findOne({
+      where: { 
+        id: registrationId,
+        eventId: eventId
+      },
+      include: [{ model: Member, as: 'member' }]
+    });
+
+    if (!registration) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Registration not found' 
+      });
+    }
+
+    // Update registration image
+    await registration.update({
+      photo: imageUrl,
+      photoUrl: imageUrl,
+      profileImageURL: imageUrl
+    });
+
+    // Also update member image if member exists
+    if (registration.member) {
+      await registration.member.update({
+        profileImage: imageUrl
+      });
+    }
+
+    Logger.info('Registration image updated successfully', {
+      eventId,
+      registrationId,
+      imageUrl: imageUrl.substring(0, 100) + '...' // Log only first 100 chars for security
+    });
+
+    res.json({ 
+      success: true, 
+      message: 'Registration image updated successfully',
+      registration: {
+        ...registration.toJSON(),
+        photo: imageUrl,
+        photoUrl: imageUrl,
+        profileImageURL: imageUrl
+      }
+    });
+  } catch (error) {
+    Logger.error('Error updating registration image', {
+      eventId: req.params.eventId,
+      registrationId: req.params.registrationId,
+      error: error.message
+    });
+    console.error('Update registration image error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error while updating registration image' 
+    });
+  }
+});
+
 module.exports = router;
 
 

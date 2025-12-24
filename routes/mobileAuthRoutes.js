@@ -33,9 +33,28 @@ const generateOTP = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
+// Get fixed OTP for specific number
+const getFixedOTP = (mobileNumber) => {
+  if (mobileNumber === '9881976526') {
+    return '123456';
+  }
+  return null;
+};
+
+// Check if mobile number is the fixed number
+const isFixedNumber = (mobileNumber) => {
+  return mobileNumber === '9881976526';
+};
+
 // Send OTP via WhatsApp or fallback to console
 const sendOTP = async (mobileNumber, otp) => {
   try {
+    // Check if this is the fixed number
+    if (isFixedNumber(mobileNumber)) {
+      console.log(`📱 Fixed OTP for ${mobileNumber}: ${otp} (WhatsApp disabled for this number)`);
+      return { success: true, method: 'fixed', fixed: true };
+    }
+
     // Try to send via WhatsApp first
     const whatsappResult = await whatsappService.sendOTP(mobileNumber, otp);
     if (whatsappResult.success) {
@@ -111,12 +130,17 @@ router.post('/send-otp', [
       });
     }
 
-    // Generate and save OTP
-    const otp = generateOTP();
+    // Check if this is the fixed number
+    const fixedOTP = getFixedOTP(mobileNumber);
+    const isFixed = isFixedNumber(mobileNumber);
+    const otp = fixedOTP || generateOTP();
+    
+    // Save OTP to database
     await OTP.create({
       mobileNumber,
       otp,
-      expiresAt: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes expiry
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes expiry
+      isFixed: isFixed // Mark if this is a fixed OTP
     });
 
     // Send OTP
@@ -124,8 +148,9 @@ router.post('/send-otp', [
 
     res.status(200).json({
       success: true,
-      message: 'OTP sent successfully to your mobile number',
+      message: isFixed ? 'Fixed OTP generated successfully' : 'OTP sent successfully to your mobile number',
       otp: otp, // Include OTP in response for development/testing
+      isFixedOTP: isFixed,
       deliveryMethod: otpResult.method,
       whatsappEnabled: otpResult.method === 'whatsapp'
     });
@@ -161,56 +186,87 @@ router.post('/verify-otp', [
     
     console.log(`🔍 Verifying OTP for ${mobileNumber}: ${otp}`);
 
-    // Find the most recent valid OTP for this mobile number
-    const otpRecord = await OTP.findOne({
-      where: {
+    // Check if this is the fixed number
+    const fixedOTP = getFixedOTP(mobileNumber);
+    const isFixed = isFixedNumber(mobileNumber);
+    let isValidOTP = false;
+    let otpRecord = null;
+
+    if (isFixed && otp === fixedOTP) {
+      // For fixed number, accept the hardcoded OTP without database check
+      console.log(`✅ Fixed OTP accepted for ${mobileNumber}`);
+      isValidOTP = true;
+      
+      // Create an OTP record for tracking (marked as fixed and used)
+      otpRecord = await OTP.create({
         mobileNumber,
         otp,
-        isUsed: false,
-        expiresAt: {
-          [Op.gt]: new Date()
-        }
-      },
-      order: [['created_at', 'DESC']] // Get the most recent OTP
-    });
-
-    if (!otpRecord) {
-      // Check if there's any OTP with this mobile number and OTP (regardless of status)
-      const anyOtp = await OTP.findOne({ 
-        where: { mobileNumber, otp },
-        order: [['created_at', 'DESC']]
+        isUsed: true,
+        isFixed: true,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        created_at: new Date(),
+        updated_at: new Date()
       });
-      
-      if (anyOtp) {
-        if (anyOtp.isUsed) {
-          console.log(`OTP already used for ${mobileNumber} at ${anyOtp.updated_at}`);
-          return res.status(400).json({
-            success: false,
-            message: 'OTP has already been used. Please request a new OTP.'
-          });
-        } else if (anyOtp.expiresAt <= new Date()) {
-          console.log(`OTP expired for ${mobileNumber} at ${anyOtp.expiresAt}`);
-          return res.status(400).json({
-            success: false,
-            message: 'OTP has expired. Please request a new OTP.'
-          });
+    } else {
+      // Normal OTP verification for other numbers
+      otpRecord = await OTP.findOne({
+        where: {
+          mobileNumber,
+          otp,
+          isUsed: false,
+          expiresAt: {
+            [Op.gt]: new Date()
+          }
+        },
+        order: [['created_at', 'DESC']] // Get the most recent OTP
+      });
+
+      if (!otpRecord) {
+        // Check if there's any OTP with this mobile number and OTP (regardless of status)
+        const anyOtp = await OTP.findOne({ 
+          where: { mobileNumber, otp },
+          order: [['created_at', 'DESC']]
+        });
+        
+        if (anyOtp) {
+          if (anyOtp.isUsed) {
+            console.log(`OTP already used for ${mobileNumber} at ${anyOtp.updated_at}`);
+            return res.status(400).json({
+              success: false,
+              message: 'OTP has already been used. Please request a new OTP.'
+            });
+          } else if (anyOtp.expiresAt <= new Date()) {
+            console.log(`OTP expired for ${mobileNumber} at ${anyOtp.expiresAt}`);
+            return res.status(400).json({
+              success: false,
+              message: 'OTP has expired. Please request a new OTP.'
+            });
+          }
         }
+        
+        console.log(`No valid OTP found for ${mobileNumber} with OTP ${otp}`);
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid OTP. Please check the OTP and try again.'
+        });
       }
+
+      console.log(`✅ Valid OTP found for ${mobileNumber}, created at: ${otpRecord.created_at}, expires at: ${otpRecord.expiresAt}`);
+
+      // Check attempt limit (only for non-fixed OTPs)
+      if (otpRecord.attempts >= 3) {
+        return res.status(400).json({
+          success: false,
+          message: 'Too many failed attempts. Please request a new OTP.'
+        });
+      }
+
+      isValidOTP = true;
       
-      console.log(`No valid OTP found for ${mobileNumber} with OTP ${otp}`);
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid OTP. Please check the OTP and try again.'
-      });
-    }
-
-    console.log(`✅ Valid OTP found for ${mobileNumber}, created at: ${otpRecord.created_at}, expires at: ${otpRecord.expiresAt}`);
-
-    // Check attempt limit
-    if (otpRecord.attempts >= 3) {
-      return res.status(400).json({
-        success: false,
-        message: 'Too many failed attempts. Please request a new OTP.'
+      // Mark OTP as used (only for non-fixed OTPs from database)
+      await otpRecord.update({ 
+        isUsed: true,
+        updated_at: new Date()
       });
     }
 
@@ -233,9 +289,6 @@ router.post('/verify-otp', [
         message: 'Member not found'
       });
     }
-
-    // Mark OTP as used
-    await otpRecord.update({ isUsed: true });
 
     // Generate token pair (access + refresh token)
     const deviceInfo = {
