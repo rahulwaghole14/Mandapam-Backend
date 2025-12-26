@@ -74,6 +74,11 @@ const EventRegistration = sequelize.define('EventRegistration', {
     allowNull: true,
     field: 'attended_at'
   },
+  cancelledAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    field: 'cancelled_at'
+  },
   notes: {
     type: DataTypes.TEXT,
     allowNull: true

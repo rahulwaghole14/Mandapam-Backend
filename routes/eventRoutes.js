@@ -2905,6 +2905,78 @@ router.put('/:eventId/registrations/:registrationId/image', protect, [
   }
 });
 
+// @desc    Cancel event registration
+// @route   DELETE /api/events/:eventId/registrations/:registrationId
+// @access  Private (admin)
+router.delete('/:eventId/registrations/:registrationId', protect, async (req, res) => {
+  try {
+    const { eventId, registrationId } = req.params;
+
+    // Find the registration
+    const registration = await EventRegistration.findOne({
+      where: { 
+        id: registrationId,
+        eventId: eventId
+      },
+      include: [{ model: Member, as: 'member' }]
+    });
+
+    if (!registration) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Registration not found' 
+      });
+    }
+
+    // Check if already cancelled
+    if (registration.status === 'cancelled') {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Registration is already cancelled' 
+      });
+    }
+
+    // Update registration status to cancelled with timestamp
+    await registration.update({
+      status: 'cancelled',
+      cancelledAt: new Date()
+    });
+
+    // Decrease event attendee count
+    const event = await Event.findByPk(eventId);
+    if (event && event.currentAttendees > 0) {
+      await event.decrement('currentAttendees');
+    }
+
+    Logger.info('Registration cancelled successfully', {
+      eventId,
+      registrationId,
+      memberId: registration.memberId,
+      cancelledBy: req.user?.id || 'unknown'
+    });
+
+    res.json({ 
+      success: true, 
+      message: 'Registration cancelled successfully',
+      registration: {
+        ...registration.toJSON(),
+        status: 'cancelled'
+      }
+    });
+  } catch (error) {
+    Logger.error('Error cancelling registration', {
+      eventId: req.params.eventId,
+      registrationId: req.params.registrationId,
+      error: error.message
+    });
+    console.error('Cancel registration error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error while cancelling registration' 
+    });
+  }
+});
+
 module.exports = router;
 
 

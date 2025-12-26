@@ -363,7 +363,7 @@ class FCMService {
       // Use direct update to avoid validation issues
       const [updatedRows] = await FCMToken.update(
         { isActive: false },
-        { where: { token } }
+        { where: { token }, validate: false }
       );
       
       if (updatedRows > 0) {
@@ -433,6 +433,7 @@ class FCMService {
       const result = await FCMToken.update(
         { isActive: false },
         {
+          validate: false,
           where: {
             lastUsedAt: {
               [require('sequelize').Op.lt]: thirtyDaysAgo
