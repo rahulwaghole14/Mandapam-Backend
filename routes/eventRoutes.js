@@ -1361,6 +1361,7 @@ router.get('/:id/registrations', protect, async (req, res) => {
         status: registration.status,
         registeredAt: registration.registeredAt,
         attendedAt: registration.attendedAt,
+        cancelledAt: registration.cancelledAt,
         profileImage: effectiveProfileUrl,
         profileImageURL: effectiveProfileUrl,
         photo: effectiveProfileUrl,
