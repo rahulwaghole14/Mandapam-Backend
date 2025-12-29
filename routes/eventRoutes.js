@@ -2994,6 +2994,17 @@ router.delete('/:eventId/registrations/:registrationId', protect, async (req, re
           refundError: true
         });
       }
+    } else if (refundAmount && (!registration.paymentId || registration.paymentStatus !== 'paid')) {
+      // Handle case where refund is requested but no valid payment exists
+      // This is common for free events or unpaid registrations
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'Refund requested but no valid payment found. This registration may be free or unpaid.',
+        isFreeEvent: true,
+        paymentStatus: registration.paymentStatus,
+        amountPaid: registration.amountPaid
+      });
     }
 
     // Update registration status to cancelled with timestamp
@@ -3024,19 +3035,23 @@ router.delete('/:eventId/registrations/:registrationId', protect, async (req, re
       success: true, 
       message: refundResult 
         ? 'Registration cancelled and refund processed successfully' 
-        : 'Registration cancelled successfully',
+        : (registration.paymentStatus === 'paid' 
+          ? 'Registration cancelled successfully (no refund requested)'
+          : 'Registration cancelled successfully (free event - no payment to refund)'),
       registration: {
         id: registration.id,
         status: registration.status,
         cancelledAt: registration.cancelledAt,
-        paymentStatus: registration.paymentStatus
+        paymentStatus: registration.paymentStatus,
+        amountPaid: registration.amountPaid
       },
       refund: refundResult ? {
         id: refundResult.id,
         amount: refundResult.amount / 100, // Convert back to rupees
         status: refundResult.status,
         processedAt: new Date(refundResult.created_at * 1000)
-      } : null
+      } : null,
+      isFreeEvent: !registration.paymentId || registration.paymentStatus !== 'paid'
     });
   } catch (error) {
     await transaction.rollback();
@@ -3169,6 +3184,176 @@ router.post('/:eventId/registrations/:registrationId/refund', protect, async (re
     res.status(500).json({ 
       success: false, 
       message: error.message || 'Server error while processing refund' 
+    });
+  }
+});
+
+// @desc    Smart cancel event registration (auto-handles free vs paid events)
+// @route   DELETE /api/events/:eventId/registrations/:registrationId/cancel-smart
+// @access  Private (admin)
+router.delete('/:eventId/registrations/:registrationId/cancel-smart', protect, async (req, res) => {
+  const transaction = await sequelize.transaction();
+  
+  try {
+    const { eventId, registrationId } = req.params;
+    const { refundAmount, reason } = req.body; // Optional refund amount and reason
+
+    // Find the registration
+    const registration = await EventRegistration.findOne({
+      where: { 
+        id: registrationId,
+        eventId: eventId
+      },
+      include: [{ model: Member, as: 'member' }],
+      transaction
+    });
+
+    if (!registration) {
+      await transaction.rollback();
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Registration not found' 
+      });
+    }
+
+    // Check if already cancelled
+    if (registration.status === 'cancelled') {
+      await transaction.rollback();
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Registration is already cancelled' 
+      });
+    }
+
+    let refundResult = null;
+    const isPaidEvent = registration.paymentId && registration.paymentStatus === 'paid';
+    
+    // Auto-handle refund logic
+    if (refundAmount && isPaidEvent) {
+      // Process refund for paid events if amount specified
+      try {
+        const paymentService = require('../services/paymentService');
+        
+        // Validate refund amount doesn't exceed paid amount
+        const maxRefundAmount = parseFloat(registration.amountPaid || 0);
+        const requestedRefundAmount = parseFloat(refundAmount);
+        
+        if (requestedRefundAmount > maxRefundAmount) {
+          await transaction.rollback();
+          return res.status(400).json({
+            success: false,
+            message: `Refund amount (${requestedRefundAmount}) cannot exceed paid amount (${maxRefundAmount})`
+          });
+        }
+        
+        refundResult = await paymentService.processRefund(
+          registration.paymentId,
+          requestedRefundAmount,
+          {
+            registrationId: registration.id,
+            eventId: eventId,
+            memberId: registration.memberId,
+            cancelledBy: req.user?.id || 'admin',
+            reason: reason || 'Registration cancelled by admin'
+          }
+        );
+        
+        // Update payment status to refunded
+        await registration.update({
+          paymentStatus: 'refunded',
+          notes: (registration.notes || '') + `\nRefunded: ₹${requestedRefundAmount} on ${new Date().toISOString()}. Reason: ${reason || 'Admin cancellation'}`
+        }, { transaction });
+        
+      } catch (refundError) {
+        await transaction.rollback();
+        Logger.error('Refund failed during registration cancellation', refundError, {
+          registrationId,
+          paymentId: registration.paymentId,
+          refundAmount
+        });
+        
+        return res.status(400).json({
+          success: false,
+          message: `Registration cancelled but refund failed: ${refundError.message}`,
+          refundError: true
+        });
+      }
+    } else if (!isPaidEvent && refundAmount) {
+      // Ignore refund amount for free events but log it
+      Logger.info('Refund amount ignored for free event', {
+        registrationId,
+        eventId,
+        requestedRefundAmount: refundAmount,
+        paymentStatus: registration.paymentStatus
+      });
+    }
+
+    // Update registration status to cancelled with timestamp
+    await registration.update({
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      notes: (registration.notes || '') + `\nCancelled on ${new Date().toISOString()}. Reason: ${reason || 'Admin cancellation'}`
+    }, { transaction });
+
+    // Decrease event attendee count
+    const event = await Event.findByPk(eventId, { transaction });
+    if (event && event.currentAttendees > 0) {
+      await event.decrement('currentAttendees', { transaction });
+    }
+
+    await transaction.commit();
+
+    Logger.info('Registration cancelled successfully (smart)', {
+      eventId,
+      registrationId,
+      memberId: registration.memberId,
+      cancelledBy: req.user?.id || 'unknown',
+      refundProcessed: !!refundResult,
+      refundAmount: refundResult ? refundResult.amount / 100 : null,
+      wasPaidEvent: isPaidEvent
+    });
+
+    // Smart response based on event type
+    let message;
+    if (refundResult) {
+      message = 'Registration cancelled and refund processed successfully';
+    } else if (isPaidEvent) {
+      message = 'Registration cancelled successfully (paid event - no refund processed)';
+    } else {
+      message = 'Registration cancelled successfully (free event)';
+    }
+
+    res.json({ 
+      success: true, 
+      message,
+      registration: {
+        id: registration.id,
+        status: registration.status,
+        cancelledAt: registration.cancelledAt,
+        paymentStatus: registration.paymentStatus,
+        amountPaid: registration.amountPaid
+      },
+      refund: refundResult ? {
+        id: refundResult.id,
+        amount: refundResult.amount / 100, // Convert back to rupees
+        status: refundResult.status,
+        processedAt: new Date(refundResult.created_at * 1000)
+      } : null,
+      isFreeEvent: !isPaidEvent,
+      wasPaidEvent: isPaidEvent,
+      refundIgnored: !isPaidEvent && !!refundAmount
+    });
+  } catch (error) {
+    await transaction.rollback();
+    Logger.error('Error cancelling registration (smart)', {
+      eventId: req.params.eventId,
+      registrationId: req.params.registrationId,
+      error: error.message
+    });
+    console.error('Cancel registration error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error while cancelling registration' 
     });
   }
 });
