@@ -83,9 +83,70 @@ function verifySignature({ razorpay_order_id, razorpay_payment_id, razorpay_sign
   return expected === razorpay_signature;
 }
 
+async function processRefund(paymentId, amountInRupees, notes = {}) {
+  if (!razorpay) {
+    throw new Error('Razorpay is not configured. Please set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET environment variables.');
+  }
+  
+  if (!paymentId) {
+    throw new Error('Payment ID is required for refund.');
+  }
+  
+  const amount = amountInRupees ? Math.round(Number(amountInRupees) * 100) : undefined;
+  
+  if (amount && (isNaN(amount) || amount <= 0)) {
+    throw new Error(`Invalid refund amount: ${amountInRupees}. Amount must be a positive number.`);
+  }
+
+  try {
+    const refundData = {
+      notes: {
+        ...notes,
+        refund_processed_at: new Date().toISOString(),
+        refund_source: 'mandapam_backend'
+      }
+    };
+    
+    // Only add amount if specified (for partial refunds)
+    if (amount) {
+      refundData.amount = amount;
+    }
+    
+    const refund = await razorpay.payments.refund(paymentId, refundData);
+    
+    Logger.info('Refund processed successfully', {
+      paymentId,
+      refundId: refund.id,
+      amount: refund.amount,
+      status: refund.status
+    });
+    
+    return refund;
+  } catch (error) {
+    Logger.error('Payment Service: Razorpay refund failed', error, {
+      paymentId,
+      amount: amountInRupees,
+      statusCode: error.statusCode,
+      errorCode: error.error?.code,
+      errorDescription: error.error?.description
+    });
+    
+    if (error.statusCode === 400 && error.error?.code === 'BAD_REQUEST_ERROR') {
+      throw new Error(`Refund failed: ${error.error.description}`);
+    }
+    
+    if (error.statusCode === 401) {
+      throw new Error(`Razorpay authentication failed. Please verify that RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are correct.`);
+    }
+    
+    throw new Error(`Refund failed: ${error.error?.description || error.message}`);
+  }
+}
+
 module.exports = {
   createOrder,
-  verifySignature
+  verifySignature,
+  processRefund
 };
 
 
