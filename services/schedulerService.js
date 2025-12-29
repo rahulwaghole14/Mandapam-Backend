@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const BirthdayNotificationService = require('./birthdayNotificationService');
 const RefreshTokenService = require('./refreshTokenService');
+const AccountDeletionService = require('./accountDeletionService');
 
 class SchedulerService {
   constructor() {
@@ -25,6 +26,9 @@ class SchedulerService {
     
     // Schedule refresh token cleanup daily at 2:00 AM IST
     this.scheduleRefreshTokenCleanup();
+    
+    // Schedule account deletion processing daily at 1:00 AM IST
+    this.scheduleAccountDeletionProcessing();
     
     // Schedule other jobs here in the future
     // this.scheduleEventReminders();
@@ -122,6 +126,35 @@ class SchedulerService {
   }
 
   /**
+   * Schedule account deletion processing at 1:00 AM IST daily
+   */
+  scheduleAccountDeletionProcessing() {
+    // Cron expression for 1:00 AM IST daily
+    // IST is UTC+5:30, so 1:00 AM IST = 7:30 PM UTC (previous day)
+    const cronExpression = '30 19 * * *'; // At 19:30 UTC (1:00 AM IST)
+
+    const job = cron.schedule(cronExpression, async () => {
+      console.log('🗑️ Account deletion processing job triggered at 1:00 AM IST');
+
+      try {
+        console.log('Processing scheduled account deletions...');
+        await AccountDeletionService.processScheduledDeletions();
+        console.log('✅ Account deletion processing completed');
+      } catch (error) {
+        console.error('❌ Error in account deletion processing job:', error);
+      }
+    }, {
+      scheduled: false,
+      timezone: 'Asia/Kolkata'
+    });
+
+    this.jobs.set('accountDeletionProcessing', job);
+    job.start();
+
+    console.log('🗑️ Account deletion processing scheduled for 1:00 AM IST daily');
+  }
+
+  /**
    * Get status of all scheduled jobs
    */
   getStatus() {
@@ -182,6 +215,22 @@ class SchedulerService {
       return stats;
     } catch (error) {
       console.error('❌ Error getting birthday stats:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Manually trigger account deletion processing (for testing)
+   */
+  async triggerAccountDeletionProcessing() {
+    console.log('🧪 Manually triggering account deletion processing...');
+
+    try {
+      await AccountDeletionService.processScheduledDeletions();
+      console.log('✅ Manual account deletion processing completed');
+      return { success: true, message: 'Account deletion processing completed' };
+    } catch (error) {
+      console.error('❌ Error in manual account deletion processing:', error);
       throw error;
     }
   }

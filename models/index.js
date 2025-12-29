@@ -16,6 +16,7 @@ const EventRegistration = require('./EventRegistration');
 const EventExhibitor = require('./EventExhibitor');
 const RefreshToken = require('./RefreshToken');
 const WhatsAppConfigModel = require('./WhatsAppConfig');
+const AccountDeletionRequest = require('./AccountDeletionRequest');
 
 // Define associations
 const defineAssociations = () => {
@@ -321,5 +322,6 @@ module.exports = {
   EventRegistration,
   EventExhibitor,
   RefreshToken,
-  WhatsAppConfig
+  WhatsAppConfig,
+  AccountDeletionRequest
 };

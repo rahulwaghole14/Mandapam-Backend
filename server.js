@@ -52,6 +52,7 @@ const birthdayRoutes = require('./routes/birthdayRoutes');
 const whatsappRoutes = require('./routes/whatsappRoutes');
 const publicEventRoutes = require('./routes/publicEventRoutes');
 const logRoutes = require('./routes/logRoutes');
+const accountDeletionRoutes = require('./routes/accountDeletionRoutes');
 
 // Import middleware
 const { errorHandler } = require('./middleware/errorMiddleware');
@@ -552,6 +553,9 @@ app.use('/api/whatsapp', whatsappRoutes);
 // Public event registration routes (no authentication required)
 app.use('/api/public', publicEventRoutes);
 app.use('/api/logs', logRoutes);
+
+// Account deletion routes (public)
+app.use('/api/account', accountDeletionRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
