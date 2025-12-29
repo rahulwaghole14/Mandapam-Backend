@@ -245,8 +245,8 @@ async function generateVisitorPassPDF(registration, event, member, baseUrl = '')
         for (const logoPath of possibleLogoPaths) {
           if (fs.existsSync(logoPath)) {
             try {
-              const logoWidth = 150;
-              const logoHeight = 66;
+              const logoWidth = 180;
+              const logoHeight = 80;
               doc.image(logoPath, (pageWidth - logoWidth) / 2, cursorY, { width: logoWidth, height: logoHeight });
               cursorY += logoHeight + 28; // Space after logo
               logoAdded = true;
@@ -262,12 +262,12 @@ async function generateVisitorPassPDF(registration, event, member, baseUrl = '')
         if (!logoAdded) {
           console.error('[PDF Service] Logo not found in any expected location. Checked paths:', possibleLogoPaths);
           // Don't skip - add spacing even if logo not found to maintain layout
-          cursorY += 94; // Space for logo (66) + margin (28)
+          cursorY += 108; // Space for logo (80) + margin (28)
         }
       } catch (logoError) {
         console.error('[PDF Service] Error adding logo:', logoError.message);
         // Add spacing even if logo fails
-        cursorY += 94;
+        cursorY += 108;
       }
       
       // Mandapam Title (always show, not event title) - use Devanagari-compatible font
