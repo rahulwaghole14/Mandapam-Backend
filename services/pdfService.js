@@ -270,16 +270,8 @@ async function generateVisitorPassPDF(registration, event, member, baseUrl = '')
         cursorY += 108;
       }
       
-      // Mandapam Title (always show, not event title) - use Devanagari-compatible font
-      const mandapamTitle = 'Mandapam';
-      doc.fontSize(20)
-         .font(selectFont(mandapamTitle, true))
-         .fillColor('#111827')
-         .text(mandapamTitle, marginX, cursorY, {
-           width: pageWidth - marginX * 2,
-           align: 'center'
-         });
-      cursorY += 30;
+      // Removed hardcoded title as requested
+      cursorY += 10;
       
       // Visitor Pass Label
       doc.fontSize(16)
