@@ -31,6 +31,12 @@ async function createOrder(amountInRupees, receipt) {
   }
 
   try {
+    Logger.info('Razorpay: creating order', {
+      amountInRupees,
+      amountInPaise: amount,
+      receipt
+    });
+    
     return await razorpay.orders.create({ 
       amount, 
       currency: 'INR', 
@@ -80,7 +86,15 @@ function verifySignature({ razorpay_order_id, razorpay_payment_id, razorpay_sign
     .createHmac('sha256', key_secret)
     .update(payload)
     .digest('hex');
-  return expected === razorpay_signature;
+  const isValid = expected === razorpay_signature;
+
+  Logger.debug('Razorpay: signature verification result', {
+    razorpay_order_id,
+    razorpay_payment_id,
+    isValid
+  });
+
+  return isValid;
 }
 
 async function processRefund(paymentId, amountInRupees, notes = {}) {
@@ -112,7 +126,20 @@ async function processRefund(paymentId, amountInRupees, notes = {}) {
       refundData.amount = amount;
     }
     
+    Logger.info('Payment Service: Initiating Razorpay refund', {
+      paymentId,
+      amountInRupees,
+      notes
+    });
+
     const refund = await razorpay.payments.refund(paymentId, refundData);
+    
+    Logger.debug('Payment Service: Razorpay refund API response', {
+      paymentId,
+      refundId: refund?.id,
+      rawStatus: refund?.status,
+      amount: refund?.amount
+    });
     
     Logger.info('Refund processed successfully', {
       paymentId,
