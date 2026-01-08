@@ -598,4 +598,46 @@ router.get('/birthdays/upcoming', protectMobile, async (req, res) => {
   }
 });
 
+// @desc    Delete member account (mobile self-service)
+// @route   DELETE /api/mobile/members/:id
+// @access  Private (member can delete own account)
+router.delete('/:id', protectMobile, async (req, res) => {
+  try {
+    const memberId = req.params.id;
+    const authenticatedMemberId = req.user.id;
+
+    // Ensure member can only delete their own account
+    if (memberId !== authenticatedMemberId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only delete your own account'
+      });
+    }
+
+    const member = await Member.findByPk(memberId);
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        message: 'Member not found'
+      });
+    }
+
+    // Delete the member and related data
+    await member.destroy();
+
+    res.status(200).json({
+      success: true,
+      message: 'Account deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Delete member account error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while deleting account'
+    });
+  }
+});
+
 module.exports = router;
