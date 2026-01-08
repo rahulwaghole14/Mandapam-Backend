@@ -7,6 +7,15 @@ const DEVICE_UID = process.env.WHATSAPP_DEVICE_UID || 'a8bec8c820614d8ba084a5542
 const DEVICE_NAME = process.env.WHATSAPP_DEVICE_NAME || 'Mandapam';
 const WHATSAPP_API_KEY = process.env.WHATSAPP_API_KEY || '';
 const COUNTRY_CODE = '91';
+const Logger = require('../utils/logger');
+
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 2000;
+
+/**
+ * Wait for a specified number of milliseconds
+ */
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const WHATSAPP_MESSAGE_TEMPLATE = `
 🙏 MANDAPAM 2026 – कोल्हापूर मध्ये आपले हार्दिक स्वागत! 🎉
@@ -37,31 +46,31 @@ MANDAPAM App डाउनलोड करा 👇
  */
 function formatPhoneNumber(value) {
   if (!value) return '';
-  
+
   // Remove all non-digit characters
   const digits = String(value).replace(/\D/g, '');
   if (!digits) return '';
-  
+
   // If already 12 digits and starts with 91, return as is
   if (digits.length === 12 && digits.startsWith(COUNTRY_CODE)) {
     return digits;
   }
-  
+
   // If 10 digits, add 91 prefix
   if (digits.length === 10) {
     return `${COUNTRY_CODE}${digits}`;
   }
-  
+
   // If 11 digits and starts with 0, remove 0 and add 91
   if (digits.length === 11 && digits.startsWith('0')) {
     return `${COUNTRY_CODE}${digits.substring(1)}`;
   }
-  
+
   // If more than 10 digits, take last 10 and add 91
   if (digits.length > 10) {
     return `${COUNTRY_CODE}${digits.slice(-10)}`;
   }
-  
+
   // If less than 10 digits, it's invalid
   return '';
 }
@@ -84,15 +93,15 @@ function buildMessage(memberName) {
 async function sendPdfViaWhatsApp(phoneNumber, pdfSource, memberName = '') {
   // Declare formattedPhone outside try block so it's available in catch
   let formattedPhone;
-  
+
   try {
     console.log(`[WhatsApp Service] sendPdfViaWhatsApp called`);
     console.log(`[WhatsApp Service] Phone: ${phoneNumber}, Source type: ${typeof pdfSource}, Name: ${memberName}`);
     console.log(`[WhatsApp Service] DEVICE_UID: ${DEVICE_UID}, DEVICE_NAME: ${DEVICE_NAME}`);
-    
+
     formattedPhone = formatPhoneNumber(phoneNumber);
     console.log(`[WhatsApp Service] Formatted phone: ${formattedPhone}`);
-    
+
     if (!formattedPhone) {
       console.error(`[WhatsApp Service] ❌ Invalid phone number format: ${phoneNumber}`);
       return {
@@ -104,120 +113,84 @@ async function sendPdfViaWhatsApp(phoneNumber, pdfSource, memberName = '') {
     const message = buildMessage(memberName);
     console.log(`[WhatsApp Service] Message length: ${message.length} characters`);
 
-    // Create FormData for file upload
-    const formData = new FormData();
-    
-    // Handle different PDF source types
-    if (typeof pdfSource === 'string') {
-      // File path (legacy support)
-      if (!fs.existsSync(pdfSource)) {
-        console.error(`[WhatsApp Service] ❌ PDF file not found: ${pdfSource}`);
-        return {
-          success: false,
-          error: 'PDF file not found'
-        };
+    let lastError;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        console.log(`[WhatsApp Service] 📤 Attempt ${attempt}/${MAX_RETRIES} to send PDF to ${formattedPhone}`);
+
+        // Create FormData for file upload (must recreate for each retry as streams are consumed)
+        const formData = new FormData();
+
+        // Handle different PDF source types
+        if (typeof pdfSource === 'string') {
+          if (!fs.existsSync(pdfSource)) {
+            return { success: false, error: 'PDF file not found' };
+          }
+          formData.append('file', fs.createReadStream(pdfSource));
+        } else if (Buffer.isBuffer(pdfSource)) {
+          formData.append('file', pdfSource, {
+            filename: 'visitor-pass.pdf',
+            contentType: 'application/pdf'
+          });
+        } else if (pdfSource && typeof pdfSource.pipe === 'function') {
+          formData.append('file', pdfSource, {
+            filename: 'visitor-pass.pdf',
+            contentType: 'application/pdf'
+          });
+        }
+
+        formData.append('phone', formattedPhone);
+        formData.append('message', message);
+
+        const apiUrl = `https://messagesapi.co.in/chat/sendMessageFile/${DEVICE_UID}/${encodeURIComponent(DEVICE_NAME)}`;
+        const sendStartTime = Date.now();
+
+        const response = await axios.post(
+          apiUrl,
+          formData,
+          {
+            headers: { ...formData.getHeaders() },
+            timeout: 60000
+          }
+        );
+
+        const sendDuration = Date.now() - sendStartTime;
+        console.log(`[WhatsApp Service] ⏱️ Attempt ${attempt} completed in ${sendDuration}ms`);
+
+        // Check if response indicates success
+        const responseData = response.data;
+        const isSuccess = response.status === 200 && (
+          (typeof responseData === 'object' && (responseData.success === true || responseData.status === 'success' || responseData.message?.toLowerCase().includes('success'))) ||
+          (typeof responseData === 'string' && responseData.toLowerCase().includes('success'))
+        );
+
+        if (isSuccess) {
+          Logger.info('WhatsApp Service: ✅ PDF sent via WhatsApp successfully', {
+            phone: formattedPhone,
+            attempt,
+            apiDuration: sendDuration,
+            timestamp: new Date().toISOString()
+          });
+          return { success: true, message: 'PDF sent via WhatsApp successfully' };
+        } else {
+          const errorMsg = typeof responseData === 'object' ? (responseData.error || responseData.message || 'Unknown error') : String(responseData);
+          throw new Error(`API returned error response: ${errorMsg}`);
+        }
+      } catch (err) {
+        lastError = err;
+        const isTransient = err.response && (err.response.status === 504 || err.response.status === 503 || err.response.status === 502);
+        const isNetworkError = err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT' || err.message.includes('timeout');
+
+        if ((isTransient || isNetworkError) && attempt < MAX_RETRIES) {
+          console.warn(`[WhatsApp Service] ⚠️ Attempt ${attempt} failed with ${err.response?.status || err.code || err.message}. Retrying in ${RETRY_DELAY_MS}ms...`);
+          await wait(RETRY_DELAY_MS * attempt);
+        } else {
+          break;
+        }
       }
-      const fileStats = fs.statSync(pdfSource);
-      console.log(`[WhatsApp Service] PDF file size: ${fileStats.size} bytes (${(fileStats.size / 1024 / 1024).toFixed(2)} MB)`);
-      formData.append('file', fs.createReadStream(pdfSource));
-    } else if (Buffer.isBuffer(pdfSource)) {
-      // Buffer (preferred - no temp files)
-      console.log(`[WhatsApp Service] PDF buffer size: ${pdfSource.length} bytes (${(pdfSource.length / 1024 / 1024).toFixed(2)} MB)`);
-      formData.append('file', pdfSource, {
-        filename: 'visitor-pass.pdf',
-        contentType: 'application/pdf'
-      });
-    } else if (pdfSource && typeof pdfSource.pipe === 'function') {
-      // Stream (preferred - most memory efficient)
-      console.log(`[WhatsApp Service] PDF stream detected`);
-      formData.append('file', pdfSource, {
-        filename: 'visitor-pass.pdf',
-        contentType: 'application/pdf'
-      });
-    } else {
-      console.error(`[WhatsApp Service] ❌ Invalid PDF source type: ${typeof pdfSource}`);
-      return {
-        success: false,
-        error: 'Invalid PDF source. Expected file path, buffer, or stream.'
-      };
     }
-    
-    formData.append('phone', formattedPhone);
-    formData.append('message', message);
 
-    const apiUrl = `https://messagesapi.co.in/chat/sendMessageFile/${DEVICE_UID}/${encodeURIComponent(DEVICE_NAME)}`;
-    console.log(`[WhatsApp Service] Sending to API: ${apiUrl}`);
-
-    // Send via WhatsApp API (no timeout - async, can take as long as needed)
-    const sendStartTime = Date.now();
-    console.log(`[WhatsApp Service] 📤 Sending to API at ${new Date().toISOString()}`);
-    
-    const response = await axios.post(
-      apiUrl,
-      formData,
-      {
-        headers: {
-          ...formData.getHeaders()
-        },
-        timeout: 0 // No timeout - can take as long as needed (async)
-      }
-    );
-    
-    const sendEndTime = Date.now();
-    const sendDuration = sendEndTime - sendStartTime;
-    console.log(`[WhatsApp Service] ⏱️ API call completed in ${sendDuration}ms at ${new Date().toISOString()}`);
-
-    const Logger = require('../utils/logger');
-    Logger.info('WhatsApp Service: API Response received', {
-      status: response.status,
-      statusText: response.statusText,
-      responseData: typeof response.data === 'object' ? JSON.stringify(response.data).substring(0, 500) : String(response.data).substring(0, 500),
-      phone: formattedPhone,
-      memberName
-    });
-
-    // Check if response indicates success
-    const responseData = response.data;
-    const isSuccess = response.status === 200 && (
-      (typeof responseData === 'object' && (responseData.success === true || responseData.status === 'success' || responseData.message?.toLowerCase().includes('success'))) ||
-      (typeof responseData === 'string' && responseData.toLowerCase().includes('success'))
-    );
-
-    if (isSuccess) {
-      // Log success with comprehensive details
-      Logger.info('WhatsApp Service: ✅ PDF sent via WhatsApp successfully', {
-        phone: formattedPhone,
-        originalPhone: phoneNumber,
-        memberName: memberName || 'N/A',
-        responseStatus: response.status,
-        apiDuration: sendDuration,
-        pdfSize: typeof pdfSource === 'string' 
-          ? (fs.existsSync(pdfSource) ? fs.statSync(pdfSource).size : 'unknown')
-          : (Buffer.isBuffer(pdfSource) ? pdfSource.length : 'stream'),
-        timestamp: new Date().toISOString()
-      });
-      console.log(`[WhatsApp Service] ✅ SUCCESS: PDF sent to ${formattedPhone} (${memberName || 'N/A'}) in ${sendDuration}ms`);
-      return {
-        success: true,
-        message: 'PDF sent via WhatsApp successfully'
-      };
-    } else {
-      // Even if status is 200, check if the response indicates failure
-      const errorMsg = typeof responseData === 'object' 
-        ? (responseData.error || responseData.message || 'Unknown error')
-        : (typeof responseData === 'string' ? responseData : `WhatsApp API returned status ${response.status}`);
-      
-      Logger.error('WhatsApp Service: API returned error response', new Error(errorMsg), {
-        phone: formattedPhone,
-        status: response.status,
-        responseData: typeof responseData === 'object' ? JSON.stringify(responseData) : String(responseData)
-      });
-      
-      return {
-        success: false,
-        error: errorMsg
-      };
-    }
+    throw lastError;
   } catch (error) {
     // Detailed error logging for debugging
     console.error(`[WhatsApp Service] ❌ EXCEPTION CAUGHT`);
@@ -228,14 +201,14 @@ async function sendPdfViaWhatsApp(phoneNumber, pdfSource, memberName = '') {
     const safeFormattedPhone = formattedPhone || formatPhoneNumber(phoneNumber);
     console.error(`[WhatsApp Service] Phone Number: ${phoneNumber} (formatted: ${safeFormattedPhone})`);
     // Fix: Use pdfSource instead of pdfFilePath, and handle different types
-    const pdfSourceInfo = typeof pdfSource === 'string' 
-      ? pdfSource 
+    const pdfSourceInfo = typeof pdfSource === 'string'
+      ? pdfSource
       : (Buffer.isBuffer(pdfSource) ? `Buffer(${pdfSource.length} bytes)` : (pdfSource && typeof pdfSource.pipe === 'function' ? 'Stream' : 'Unknown'));
     console.error(`[WhatsApp Service] PDF Source: ${pdfSourceInfo}`);
     console.error(`[WhatsApp Service] Member Name: ${memberName || 'N/A'}`);
     console.error(`[WhatsApp Service] DEVICE_UID: ${DEVICE_UID}`);
     console.error(`[WhatsApp Service] DEVICE_NAME: ${DEVICE_NAME}`);
-    
+
     // Log to Logger for Render visibility
     Logger.error('WhatsApp Service: Exception sending PDF via WhatsApp', error, {
       phone: safeFormattedPhone,
@@ -249,7 +222,7 @@ async function sendPdfViaWhatsApp(phoneNumber, pdfSource, memberName = '') {
       responseStatus: error.response?.status,
       hasRequest: !!error.request
     });
-    
+
     if (error.response) {
       console.error(`[WhatsApp Service] ⚠️ API RESPONSE ERROR`);
       console.error(`[WhatsApp Service] Response Status: ${error.response.status}`);
@@ -268,11 +241,11 @@ async function sendPdfViaWhatsApp(phoneNumber, pdfSource, memberName = '') {
       console.error(`[WhatsApp Service] ⚠️ REQUEST SETUP ERROR`);
       console.error(`[WhatsApp Service] Error occurred before request was sent`);
     }
-    
+
     if (error.stack) {
       console.error(`[WhatsApp Service] Stack Trace:`, error.stack);
     }
-    
+
     // Build detailed error message
     let errorMessage = 'Failed to send PDF via WhatsApp';
     if (error.response?.data) {
@@ -288,7 +261,7 @@ async function sendPdfViaWhatsApp(phoneNumber, pdfSource, memberName = '') {
     } else if (error.message) {
       errorMessage = error.message;
     }
-    
+
     // Add context to error message
     if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
       errorMessage = `WhatsApp API timeout: ${errorMessage}`;
@@ -297,7 +270,7 @@ async function sendPdfViaWhatsApp(phoneNumber, pdfSource, memberName = '') {
     } else if (error.response?.status) {
       errorMessage = `WhatsApp API error (${error.response.status}): ${errorMessage}`;
     }
-    
+
     return {
       success: false,
       error: errorMessage,
@@ -324,10 +297,10 @@ async function sendPdfViaWhatsApp(phoneNumber, pdfSource, memberName = '') {
 async function sendPdfBase64ViaWhatsApp(phoneNumber, pdfBase64, fileName, memberName = '') {
   // Declare formattedPhone outside try block so it's available in catch
   let formattedPhone;
-  
+
   try {
     formattedPhone = formatPhoneNumber(phoneNumber);
-    
+
     if (!formattedPhone) {
       return {
         success: false,
@@ -342,54 +315,67 @@ async function sendPdfBase64ViaWhatsApp(phoneNumber, pdfBase64, fileName, member
       };
     }
 
-    // Convert base64 to buffer
+    // Convert base64 to buffer and prepare message
     const pdfBuffer = Buffer.from(pdfBase64, 'base64');
-
     const message = buildMessage(memberName);
+    const apiUrl = `https://messagesapi.co.in/chat/sendMessageFile/${DEVICE_UID}/${encodeURIComponent(DEVICE_NAME)}`;
 
-    // Create FormData for file upload
-    const formData = new FormData();
-    formData.append('file', pdfBuffer, {
-      filename: fileName || 'visitor-pass.pdf',
-      contentType: 'application/pdf'
-    });
-    formData.append('phone', formattedPhone);
-    formData.append('message', message);
+    let lastError;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        console.log(`[WhatsApp Service] 📤 Attempt ${attempt}/${MAX_RETRIES} to send PDF (Base64) to ${formattedPhone}`);
+        const sendStartTime = Date.now();
 
-    // Send via WhatsApp API
-    const response = await axios.post(
-      `https://messagesapi.co.in/chat/sendMessageFile/${DEVICE_UID}/${encodeURIComponent(DEVICE_NAME)}`,
-      formData,
-      {
-        headers: {
-          ...formData.getHeaders()
-        },
-        timeout: 0 // No timeout - can take as long as needed (async)
+        // Prepare form data
+        const formData = new FormData();
+        formData.append('file', pdfBuffer, {
+          filename: fileName || 'visitor-pass.pdf',
+          contentType: 'application/pdf'
+        });
+        formData.append('phone', formattedPhone);
+        formData.append('message', message);
+
+        const response = await axios.post(apiUrl, formData, {
+          headers: { ...formData.getHeaders() },
+          timeout: 60000
+        });
+
+        const sendDuration = Date.now() - sendStartTime;
+        console.log(`[WhatsApp Service] ⏱️ Base64 Attempt ${attempt} completed in ${sendDuration}ms`);
+
+        const responseData = response.data;
+        const isSuccess = response.status === 200 && (
+          (typeof responseData === 'object' && (responseData.success === true || responseData.status === 'success' || responseData.message?.toLowerCase().includes('success'))) ||
+          (typeof responseData === 'string' && responseData.toLowerCase().includes('success'))
+        );
+
+        if (isSuccess) {
+          Logger.info('WhatsApp Service: ✅ PDF (Base64) sent via WhatsApp successfully', {
+            phone: formattedPhone,
+            fileName: fileName || 'visitor-pass.pdf',
+            attempt,
+            duration: sendDuration
+          });
+          return { success: true, message: 'PDF sent via WhatsApp successfully' };
+        } else {
+          const errorMsg = typeof responseData === 'object' ? (responseData.error || responseData.message || 'Unknown error') : String(responseData);
+          throw new Error(`API returned error response: ${errorMsg}`);
+        }
+      } catch (err) {
+        lastError = err;
+        const isTransient = err.response && (err.response.status === 504 || err.response.status === 503 || err.response.status === 502);
+        const isNetworkError = err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT' || err.message.includes('timeout');
+
+        if ((isTransient || isNetworkError) && attempt < MAX_RETRIES) {
+          console.warn(`[WhatsApp Service] ⚠️ Base64 Attempt ${attempt} failed. Retrying...`);
+          await wait(RETRY_DELAY_MS * attempt);
+        } else {
+          break;
+        }
       }
-    );
-
-    if (response.status === 200) {
-      // Log success for base64 sending
-      const Logger = require('../utils/logger');
-      Logger.info('WhatsApp Service: ✅ PDF (Base64) sent via WhatsApp successfully', {
-        phone: formattedPhone,
-        originalPhone: phoneNumber,
-        memberName: memberName || 'N/A',
-        fileName: fileName || 'visitor-pass.pdf',
-        pdfBase64Length: pdfBase64?.length || 0,
-        timestamp: new Date().toISOString()
-      });
-      console.log(`[WhatsApp Service] ✅ SUCCESS (Base64): PDF sent to ${formattedPhone} (${memberName || 'N/A'})`);
-      return {
-        success: true,
-        message: 'PDF sent via WhatsApp successfully'
-      };
-    } else {
-      return {
-        success: false,
-        error: `WhatsApp API returned status ${response.status}`
-      };
     }
+
+    throw lastError;
   } catch (error) {
     // Detailed error logging for base64 sending
     console.error(`[WhatsApp Service] ❌ EXCEPTION CAUGHT (Base64)`);
@@ -402,7 +388,7 @@ async function sendPdfBase64ViaWhatsApp(phoneNumber, pdfBase64, fileName, member
     console.error(`[WhatsApp Service] File Name: ${fileName || 'N/A'}`);
     console.error(`[WhatsApp Service] PDF Base64 Length: ${pdfBase64?.length || 0}`);
     console.error(`[WhatsApp Service] Member Name: ${memberName || 'N/A'}`);
-    
+
     // Log to Logger for Render visibility
     Logger.error('WhatsApp Service: Exception sending PDF (Base64) via WhatsApp', error, {
       phone: safeFormattedPhone,
@@ -416,7 +402,7 @@ async function sendPdfBase64ViaWhatsApp(phoneNumber, pdfBase64, fileName, member
       hasResponse: !!error.response,
       responseStatus: error.response?.status
     });
-    
+
     if (error.response) {
       console.error(`[WhatsApp Service] ⚠️ API RESPONSE ERROR (Base64)`);
       console.error(`[WhatsApp Service] Response Status: ${error.response.status}`);
@@ -424,11 +410,11 @@ async function sendPdfBase64ViaWhatsApp(phoneNumber, pdfBase64, fileName, member
     } else if (error.request) {
       console.error(`[WhatsApp Service] ⚠️ NO RESPONSE FROM API (Base64)`);
     }
-    
+
     if (error.stack) {
       console.error(`[WhatsApp Service] Stack Trace (Base64):`, error.stack);
     }
-    
+
     let errorMessage = 'Failed to send PDF via WhatsApp';
     if (error.response?.data) {
       if (typeof error.response.data === 'string') {
@@ -441,7 +427,7 @@ async function sendPdfBase64ViaWhatsApp(phoneNumber, pdfBase64, fileName, member
     } else if (error.message) {
       errorMessage = error.message;
     }
-    
+
     return {
       success: false,
       error: errorMessage,
@@ -460,7 +446,7 @@ async function sendPdfBase64ViaWhatsApp(phoneNumber, pdfBase64, fileName, member
 async function sendOTP(phoneNumber, otp) {
   try {
     const formattedPhone = formatPhoneNumber(phoneNumber);
-    
+
     if (!formattedPhone) {
       return {
         success: false,
@@ -478,91 +464,76 @@ async function sendOTP(phoneNumber, otp) {
     // Build OTP message
     const message = `🔐 MANDAPAM Login OTP\n\nYour OTP is: ${otp}\n\nThis OTP is valid for 10 minutes.\n\nDo not share this OTP with anyone.\n\n— MANDAPAM Team`;
 
-    console.log(`[WhatsApp Service] 📤 Sending OTP to ${formattedPhone} at ${new Date().toISOString()}`);
-    console.log(`[WhatsApp Service] Original phone: ${phoneNumber}, Formatted phone: ${formattedPhone}`);
-
-    // Use JSON format as per API documentation
-    const sendStartTime = Date.now();
     const apiUrl = `https://messagesapi.co.in/chat/sendMessage`;
-    console.log(`[WhatsApp Service] API URL: ${apiUrl}`);
-    console.log(`[WhatsApp Service] Phone: ${formattedPhone}, Message length: ${message.length} chars`);
-    
-    // Prepare request body according to API documentation
     const requestBody = {
       id: DEVICE_UID,
       name: DEVICE_NAME,
       phone: formattedPhone,
       message: message
     };
-
-    // Prepare headers according to API documentation
     const headers = {
       'Content-Type': 'application/json',
       'Hello': 'Hello2'
     };
-    
-    // Add API key if available
     if (WHATSAPP_API_KEY) {
       headers['x-api-key'] = WHATSAPP_API_KEY;
     }
 
-    console.log(`[WhatsApp Service] Request body:`, JSON.stringify(requestBody));
-    console.log(`[WhatsApp Service] Headers:`, JSON.stringify(headers));
-    
-    const response = await axios.post(
-      apiUrl,
-      requestBody,
-      {
-        headers: headers,
-        timeout: 0 // No timeout - async, can take as long as needed
+    let lastError;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        console.log(`[WhatsApp Service] 📤 Attempt ${attempt}/${MAX_RETRIES} to send OTP to ${formattedPhone}`);
+        const sendStartTime = Date.now();
+
+        const response = await axios.post(apiUrl, requestBody, {
+          headers,
+          timeout: 45000 // 45s for OTP
+        });
+
+        const sendDuration = Date.now() - sendStartTime;
+        console.log(`[WhatsApp Service] ⏱️ OTP Attempt ${attempt} completed in ${sendDuration}ms`);
+
+        const responseData = response.data;
+        const isSuccess = response.status === 200 && (
+          (typeof responseData === 'object' && (responseData.success === true || responseData.status === 'success' || responseData.message?.toLowerCase().includes('success'))) ||
+          (typeof responseData === 'string' && responseData.toLowerCase().includes('success'))
+        );
+
+        if (isSuccess) {
+          console.log(`✅ WhatsApp OTP sent successfully to ${formattedPhone}`);
+          Logger.info('WhatsApp Service: ✅ OTP sent successfully', {
+            phone: formattedPhone,
+            attempt,
+            duration: sendDuration
+          });
+          return { success: true, message: 'OTP sent via WhatsApp successfully' };
+        } else {
+          const errorMsg = typeof responseData === 'object' ? (responseData.error || responseData.message || 'Unknown error') : String(responseData);
+          throw new Error(`API returned error response: ${errorMsg}`);
+        }
+      } catch (err) {
+        lastError = err;
+        const isTransient = err.response && (err.response.status === 504 || err.response.status === 503 || err.response.status === 502);
+        const isNetworkError = err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT' || err.message.includes('timeout');
+
+        if ((isTransient || isNetworkError) && attempt < MAX_RETRIES) {
+          console.warn(`[WhatsApp Service] ⚠️ OTP Attempt ${attempt} failed. Retrying...`);
+          await wait(RETRY_DELAY_MS * attempt);
+        } else {
+          break;
+        }
       }
-    );
-
-    const sendEndTime = Date.now();
-    const sendDuration = sendEndTime - sendStartTime;
-    console.log(`[WhatsApp Service] ⏱️ OTP API call completed in ${sendDuration}ms at ${new Date().toISOString()}`);
-
-    // Check if response indicates success (similar to PDF sending logic)
-    const responseData = response.data;
-    const isSuccess = response.status === 200 && (
-      (typeof responseData === 'object' && (responseData.success === true || responseData.status === 'success' || responseData.message?.toLowerCase().includes('success'))) ||
-      (typeof responseData === 'string' && responseData.toLowerCase().includes('success'))
-    );
-
-    if (isSuccess) {
-      console.log(`✅ WhatsApp OTP sent successfully to ${formattedPhone}`);
-      return {
-        success: true,
-        message: 'OTP sent via WhatsApp successfully'
-      };
-    } else {
-      // Even if status is 200, check if the response indicates failure
-      const errorMsg = typeof responseData === 'object' 
-        ? (responseData.error || responseData.message || 'Unknown error')
-        : (typeof responseData === 'string' ? responseData : `WhatsApp API returned status ${response.status}`);
-      
-      console.error(`⚠️ WhatsApp OTP API returned error response: ${errorMsg}`);
-      return {
-        success: false,
-        error: errorMsg
-      };
     }
+
+    throw lastError;
   } catch (error) {
-    console.error(`[WhatsApp Service] ❌ Error sending OTP to ${phoneNumber}:`, error.message);
-    
-    let errorMessage = 'Failed to send OTP via WhatsApp';
-    if (error.response?.data) {
-      if (typeof error.response.data === 'string') {
-        errorMessage = error.response.data;
-      } else if (error.response.data.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.response.data.error) {
-        errorMessage = error.response.data.error;
-      }
-    } else if (error.message) {
-      errorMessage = error.message;
-    }
-    
+    Logger.error('WhatsApp Service: Error sending OTP', error, {
+      phone: phoneNumber,
+      status: error.response?.status,
+      data: error.response?.data
+    });
+
+    let errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to send OTP via WhatsApp';
     return {
       success: false,
       error: errorMessage,
