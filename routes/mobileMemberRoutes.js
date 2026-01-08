@@ -18,7 +18,7 @@ router.get('/profile', protectMobile, async (req, res) => {
         attributes: ['name']
       }]
     });
-    
+
     if (!member) {
       return res.status(404).json({
         success: false,
@@ -82,7 +82,7 @@ router.put('/profile', protectMobile, [
     }
 
     const member = await Member.findByPk(req.user.id);
-    
+
     if (!member) {
       return res.status(404).json({
         success: false,
@@ -117,9 +117,9 @@ router.put('/profile', protectMobile, [
     if (req.body.profileImage !== undefined) {
       // Only update profileImage if provided and not a local URI (file:// or content://)
       // Local URIs should be uploaded first via upload endpoint
-      if (req.body.profileImage && 
-          !req.body.profileImage.startsWith('file://') && 
-          !req.body.profileImage.startsWith('content://')) {
+      if (req.body.profileImage &&
+        !req.body.profileImage.startsWith('file://') &&
+        !req.body.profileImage.startsWith('content://')) {
         updateData.profileImage = req.body.profileImage;
       }
     }
@@ -163,11 +163,11 @@ router.get('/members', async (req, res) => {
 
     // Build filter object
     const whereClause = { isActive: true };
-    
+
     if (req.query.businessType) {
       whereClause.businessType = req.query.businessType;
     }
-    
+
     if (req.query.city) {
       whereClause.city = {
         [Op.iLike]: `%${req.query.city}%`
@@ -249,7 +249,7 @@ router.get('/members', async (req, res) => {
 router.get('/members/search', protectMobile, async (req, res) => {
   try {
     const { q, businessType, city, associationName } = req.query;
-    
+
     if (!q && !businessType && !city && !associationName) {
       return res.status(400).json({
         success: false,
@@ -263,7 +263,7 @@ router.get('/members/search', protectMobile, async (req, res) => {
 
     // Build search query
     const whereClause = { isActive: true };
-    
+
     if (q) {
       whereClause[Op.or] = [
         { name: { [Op.iLike]: `%${q}%` } },
@@ -271,18 +271,18 @@ router.get('/members/search', protectMobile, async (req, res) => {
         { phone: { [Op.iLike]: `%${q}%` } }
       ];
     }
-    
+
     if (businessType) {
       whereClause.businessType = businessType;
     }
-    
+
     if (city) {
       whereClause[Op.or] = [
         { district: { [Op.iLike]: `%${city}%` } },
         { city: { [Op.iLike]: `%${city}%` } }
       ];
     }
-    
+
     if (associationName) {
       whereClause['$association.name$'] = { [Op.iLike]: `%${associationName}%` };
     }
@@ -325,33 +325,33 @@ router.get('/members/search', protectMobile, async (req, res) => {
 router.get('/members/filter', protectMobile, async (req, res) => {
   try {
     const { businessType, city, state, associationName, paymentStatus } = req.query;
-    
+
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const offset = (page - 1) * limit;
 
     // Build filter query
     const whereClause = { isActive: true };
-    
+
     if (businessType) {
       whereClause.businessType = businessType;
     }
-    
+
     if (city) {
       whereClause[Op.or] = [
         { district: { [Op.iLike]: `%${city}%` } },
         { city: { [Op.iLike]: `%${city}%` } }
       ];
     }
-    
+
     if (state) {
       whereClause.state = { [Op.iLike]: `%${state}%` };
     }
-    
+
     if (associationName) {
       whereClause['$association.name$'] = { [Op.iLike]: `%${associationName}%` };
     }
-    
+
     if (paymentStatus) {
       whereClause.paymentStatus = paymentStatus;
     }
@@ -394,7 +394,7 @@ router.get('/members/filter', protectMobile, async (req, res) => {
 router.get('/members/:id', protectMobile, async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Validate integer ID format
     if (!id.match(/^\d+$/)) {
       return res.status(400).json({
@@ -478,7 +478,7 @@ router.get('/birthdays/today', protectMobile, async (req, res) => {
       success: true,
       count: membersWithAge.length,
       date: today.toISOString().split('T')[0], // YYYY-MM-DD format
-      message: membersWithAge.length > 0 
+      message: membersWithAge.length > 0
         ? `Found ${membersWithAge.length} member(s) celebrating birthday today`
         : 'No birthdays today',
       members: membersWithAge
@@ -522,26 +522,26 @@ router.get('/birthdays/upcoming', protectMobile, async (req, res) => {
     // Filter members whose birthday is in the next 7 days
     const upcomingBirthdays = allMembersWithBirthdays.filter(member => {
       if (!member.birthDate) return false;
-      
+
       try {
         // Ensure birthDate is a proper Date object
         const birthDate = new Date(member.birthDate);
         if (isNaN(birthDate.getTime())) return false;
-        
+
         const birthMonth = birthDate.getMonth() + 1;
         const birthDay = birthDate.getDate();
-        
+
         // Calculate days until birthday this year
         const thisYearBirthday = new Date(today.getFullYear(), birthDate.getMonth(), birthDate.getDate());
         const nextYearBirthday = new Date(today.getFullYear() + 1, birthDate.getMonth(), birthDate.getDate());
-        
+
         let daysUntil;
         if (thisYearBirthday >= today) {
           daysUntil = Math.ceil((thisYearBirthday - today) / (1000 * 60 * 60 * 24));
         } else {
           daysUntil = Math.ceil((nextYearBirthday - today) / (1000 * 60 * 60 * 24));
         }
-        
+
         // Include birthdays in the next 7 days (1-7 days from now)
         return daysUntil >= 1 && daysUntil <= 7;
       } catch (dateError) {
@@ -559,15 +559,15 @@ router.get('/birthdays/upcoming', protectMobile, async (req, res) => {
           const birthYear = birthDate.getFullYear();
           const currentYear = today.getFullYear();
           memberObj.age = currentYear - birthYear;
-          
+
           // Calculate days until birthday
           const thisYearBirthday = new Date(currentYear, birthDate.getMonth(), birthDate.getDate());
           const nextYearBirthday = new Date(currentYear + 1, birthDate.getMonth(), birthDate.getDate());
-          
-          const daysUntil = thisYearBirthday >= today 
+
+          const daysUntil = thisYearBirthday >= today
             ? Math.ceil((thisYearBirthday - today) / (1000 * 60 * 60 * 24))
             : Math.ceil((nextYearBirthday - today) / (1000 * 60 * 60 * 24));
-          
+
           memberObj.daysUntilBirthday = daysUntil;
         } catch (dateError) {
           console.error('Date calculation error for member:', member.id, dateError);
@@ -583,7 +583,7 @@ router.get('/birthdays/upcoming', protectMobile, async (req, res) => {
       success: true,
       count: membersWithDetails.length,
       period: 'next 7 days',
-      message: membersWithDetails.length > 0 
+      message: membersWithDetails.length > 0
         ? `Found ${membersWithDetails.length} member(s) with upcoming birthdays`
         : 'No upcoming birthdays in the next 7 days',
       members: membersWithDetails
@@ -601,7 +601,7 @@ router.get('/birthdays/upcoming', protectMobile, async (req, res) => {
 // @desc    Delete member account (mobile self-service)
 // @route   DELETE /api/mobile/members/:id
 // @access  Private (member can delete own account)
-router.delete('/:id', protectMobile, async (req, res) => {
+router.delete('/members/:id', protectMobile, async (req, res) => {
   try {
     const memberId = req.params.id;
     const authenticatedMemberId = req.user.id;
@@ -623,7 +623,9 @@ router.delete('/:id', protectMobile, async (req, res) => {
       });
     }
 
-    // Delete the member and related data
+    // Delete the member record.
+    // Note: Related event registrations are preserved (member_id is set to NULL)
+    // due to the 'SET NULL' constraint in the EventRegistration model.
     await member.destroy();
 
     res.status(200).json({

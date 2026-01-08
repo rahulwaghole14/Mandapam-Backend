@@ -22,13 +22,23 @@ const EventRegistration = sequelize.define('EventRegistration', {
   },
   memberId: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    allowNull: true,
     field: 'member_id',
     references: {
       model: 'members',
       key: 'id'
     },
-    onDelete: 'CASCADE'
+    onDelete: 'SET NULL'
+  },
+  memberName: {
+    type: DataTypes.STRING(100),
+    allowNull: true,
+    field: 'member_name'
+  },
+  memberPhone: {
+    type: DataTypes.STRING(15),
+    allowNull: true,
+    field: 'member_phone'
   },
   status: {
     type: DataTypes.ENUM('registered', 'cancelled', 'attended', 'no_show'),

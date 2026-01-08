@@ -20,16 +20,16 @@ router.get('/events', async (req, res) => {
     const offset = (page - 1) * limit;
 
     // Build filter object - show all events (past, current, and future)
-    const whereClause = { 
+    const whereClause = {
       isPublic: true,
       isActive: true
       // Removed date filter to include old events
     };
-    
+
     if (req.query.type) {
       whereClause.type = req.query.type;
     }
-    
+
     if (req.query.city) {
       whereClause.city = {
         [Op.iLike]: `%${req.query.city}%`
@@ -70,7 +70,7 @@ router.get('/events', async (req, res) => {
     // Count ALL registrations regardless of status (matching manager page behavior)
     const eventIds = events.rows.map(e => e.id);
     const countMap = {};
-    
+
     // Count registrations for all events in parallel (count ALL registrations, not just 'registered' status)
     if (eventIds.length > 0) {
       const countPromises = eventIds.map(async (eventId) => {
@@ -79,7 +79,7 @@ router.get('/events', async (req, res) => {
         });
         return { eventId, count };
       });
-      
+
       const counts = await Promise.all(countPromises);
       counts.forEach(({ eventId, count }) => {
         countMap[eventId] = count;
@@ -89,26 +89,26 @@ router.get('/events', async (req, res) => {
     // Transform events to include RSVP status
     const eventsWithRSVP = events.rows.map(event => {
       const eventData = event.toJSON();
-      
+
       // Replace currentAttendees with actual count from database (same as manager page)
       const actualCount = countMap[event.id] || 0;
       eventData.currentAttendees = actualCount;
-      
+
       // Only show RSVP status if user is authenticated
       if (req.user && req.user.id) {
         const isRegistered = eventData.registrations && eventData.registrations.length > 0;
         const registration = isRegistered ? eventData.registrations[0] : null;
-        
+
         // Remove registrations array from response (we only need the status)
         delete eventData.registrations;
-        
+
         return {
           ...eventData,
           isRegistered,
           registrationStatus: registration ? registration.status : null,
           registeredAt: registration ? registration.registeredAt : null,
-          canRegister: RSVPService.isEventUpcoming(event) && 
-                       (!event.maxAttendees || actualCount < event.maxAttendees)
+          canRegister: RSVPService.isEventUpcoming(event) &&
+            (!event.maxAttendees || actualCount < event.maxAttendees)
         };
       } else {
         // No user authentication - return basic event data
@@ -198,11 +198,11 @@ router.get('/events/past', protectMobile, async (req, res) => {
       isActive: true,
       startDate: { [Op.lt]: now } // Only past events
     };
-    
+
     if (req.query.type) {
       whereClause.type = req.query.type;
     }
-    
+
     if (req.query.city) {
       whereClause.city = {
         [Op.iLike]: `%${req.query.city}%`
@@ -251,7 +251,7 @@ router.get('/events/past', protectMobile, async (req, res) => {
 router.get('/events/search', protectMobile, async (req, res) => {
   try {
     const { q, type, city } = req.query;
-    
+
     if (!q && !type && !city) {
       return res.status(400).json({
         success: false,
@@ -264,12 +264,12 @@ router.get('/events/search', protectMobile, async (req, res) => {
     const offset = (page - 1) * limit;
 
     // Build search query - show all events (past, current, and future)
-    const whereClause = { 
+    const whereClause = {
       isPublic: true,
       isActive: true
       // Removed date filter to include old events
     };
-    
+
     if (q) {
       whereClause[Op.or] = [
         { title: { [Op.iLike]: `%${q}%` } },
@@ -277,11 +277,11 @@ router.get('/events/search', protectMobile, async (req, res) => {
         { contactPerson: { [Op.iLike]: `%${q}%` } }
       ];
     }
-    
+
     if (type) {
       whereClause.type = type;
     }
-    
+
     if (city) {
       whereClause.city = { [Op.iLike]: `%${city}%` };
     }
@@ -319,7 +319,7 @@ router.get('/events/search', protectMobile, async (req, res) => {
 router.get('/events/stats', protectMobile, async (req, res) => {
   try {
     const now = new Date();
-    
+
     const totalEvents = await Event.count({
       where: { isPublic: true }
     });
@@ -384,7 +384,7 @@ router.get('/events/stats', protectMobile, async (req, res) => {
 router.get('/events/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Validate integer ID format
     if (!id.match(/^\d+$/)) {
       return res.status(400).json({
@@ -442,28 +442,28 @@ router.post('/events/:id/register-payment', protectMobile, async (req, res) => {
   try {
     const eventId = parseInt(req.params.id, 10);
     const memberId = req.user.id;
-    
+
     if (isNaN(eventId)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid event ID' 
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid event ID'
       });
     }
-    
+
     const event = await Event.findByPk(eventId);
     if (!event) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Event not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found'
       });
     }
-    
+
     const fee = Number(event.registrationFee || 0);
-    
+
     // If event is free, return success without payment
     if (!(fee > 0)) {
-      return res.status(200).json({ 
-        success: true, 
+      return res.status(200).json({
+        success: true,
         isFree: true,
         message: 'This event is free. Please use the RSVP endpoint to register.',
         event: {
@@ -486,17 +486,17 @@ router.post('/events/:id/register-payment', protectMobile, async (req, res) => {
         hasKeyId: !!process.env.RAZORPAY_KEY_ID,
         hasKeySecret: !!process.env.RAZORPAY_KEY_SECRET
       });
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Payment gateway is not configured. Please contact administrator.' 
+      return res.status(500).json({
+        success: false,
+        message: 'Payment gateway is not configured. Please contact administrator.'
       });
     }
 
     // Get member details for prefill
     const member = await Member.findByPk(memberId);
-    
+
     const order = await paymentService.createOrder(fee, `evt_${eventId}_mem_${memberId}_${Date.now()}`);
-    
+
     // Log payment order creation
     const Logger = require('../utils/logger');
     Logger.info('Event Registration: Payment order created', {
@@ -510,7 +510,7 @@ router.post('/events/:id/register-payment', protectMobile, async (req, res) => {
       amount: fee,
       currency: 'INR'
     });
-    
+
     // Prepare payment options for frontend (Razorpay Checkout)
     const paymentOptions = {
       key: process.env.RAZORPAY_KEY_ID,
@@ -534,11 +534,11 @@ router.post('/events/:id/register-payment', protectMobile, async (req, res) => {
         eventName: event.title
       }
     };
-    
-    return res.status(201).json({ 
-      success: true, 
+
+    return res.status(201).json({
+      success: true,
       isFree: false,
-      order, 
+      order,
       keyId: process.env.RAZORPAY_KEY_ID,
       paymentOptions // Provide pre-configured options
     });
@@ -551,8 +551,8 @@ router.post('/events/:id/register-payment', protectMobile, async (req, res) => {
       memberId: req.user?.id
     });
     const errorMessage = error.message || 'Server error while creating order';
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: errorMessage,
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
@@ -566,31 +566,31 @@ router.post('/events/:id/confirm-payment', protectMobile, async (req, res) => {
   try {
     const eventId = parseInt(req.params.id, 10);
     const memberId = req.user.id;
-    
+
     if (isNaN(eventId)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid event ID' 
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid event ID'
       });
     }
-    
+
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, notes } = req.body;
 
     // Get event first to check if it exists and if it requires payment
     const event = await Event.findByPk(eventId);
     if (!event) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Event not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found'
       });
     }
 
     const fee = Number(event.registrationFee || 0);
-    
+
     // If event is free, use RSVP flow instead
     if (!(fee > 0)) {
-      return res.status(400).json({ 
-        success: false, 
+      return res.status(400).json({
+        success: false,
         message: 'This event is free. Please use the RSVP endpoint to register.',
         useRSVP: true
       });
@@ -598,9 +598,9 @@ router.post('/events/:id/confirm-payment', protectMobile, async (req, res) => {
 
     // Validate payment fields for paid events
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Payment details are required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Payment details are required'
       });
     }
 
@@ -613,9 +613,9 @@ router.post('/events/:id/confirm-payment', protectMobile, async (req, res) => {
         orderId: razorpay_order_id,
         paymentId: razorpay_payment_id
       });
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid payment signature' 
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid payment signature'
       });
     }
 
@@ -624,7 +624,7 @@ router.post('/events/:id/confirm-payment', protectMobile, async (req, res) => {
     // Upsert registration with paid status
     let registration = await EventRegistration.findOne({ where: { eventId, memberId } });
     const isNewRegistration = !registration;
-    
+
     if (registration) {
       // Update existing registration
       const wasPaid = registration.paymentStatus === 'paid';
@@ -637,7 +637,7 @@ router.post('/events/:id/confirm-payment', protectMobile, async (req, res) => {
         notes: notes || registration.notes,
         registeredAt: registration.registeredAt || new Date()
       });
-      
+
       // Only increment attendee count if this was not previously paid
       if (!wasPaid) {
         await Event.increment('currentAttendees', {
@@ -649,6 +649,8 @@ router.post('/events/:id/confirm-payment', protectMobile, async (req, res) => {
       registration = await EventRegistration.create({
         eventId,
         memberId,
+        memberName: req.user.name,
+        memberPhone: req.user.phone,
         status: 'registered',
         paymentStatus: 'paid',
         amountPaid: amountPaid,
@@ -657,7 +659,7 @@ router.post('/events/:id/confirm-payment', protectMobile, async (req, res) => {
         notes: notes || null,
         registeredAt: new Date()
       });
-      
+
       // Update event attendee count for new registration
       await Event.increment('currentAttendees', {
         where: { id: eventId }
@@ -680,15 +682,15 @@ router.post('/events/:id/confirm-payment', protectMobile, async (req, res) => {
 
     // Generate QR on the fly
     const qrDataURL = await qrService.generateQrDataURL(registration);
-    
+
     // Fetch member data for name and image
     const member = await Member.findByPk(memberId);
     const baseUrl = req.protocol + '://' + req.get('host');
-    
+
     // Get member name and profile image URL
     let memberName = null;
     let memberImageURL = null;
-    
+
     if (member) {
       memberName = member.name;
       if (member.profileImage) {
@@ -701,11 +703,11 @@ router.post('/events/:id/confirm-payment', protectMobile, async (req, res) => {
         }
       }
     }
-    
-    res.status(201).json({ 
-      success: true, 
-      message: 'Registration confirmed', 
-      registrationId: registration.id, 
+
+    res.status(201).json({
+      success: true,
+      message: 'Registration confirmed',
+      registrationId: registration.id,
       qrDataURL,
       member: {
         name: memberName,
@@ -731,8 +733,8 @@ router.post('/events/:id/confirm-payment', protectMobile, async (req, res) => {
       orderId: req.body?.razorpay_order_id
     });
     const errorMessage = error.message || 'Server error while confirming payment';
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: errorMessage,
       error: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
@@ -746,12 +748,12 @@ router.get('/my/events', protectMobile, async (req, res) => {
   try {
     const memberId = req.user.id;
     const baseUrl = req.protocol + '://' + req.get('host');
-    
+
     // Fetch member data once for all registrations
     const member = await Member.findByPk(memberId);
     let memberName = null;
     let memberImageURL = null;
-    
+
     if (member) {
       memberName = member.name;
       if (member.profileImage) {
@@ -764,7 +766,7 @@ router.get('/my/events', protectMobile, async (req, res) => {
         }
       }
     }
-    
+
     const regs = await EventRegistration.findAll({
       where: { memberId },
       include: [{ model: Event, as: 'event', include: [{ model: EventExhibitor, as: 'exhibitors' }] }],
@@ -801,18 +803,18 @@ router.get('/registrations/:id/qr', protectMobile, async (req, res) => {
     const reg = await EventRegistration.findByPk(id, {
       include: [{ model: Member, as: 'member' }]
     });
-    
+
     if (!reg || reg.memberId !== req.user.id) {
       return res.status(404).json({ success: false, message: 'Registration not found' });
     }
-    
+
     const dataUrl = await qrService.generateQrDataURL(reg);
-    
+
     // Get member name and profile image URL
     const baseUrl = req.protocol + '://' + req.get('host');
     let memberName = null;
     let memberImageURL = null;
-    
+
     if (reg.member) {
       memberName = reg.member.name;
       if (reg.member.profileImage) {
@@ -825,9 +827,9 @@ router.get('/registrations/:id/qr', protectMobile, async (req, res) => {
         }
       }
     }
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       qrDataURL: dataUrl,
       member: {
         name: memberName,
@@ -873,11 +875,11 @@ router.post('/events/:id/rsvp', protectMobile, async (req, res) => {
     // Fetch member data for name and image
     const member = await Member.findByPk(memberId);
     const baseUrl = req.protocol + '://' + req.get('host');
-    
+
     // Get member name and profile image URL
     let memberName = null;
     let memberImageURL = null;
-    
+
     if (member) {
       memberName = member.name;
       if (member.profileImage) {
@@ -911,9 +913,9 @@ router.post('/events/:id/rsvp', protectMobile, async (req, res) => {
   } catch (error) {
     console.error('RSVP registration error:', error);
     const Logger = require('../utils/logger');
-    
-    if (error.message.includes('not found') || error.message.includes('Cannot register') || 
-        error.message.includes('already registered') || error.message.includes('full capacity')) {
+
+    if (error.message.includes('not found') || error.message.includes('Cannot register') ||
+      error.message.includes('already registered') || error.message.includes('full capacity')) {
       Logger.warn('Event Registration: RSVP registration validation failed', {
         registrationType: 'mobile-rsvp',
         eventId: req.params.id,
@@ -971,7 +973,7 @@ router.delete('/events/:id/rsvp', protectMobile, async (req, res) => {
 
   } catch (error) {
     console.error('RSVP cancellation error:', error);
-    
+
     if (error.message.includes('No active registration')) {
       return res.status(404).json({
         success: false,
@@ -1063,7 +1065,7 @@ router.get('/events/my-registrations', protectMobile, async (req, res) => {
     // Calculate actual registration counts for events (same as manager page logic)
     const eventIds = [...new Set(result.rows.map(r => r.eventId).filter(id => id))];
     const countMap = {};
-    
+
     if (eventIds.length > 0) {
       const countPromises = eventIds.map(async (eventId) => {
         const count = await EventRegistration.count({
@@ -1071,7 +1073,7 @@ router.get('/events/my-registrations', protectMobile, async (req, res) => {
         });
         return { eventId, count };
       });
-      
+
       const counts = await Promise.all(countPromises);
       counts.forEach(({ eventId, count }) => {
         countMap[eventId] = count;

@@ -9,16 +9,16 @@ class RSVPService {
    */
   static isEventUpcoming(event) {
     if (!event) return false;
-    
+
     // Check if event status is 'Upcoming'
     if (event.status !== 'Upcoming') {
       return false;
     }
-    
+
     // Check if event start date is in the future
     const now = new Date();
     const eventStartDate = new Date(event.startDate);
-    
+
     return eventStartDate > now;
   }
 
@@ -37,7 +37,7 @@ class RSVPService {
           status: 'registered'
         }
       });
-      
+
       return !!existingRegistration;
     } catch (error) {
       console.error('Error checking existing registration:', error);
@@ -54,10 +54,10 @@ class RSVPService {
     try {
       const event = await Event.findByPk(eventId);
       if (!event) return false;
-      
+
       // If no max attendees limit, always has capacity
       if (!event.maxAttendees) return true;
-      
+
       // Count current registered attendees
       const registeredCount = await EventRegistration.count({
         where: {
@@ -65,7 +65,7 @@ class RSVPService {
           status: 'registered'
         }
       });
-      
+
       return registeredCount < event.maxAttendees;
     } catch (error) {
       console.error('Error checking event capacity:', error);
@@ -116,6 +116,12 @@ class RSVPService {
         throw new Error('You are already registered for this event');
       }
 
+      // Fetch member to get name and phone for snapshot
+      const member = await Member.findByPk(memberId);
+      if (!member) {
+        throw new Error('Member not found');
+      }
+
       // Check capacity
       if (!(await this.hasCapacity(eventId))) {
         throw new Error('Event is at full capacity');
@@ -135,6 +141,8 @@ class RSVPService {
         // Reactivate cancelled registration
         await existingRegistration.update({
           status: 'registered',
+          memberName: member.name,
+          memberPhone: member.phone,
           notes: notes || existingRegistration.notes,
           registeredAt: new Date()
         });
@@ -144,6 +152,8 @@ class RSVPService {
         registration = await EventRegistration.create({
           eventId,
           memberId,
+          memberName: member.name,
+          memberPhone: member.phone,
           status: 'registered',
           notes
         });

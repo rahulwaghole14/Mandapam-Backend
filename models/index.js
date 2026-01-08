@@ -261,11 +261,13 @@ const defineAssociations = () => {
   // Member has many event registrations
   Member.hasMany(EventRegistration, {
     foreignKey: 'memberId',
-    as: 'eventRegistrations'
+    as: 'eventRegistrations',
+    onDelete: 'SET NULL'
   });
   EventRegistration.belongsTo(Member, {
     foreignKey: 'memberId',
-    as: 'member'
+    as: 'member',
+    onDelete: 'SET NULL'
   });
 
   // Refresh Token associations

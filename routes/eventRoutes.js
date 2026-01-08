@@ -25,7 +25,7 @@ try {
 } catch (error) {
   Logger.warn('Event Routes: WhatsApp queue not available (Redis may not be configured)', { error: error.message });
 }
-const { 
+const {
   eventImagesUpload,
   handleMulterError,
   getFileUrl,
@@ -115,37 +115,37 @@ async function resolveAssociation(associationId, transaction = null) {
 // Helper function to find or create member
 async function findOrCreateMember(memberData, transaction = null) {
   let { phone, name, email, businessName, businessType, city, associationId, profileImage } = memberData;
-  
+
   // Normalize businessType: convert 'madap' to 'mandap' (common typo from frontend)
   if (businessType === 'madap') {
     businessType = 'mandap';
     console.log('🔄 Normalized businessType from "madap" to "mandap"');
   }
-  
+
   // Validate phone format
   if (!phone || !/^[0-9]{10}$/.test(phone)) {
     throw new Error('Phone number must be exactly 10 digits');
   }
-  
+
   // Validate required fields
   if (!name || name.trim().length < 2) {
     throw new Error('Name must be at least 2 characters');
   }
-  
+
   if (!businessName || businessName.trim().length < 2) {
     throw new Error('Business name must be at least 2 characters');
   }
-  
+
   if (!businessType) {
     throw new Error('Business type is required');
   }
-  
+
   // Check if member exists
   let member = await Member.findOne({
     where: { phone },
     transaction
   });
-  
+
   if (member) {
     const updates = {};
     if (profileImage && !member.profileImage) {
@@ -169,29 +169,29 @@ async function findOrCreateMember(memberData, transaction = null) {
     } catch (updateError) {
       console.error('❌ Error updating existing member:', updateError);
     }
-    
+
     return { member, isNew: false };
   }
-  
+
   // Create new member
   try {
     const association = await resolveAssociation(associationId, transaction);
     if (!association || !association.id) {
       throw new Error('Failed to resolve association');
     }
-    
+
     const associationName = association.name;
-    
+
     // Double-check for duplicates
     const duplicateCheck = await Member.findOne({
       where: { phone },
       transaction
     });
-    
+
     if (duplicateCheck) {
       return { member: duplicateCheck, isNew: false };
     }
-    
+
     member = await Member.create({
       name: name.trim(),
       phone,
@@ -205,9 +205,9 @@ async function findOrCreateMember(memberData, transaction = null) {
       isActive: true,
       isVerified: false
     }, { transaction });
-    
+
     return { member, isNew: true };
-    
+
   } catch (createError) {
     if (createError.name === 'SequelizeUniqueConstraintError' || createError.message?.includes('unique')) {
       const existingMember = await Member.findOne({
@@ -218,7 +218,7 @@ async function findOrCreateMember(memberData, transaction = null) {
         return { member: existingMember, isNew: false };
       }
     }
-    
+
     throw new Error(`Failed to create member: ${createError.message}`);
   }
 }
@@ -590,7 +590,7 @@ router.post('/', protect, [
     if (req.body.fee !== undefined && req.body.registrationFee === undefined) {
       req.body.registrationFee = req.body.fee;
     }
-    
+
     // Handle startDateTime/endDateTime format from frontend
     if (req.body.startDateTime && !req.body.startDate) {
       // Handle formats like "2025-11-01T12:52" or full ISO
@@ -632,7 +632,7 @@ router.post('/', protect, [
 
     // Handle date and time conversion
     let startDate, endDate;
-    
+
     if (req.body.startDate) {
       // If startTime is provided, combine date and time
       if (req.body.startTime) {
@@ -641,7 +641,7 @@ router.post('/', protect, [
         startDate = new Date(req.body.startDate);
       }
     }
-    
+
     if (req.body.endDate) {
       // If endTime is provided, combine date and time
       if (req.body.endTime) {
@@ -650,13 +650,13 @@ router.post('/', protect, [
         endDate = new Date(req.body.endDate);
       }
     }
-    
+
     // If no endDate but endTime is provided, use startDate with endTime
     if (!endDate && req.body.endTime && startDate) {
       const startDateStr = startDate.toISOString().split('T')[0];
       endDate = new Date(`${startDateStr}T${req.body.endTime}:00`);
     }
-    
+
     if (endDate && startDate && endDate < startDate) {
       return res.status(400).json({
         success: false,
@@ -866,7 +866,7 @@ router.put('/:id', protect, [
     if (req.body.fee !== undefined && req.body.registrationFee === undefined) {
       req.body.registrationFee = req.body.fee;
     }
-    
+
     // Handle image URL from Cloudinary
     // Accept both 'image' and 'imageURL' fields, prioritize 'imageURL'
     let imageUrl = null;
@@ -912,7 +912,7 @@ router.put('/:id', protect, [
 
     // Handle date and time conversion
     let startDate, endDate;
-    
+
     if (req.body.startDate !== undefined) {
       // If startTime is provided, combine date and time
       if (req.body.startTime) {
@@ -937,7 +937,7 @@ router.put('/:id', protect, [
         startDate = new Date(`${dateStr}T${req.body.startTime}:00`);
       }
     }
-    
+
     if (req.body.endDate !== undefined) {
       // If endTime is provided, combine date and time
       if (req.body.endTime) {
@@ -980,7 +980,7 @@ router.put('/:id', protect, [
     if (imageUrl) {
       console.log('📸 New image URL received:', imageUrl);
       console.log('📸 Old image URL:', existingEvent.image);
-      
+
       // If old image is a local file (not Cloudinary URL), delete it
       // Cloudinary URLs typically contain 'cloudinary.com' or 'res.cloudinary.com'
       if (existingEvent.image && !existingEvent.image.includes('cloudinary.com') && !existingEvent.image.includes('http')) {
@@ -1334,10 +1334,10 @@ router.get('/:id/registrations', protect, async (req, res) => {
 
       const fullMember = memberData
         ? {
-            ...memberData,
-            profileImage: profileMeta.stored || memberData.profileImage || memberData.profileImageURL || null,
-            profileImageURL: normalizedProfileUrl || memberData.profileImageURL || memberData.profileImage || null
-          }
+          ...memberData,
+          profileImage: profileMeta.stored || memberData.profileImage || memberData.profileImageURL || null,
+          profileImageURL: normalizedProfileUrl || memberData.profileImageURL || memberData.profileImage || null
+        }
         : null;
 
       const effectiveProfileUrl =
@@ -1350,8 +1350,8 @@ router.get('/:id/registrations', protect, async (req, res) => {
         registrationId: registration.id,
         eventId: registration.eventId,
         memberId: registration.memberId,
-        name: fullMember?.name || memberInstance?.name || null,
-        phone: fullMember?.phone || memberInstance?.phone || null,
+        name: fullMember?.name || memberInstance?.name || registration.memberName || 'Guest',
+        phone: fullMember?.phone || memberInstance?.phone || registration.memberPhone || null,
         email: fullMember?.email || null,
         businessName: fullMember?.businessName || null,
         businessType: fullMember?.businessType || null,
@@ -1387,22 +1387,22 @@ router.post('/:id/register-payment', protect, [
     const eventId = parseInt(req.params.id, 10);
     const userId = req.user.id;
     const { memberId } = req.body;
-    
+
     if (isNaN(eventId)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid event ID' 
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid event ID'
       });
     }
-    
+
     const event = await Event.findOne({
       where: { id: eventId }
     });
-    
+
     if (!event) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Event not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found'
       });
     }
 
@@ -1410,18 +1410,18 @@ router.post('/:id/register-payment', protect, [
     const now = new Date();
     const eventEndDate = new Date(event.endDate);
     if (eventEndDate < now) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Cannot register for past or completed events' 
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot register for past or completed events'
       });
     }
-    
+
     const fee = Number(event.registrationFee || 0);
-    
+
     // If event is free, return success without payment
     if (!(fee > 0)) {
-      return res.status(200).json({ 
-        success: true, 
+      return res.status(200).json({
+        success: true,
         isFree: true,
         message: 'This event is free. Please use the RSVP endpoint to register.',
         event: {
@@ -1435,15 +1435,15 @@ router.post('/:id/register-payment', protect, [
     // Check if Razorpay is configured
     if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
       console.error('Razorpay not configured: Missing RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET');
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Payment gateway is not configured. Please contact administrator.' 
+      return res.status(500).json({
+        success: false,
+        message: 'Payment gateway is not configured. Please contact administrator.'
       });
     }
 
     // Determine member ID
     let targetMemberId = memberId;
-    
+
     // If admin is registering someone else, use provided memberId
     if (memberId && req.user.role === 'admin') {
       const member = await Member.findByPk(memberId);
@@ -1462,12 +1462,12 @@ router.post('/:id/register-payment', protect, [
           message: 'Please add a phone number to your profile to register for events'
         });
       }
-      
+
       // Find member by phone
       let member = await Member.findOne({
         where: { phone: req.user.phone }
       });
-      
+
       if (!member) {
         return res.status(404).json({
           success: false,
@@ -1475,7 +1475,7 @@ router.post('/:id/register-payment', protect, [
           suggestion: 'Contact administrator to link your user account with a member profile'
         });
       }
-      
+
       targetMemberId = member.id;
     }
 
@@ -1493,9 +1493,9 @@ router.post('/:id/register-payment', protect, [
 
     // Get member details for prefill
     const member = await Member.findByPk(targetMemberId);
-    
+
     const order = await paymentService.createOrder(fee, `evt_${eventId}_mem_${targetMemberId}_${Date.now()}`);
-    
+
     // Prepare payment options for frontend (Razorpay Checkout)
     const paymentOptions = {
       key: process.env.RAZORPAY_KEY_ID,
@@ -1518,19 +1518,19 @@ router.post('/:id/register-payment', protect, [
         eventName: event.title
       }
     };
-    
-    return res.status(201).json({ 
-      success: true, 
+
+    return res.status(201).json({
+      success: true,
       isFree: false,
-      order, 
+      order,
       keyId: process.env.RAZORPAY_KEY_ID,
       paymentOptions // Provide pre-configured options
     });
   } catch (error) {
     console.error('Create order error:', error);
     const errorMessage = error.message || 'Server error while creating order';
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: errorMessage,
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
@@ -1552,29 +1552,29 @@ router.post('/:id/confirm-payment', protect, [
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, notes, memberId } = req.body;
 
     if (isNaN(eventId)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid event ID' 
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid event ID'
       });
     }
-    
+
     const event = await Event.findOne({
       where: { id: eventId }
     });
-    
+
     if (!event) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Event not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found'
       });
     }
 
     const fee = Number(event.registrationFee || 0);
-    
+
     // If event is free, use RSVP flow instead
     if (!(fee > 0)) {
-      return res.status(400).json({ 
-        success: false, 
+      return res.status(400).json({
+        success: false,
         message: 'This event is free. Please use the RSVP endpoint to register.',
         useRSVP: true
       });
@@ -1582,23 +1582,23 @@ router.post('/:id/confirm-payment', protect, [
 
     // Validate payment fields for paid events
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Payment details are required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Payment details are required'
       });
     }
 
     if (!paymentService.verifySignature({ razorpay_order_id, razorpay_payment_id, razorpay_signature })) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid payment signature' 
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid payment signature'
       });
     }
 
     // Determine member ID
     let targetMemberId = memberId;
     let memberRecord = null;
-    
+
     // If admin is registering someone else, use provided memberId
     if (memberId && req.user.role === 'admin') {
       memberRecord = await Member.findByPk(memberId);
@@ -1617,26 +1617,26 @@ router.post('/:id/confirm-payment', protect, [
           message: 'Please add a phone number to your profile to register for events'
         });
       }
-      
+
       // Find member by phone
       memberRecord = await Member.findOne({
         where: { phone: req.user.phone }
       });
-      
+
       if (!memberRecord) {
         return res.status(404).json({
           success: false,
           message: 'Member profile not found. Please ensure your phone number matches a member record.'
         });
       }
-      
+
       targetMemberId = memberRecord.id;
     }
 
     if (!memberRecord) {
       memberRecord = await Member.findByPk(targetMemberId);
     }
-    
+
     if (!memberRecord) {
       return res.status(404).json({
         success: false,
@@ -1649,7 +1649,7 @@ router.post('/:id/confirm-payment', protect, [
     // Upsert registration with paid status
     let registration = await EventRegistration.findOne({ where: { eventId, memberId: targetMemberId } });
     const isNewRegistration = !registration;
-    
+
     if (registration) {
       // Update existing registration
       const wasPaid = registration.paymentStatus === 'paid';
@@ -1662,7 +1662,7 @@ router.post('/:id/confirm-payment', protect, [
         notes: notes || registration.notes,
         registeredAt: registration.registeredAt || new Date()
       });
-      
+
       // Only increment attendee count if this was not previously paid
       if (!wasPaid) {
         await Event.increment('currentAttendees', {
@@ -1682,7 +1682,7 @@ router.post('/:id/confirm-payment', protect, [
         notes: notes || null,
         registeredAt: new Date()
       });
-      
+
       // Update event attendee count for new registration
       await Event.increment('currentAttendees', {
         where: { id: eventId }
@@ -1691,10 +1691,10 @@ router.post('/:id/confirm-payment', protect, [
 
     // Generate QR on the fly
     const qrDataURL = await qrService.generateQrDataURL(registration);
-    res.status(201).json({ 
-      success: true, 
-      message: 'Registration confirmed', 
-      registrationId: registration.id, 
+    res.status(201).json({
+      success: true,
+      message: 'Registration confirmed',
+      registrationId: registration.id,
       qrDataURL,
       registration: {
         id: registration.id,
@@ -1715,8 +1715,8 @@ router.post('/:id/confirm-payment', protect, [
   } catch (error) {
     console.error('Confirm payment error:', error);
     const errorMessage = error.message || 'Server error while confirming payment';
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: errorMessage,
       error: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
@@ -1820,7 +1820,7 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
 
     const fee = Number(event.registrationFee || 0);
     const baseUrl = req.protocol + '://' + req.get('host');
-    
+
     Logger.info('Manual Registration: Configuration', {
       fee,
       baseUrl
@@ -1829,7 +1829,7 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
     // Create member and registration in a transaction
     Logger.info('Manual Registration: Starting transaction');
     const registrationTransaction = await sequelize.transaction();
-    
+
     try {
       // Find or create member
       Logger.info('Manual Registration: Finding or creating member', {
@@ -1854,7 +1854,7 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
       }, registrationTransaction);
 
       const { member, isNew: isNewMember } = memberResult;
-      
+
       Logger.info('Manual Registration: Member result', {
         memberId: member.id,
         memberName: member.name,
@@ -1967,18 +1967,18 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
 
       // Automatically trigger WhatsApp sending for new registrations (same as public registration)
       // This runs asynchronously and does NOT block the response
-      Logger.info('Manual Registration: Checking auto-send conditions', { 
-        hasMember: !!freshMember, 
+      Logger.info('Manual Registration: Checking auto-send conditions', {
+        hasMember: !!freshMember,
         hasPhone: !!(freshMember && freshMember.phone),
         phone: freshMember?.phone || 'N/A',
         registrationId: registration.id
       });
-      
+
       if (freshMember && freshMember.phone) {
         const autoSendWhatsApp = async () => {
           try {
             Logger.info('Manual Registration: Starting auto-send process', { registrationId: registration.id });
-            
+
             // Reload registration with associations for PDF generation
             const registrationForPdf = await EventRegistration.findOne({
               where: { id: registration.id },
@@ -1997,7 +1997,7 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
             });
 
             if (!registrationForPdf || !registrationForPdf.member || !registrationForPdf.event) {
-              Logger.error('Manual Registration: Registration or associations not found for WhatsApp send', { 
+              Logger.error('Manual Registration: Registration or associations not found for WhatsApp send', {
                 registrationId: registration.id,
                 hasRegistration: !!registrationForPdf,
                 hasMember: !!(registrationForPdf && registrationForPdf.member),
@@ -2005,7 +2005,7 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
               });
               return;
             }
-            
+
             Logger.info('Manual Registration: Registration loaded with associations', {
               registrationId: registration.id,
               memberPhone: registrationForPdf.member?.phone || 'N/A',
@@ -2018,15 +2018,15 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
             const preCheck = await EventRegistration.findByPk(registration.id, {
               attributes: ['id', 'pdfSentAt']
             });
-            
+
             if (preCheck && preCheck.pdfSentAt) {
-              Logger.info('Manual Registration: WhatsApp already sent, skipping', { 
-                registrationId: registration.id, 
-                pdfSentAt: preCheck.pdfSentAt 
+              Logger.info('Manual Registration: WhatsApp already sent, skipping', {
+                registrationId: registration.id,
+                pdfSentAt: preCheck.pdfSentAt
               });
               return;
             }
-            
+
             Logger.info('Manual Registration: Pre-check passed, proceeding with WhatsApp send', { registrationId: registration.id });
 
             // Validate and clean phone number
@@ -2045,7 +2045,7 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
             } else if (cleanPhone.startsWith('91') && cleanPhone.length === 12) {
               cleanPhone = cleanPhone.substring(2);
             }
-            
+
             Logger.info('Manual Registration: Phone number cleaned', {
               registrationId: registration.id,
               rawPhone: registrationForPdf.member.phone,
@@ -2055,8 +2055,8 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
             });
 
             if (!phoneRegex.test(cleanPhone)) {
-              Logger.error('Manual Registration: Invalid phone number format', { 
-                registrationId: registration.id, 
+              Logger.error('Manual Registration: Invalid phone number format', {
+                registrationId: registration.id,
                 rawPhone: registrationForPdf.member.phone,
                 cleanPhone,
                 cleanPhoneLength: cleanPhone.length
@@ -2064,16 +2064,16 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
               await releaseWhatsAppLock(registration.id);
               return;
             }
-            
+
             const memberName = registrationForPdf.member.name || '';
             const startTime = new Date();
-            Logger.info('Manual Registration: Starting WhatsApp send', { 
-              registrationId: registration.id, 
-              phone: cleanPhone, 
+            Logger.info('Manual Registration: Starting WhatsApp send', {
+              registrationId: registration.id,
+              phone: cleanPhone,
               memberName,
               timestamp: startTime.toISOString()
             });
-            
+
             // Generate PDF on-demand as buffer
             Logger.info('Manual Registration: Starting PDF generation', {
               registrationId: registration.id,
@@ -2094,16 +2094,16 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
                 baseUrl
               );
               const pdfTime = Date.now() - pdfStartTime;
-              Logger.info('Manual Registration: PDF generated successfully', { 
-                registrationId: registration.id, 
-                sizeKB: (pdfBuffer.length / 1024).toFixed(2), 
+              Logger.info('Manual Registration: PDF generated successfully', {
+                registrationId: registration.id,
+                sizeKB: (pdfBuffer.length / 1024).toFixed(2),
                 sizeBytes: pdfBuffer.length,
                 durationMs: pdfTime,
                 isBuffer: Buffer.isBuffer(pdfBuffer),
                 bufferType: typeof pdfBuffer
               });
             } catch (pdfError) {
-              Logger.error('Manual Registration: PDF generation failed', pdfError, { 
+              Logger.error('Manual Registration: PDF generation failed', pdfError, {
                 registrationId: registration.id,
                 errorMessage: pdfError.message,
                 errorStack: pdfError.stack
@@ -2111,7 +2111,7 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
               await releaseWhatsAppLock(registration.id);
               return;
             }
-            
+
             // Use queue if available
             if (whatsappQueue && typeof whatsappQueue.addWhatsAppJob === 'function') {
               try {
@@ -2124,15 +2124,15 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
                   eventId: registration.eventId,
                   userId: req.user.id // Manager/admin who created the registration
                 });
-                
-                Logger.info('Manual Registration: Job added to queue', { 
-                  registrationId: registration.id, 
+
+                Logger.info('Manual Registration: Job added to queue', {
+                  registrationId: registration.id,
                   jobId: job.id,
                   timestamp: new Date().toISOString()
                 });
                 return; // Queue will handle the rest
               } catch (queueError) {
-                Logger.error('Manual Registration: Failed to add job to queue', queueError, { 
+                Logger.error('Manual Registration: Failed to add job to queue', queueError, {
                   registrationId: registration.id,
                   errorMessage: queueError.message,
                   errorStack: queueError.stack
@@ -2141,40 +2141,40 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
                 // Fall through to direct call
               }
             } else {
-              Logger.info('Manual Registration: Queue not available, using direct call', { 
+              Logger.info('Manual Registration: Queue not available, using direct call', {
                 registrationId: registration.id,
                 hasQueue: !!whatsappQueue,
                 hasAddJob: !!(whatsappQueue && whatsappQueue.addWhatsAppJob)
               });
             }
-            
+
             // Fallback: Direct WhatsApp call (async, single attempt, no retries)
             // For direct call, we need to acquire lock here (worker doesn't handle it)
-            Logger.info('Manual Registration: Using direct WhatsApp call, acquiring lock', { 
+            Logger.info('Manual Registration: Using direct WhatsApp call, acquiring lock', {
               registrationId: registration.id,
               phone: cleanPhone,
               memberName
             });
-            
+
             const lockResult = await acquireWhatsAppLock(registration.id);
-            
+
             if (!lockResult.acquired) {
               if (lockResult.reason === 'already_sent') {
-                Logger.info('Manual Registration: WhatsApp already sent (direct call)', { 
-                  registrationId: registration.id, 
-                  pdfSentAt: lockResult.pdfSentAt 
+                Logger.info('Manual Registration: WhatsApp already sent (direct call)', {
+                  registrationId: registration.id,
+                  pdfSentAt: lockResult.pdfSentAt
                 });
               } else {
-                Logger.warn('Manual Registration: Could not acquire lock for direct call', { 
-                  registrationId: registration.id, 
-                  reason: lockResult.reason 
+                Logger.warn('Manual Registration: Could not acquire lock for direct call', {
+                  registrationId: registration.id,
+                  reason: lockResult.reason
                 });
               }
               return;
             }
-            
+
             Logger.info('Manual Registration: Lock acquired for direct WhatsApp call', { registrationId: registration.id });
-            
+
             const whatsappService = require('../services/whatsappService');
             Logger.info('Manual Registration: Calling whatsappService.sendPdfViaWhatsApp', {
               registrationId: registration.id,
@@ -2185,7 +2185,7 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
               pdfBufferType: typeof pdfBuffer,
               isBuffer: Buffer.isBuffer(pdfBuffer)
             });
-            
+
             // Send via WhatsApp asynchronously (fire-and-forget)
             // NOTE: This is NOT awaited - API responds immediately while WhatsApp sends in background
             whatsappService.sendPdfViaWhatsApp(
@@ -2195,7 +2195,7 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
             ).then(async (result) => {
               const endTime = new Date();
               const duration = endTime.getTime() - startTime.getTime();
-              
+
               Logger.info('Manual Registration: WhatsApp service call completed', {
                 registrationId: registration.id,
                 success: result.success,
@@ -2204,22 +2204,22 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
                 durationMs: duration,
                 timestamp: endTime.toISOString()
               });
-              
+
               if (result.success) {
-                Logger.info('Manual Registration: WhatsApp sent successfully', { 
-                  registrationId: registration.id, 
+                Logger.info('Manual Registration: WhatsApp sent successfully', {
+                  registrationId: registration.id,
                   durationMs: duration,
                   timestamp: endTime.toISOString()
                 });
-                
+
                 Logger.info('Manual Registration: Updating pdfSentAt', { registrationId: registration.id });
                 const updateResult = await updateLockToSentTime(registration.id);
-                
+
                 if (!updateResult.updated) {
                   Logger.warn('Manual Registration: Lock was released by another process', { registrationId: registration.id });
                 } else {
-                  Logger.info('Manual Registration: pdfSentAt updated successfully', { 
-                    registrationId: registration.id, 
+                  Logger.info('Manual Registration: pdfSentAt updated successfully', {
+                    registrationId: registration.id,
                     pdfSentAt: updateResult.actualSentTime.toISOString()
                   });
                 }
@@ -2233,8 +2233,8 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
                 await notifyManagerOnWhatsAppSent(req.user.id, registrationForPdf, registrationForPdf.event, registrationForPdf.member);
                 Logger.info('Manual Registration: Manager notification sent', { registrationId: registration.id });
               } else {
-                Logger.error('Manual Registration: WhatsApp send failed', null, { 
-                  registrationId: registration.id, 
+                Logger.error('Manual Registration: WhatsApp send failed', null, {
+                  registrationId: registration.id,
                   durationMs: duration,
                   error: result.error || 'Unknown error',
                   resultData: result
@@ -2245,8 +2245,8 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
             }).catch(async (whatsappError) => {
               const endTime = new Date();
               const duration = endTime.getTime() - startTime.getTime();
-              Logger.error('Manual Registration: Exception sending WhatsApp', whatsappError, { 
-                registrationId: registration.id, 
+              Logger.error('Manual Registration: Exception sending WhatsApp', whatsappError, {
+                registrationId: registration.id,
                 durationMs: duration,
                 errorMessage: whatsappError.message,
                 errorStack: whatsappError.stack,
@@ -2255,8 +2255,8 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
               Logger.info('Manual Registration: Releasing lock due to exception', { registrationId: registration.id });
               await releaseWhatsAppLock(registration.id);
             });
-            
-            Logger.info('Manual Registration: WhatsApp send initiated asynchronously (non-blocking)', { 
+
+            Logger.info('Manual Registration: WhatsApp send initiated asynchronously (non-blocking)', {
               registrationId: registration.id,
               timestamp: new Date().toISOString()
             });
@@ -2265,7 +2265,7 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
             await releaseWhatsAppLock(registration.id);
           }
         };
-        
+
         // Run auto-send in background (don't await - non-blocking)
         autoSendWhatsApp().catch((error) => {
           Logger.error('Manual Registration: Exception in auto-send function', error, { registrationId: registration.id });
@@ -2281,7 +2281,7 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
 
       const requestEndTime = new Date();
       const totalDuration = requestEndTime.getTime() - requestStartTime.getTime();
-      
+
       Logger.info('Manual Registration: ========== RESPONSE SENT ==========', {
         timestamp: requestEndTime.toISOString(),
         registrationId: registration.id,
@@ -2333,7 +2333,7 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
   } catch (error) {
     const requestEndTime = new Date();
     const totalDuration = requestEndTime.getTime() - requestStartTime.getTime();
-    
+
     Logger.error('Manual Registration: ========== ERROR ==========', {
       timestamp: requestEndTime.toISOString(),
       totalDurationMs: totalDuration,
@@ -2343,7 +2343,7 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
       eventId: req.params.id,
       userId: req.user?.id
     });
-    
+
     console.error('Manual registration error:', error);
     const errorMessage = error.message || 'Server error while creating manual registration';
     res.status(500).json({
@@ -2360,7 +2360,7 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
 router.get('/my/registrations', protect, async (req, res) => {
   try {
     const userId = req.user.id;
-    
+
     // Find member by phone
     if (!req.user.phone) {
       return res.status(200).json({
@@ -2369,11 +2369,11 @@ router.get('/my/registrations', protect, async (req, res) => {
         message: 'No phone number in profile. Cannot fetch registrations.'
       });
     }
-    
+
     const member = await Member.findOne({
       where: { phone: req.user.phone }
     });
-    
+
     if (!member) {
       return res.status(200).json({
         success: true,
@@ -2384,8 +2384,8 @@ router.get('/my/registrations', protect, async (req, res) => {
 
     const regs = await EventRegistration.findAll({
       where: { memberId: member.id },
-      include: [{ 
-        model: Event, 
+      include: [{
+        model: Event,
         as: 'event',
         include: [{ model: EventExhibitor, as: 'exhibitors' }]
       }],
@@ -2431,7 +2431,7 @@ router.get('/:id/my-registration', protect, async (req, res) => {
 
     // Determine member ID
     let targetMemberId = memberId ? parseInt(memberId, 10) : null;
-    
+
     // If admin is checking someone else, use provided memberId
     if (targetMemberId && req.user.role === 'admin') {
       const member = await Member.findByPk(targetMemberId);
@@ -2450,12 +2450,12 @@ router.get('/:id/my-registration', protect, async (req, res) => {
           message: 'No phone number in profile. Cannot check registration.'
         });
       }
-      
+
       // Find member by phone
       let member = await Member.findOne({
         where: { phone: req.user.phone }
       });
-      
+
       if (!member) {
         return res.status(200).json({
           success: true,
@@ -2463,7 +2463,7 @@ router.get('/:id/my-registration', protect, async (req, res) => {
           message: 'Member profile not found'
         });
       }
-      
+
       targetMemberId = member.id;
     }
 
@@ -2524,7 +2524,7 @@ router.post('/checkin', [
 ], async (req, res) => {
   const startTime = Date.now();
   const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  
+
   try {
     Logger.qrCheckin('INFO', 'QR Check-in request received', {
       requestId,
@@ -2544,10 +2544,10 @@ router.post('/checkin', [
     }
 
     const { qrToken } = req.body;
-    
+
     // Remove EVT: prefix if present
     const tokenWithoutPrefix = qrToken.replace(/^EVT:/, '');
-    
+
     // Decode base64url
     let parsed;
     try {
@@ -2557,10 +2557,10 @@ router.post('/checkin', [
       while (base64.length % 4) {
         base64 += '=';
       }
-      
+
       const decoded = Buffer.from(base64, 'base64').toString('utf8');
       parsed = JSON.parse(decoded);
-      
+
       Logger.qrCheckin('DEBUG', 'QR token parsed successfully', {
         requestId,
         registrationId: parsed.data?.r,
@@ -2577,7 +2577,7 @@ router.post('/checkin', [
       });
       return res.status(400).json({ success: false, message: 'Invalid QR token format' });
     }
-    
+
     // Verify token signature
     const isValid = qrService.verifyToken(parsed);
     if (!isValid) {
@@ -2614,11 +2614,11 @@ router.post('/checkin', [
     // Fetch member data for name and profile image
     const member = await Member.findByPk(memberId);
     const baseUrl = req.protocol + '://' + req.get('host');
-    
+
     // Get member name and profile image URL
     let memberName = null;
     let memberImageURL = null;
-    
+
     if (member) {
       memberName = member.name;
       if (member.profileImage) {
@@ -2642,10 +2642,10 @@ router.post('/checkin', [
         attendedAt: registration.attendedAt,
         responseTime: `${responseTime}ms`
       });
-      
-      return res.json({ 
-        success: true, 
-        message: 'Already checked-in', 
+
+      return res.json({
+        success: true,
+        message: 'Already checked-in',
         attendedAt: registration.attendedAt,
         member: {
           name: memberName,
@@ -2655,7 +2655,7 @@ router.post('/checkin', [
     }
 
     await registration.update({ status: 'attended', attendedAt: new Date() });
-    
+
     const responseTime = Date.now() - startTime;
     Logger.qrCheckin('INFO', 'Check-in successful', {
       requestId,
@@ -2665,10 +2665,10 @@ router.post('/checkin', [
       memberName,
       responseTime: `${responseTime}ms`
     });
-    
-    return res.json({ 
-      success: true, 
-      message: 'Check-in successful', 
+
+    return res.json({
+      success: true,
+      message: 'Check-in successful',
       attendedAt: registration.attendedAt,
       member: {
         name: memberName,
@@ -2685,7 +2685,7 @@ router.post('/checkin', [
       errorName: error.name,
       responseTime: `${responseTime}ms`
     });
-    
+
     res.status(500).json({ success: false, message: 'Server error during check-in' });
   }
 });
@@ -2758,7 +2758,7 @@ router.put('/:eventId/exhibitors/:exhibitorId', protect, [
     const { eventId, exhibitorId } = req.params;
     const exhibitor = await EventExhibitor.findOne({ where: { id: exhibitorId, eventId } });
     if (!exhibitor) return res.status(404).json({ success: false, message: 'Exhibitor not found' });
-    
+
     const updateData = {
       name: req.body.name ?? exhibitor.name,
       logo: req.body.logo ?? exhibitor.logo,
@@ -2766,7 +2766,7 @@ router.put('/:eventId/exhibitors/:exhibitorId', protect, [
       phone: req.body.phone ?? exhibitor.phone,
       businessCategory: req.body.businessCategory ?? exhibitor.businessCategory
     };
-    
+
     await exhibitor.update(updateData);
     res.json({ success: true, exhibitor });
   } catch (error) {
@@ -2799,7 +2799,7 @@ router.get('/:eventId/registrations/:registrationId', protect, async (req, res) 
     const { eventId, registrationId } = req.params;
 
     const registration = await EventRegistration.findOne({
-      where: { 
+      where: {
         id: registrationId,
         eventId: eventId
       },
@@ -2807,14 +2807,14 @@ router.get('/:eventId/registrations/:registrationId', protect, async (req, res) 
     });
 
     if (!registration) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Registration not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Registration not found'
       });
     }
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       registration: registration.toJSON()
     });
   } catch (error) {
@@ -2824,9 +2824,9 @@ router.get('/:eventId/registrations/:registrationId', protect, async (req, res) 
       error: error.message
     });
     console.error('Get registration details error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error while fetching registration details' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching registration details'
     });
   }
 });
@@ -2848,7 +2848,7 @@ router.put('/:eventId/registrations/:registrationId/image', protect, [
 
     // Find the registration
     const registration = await EventRegistration.findOne({
-      where: { 
+      where: {
         id: registrationId,
         eventId: eventId
       },
@@ -2856,9 +2856,9 @@ router.put('/:eventId/registrations/:registrationId/image', protect, [
     });
 
     if (!registration) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Registration not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Registration not found'
       });
     }
 
@@ -2882,8 +2882,8 @@ router.put('/:eventId/registrations/:registrationId/image', protect, [
       imageUrl: imageUrl.substring(0, 100) + '...' // Log only first 100 chars for security
     });
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Registration image updated successfully',
       registration: {
         ...registration.toJSON(),
@@ -2899,9 +2899,9 @@ router.put('/:eventId/registrations/:registrationId/image', protect, [
       error: error.message
     });
     console.error('Update registration image error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error while updating registration image' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error while updating registration image'
     });
   }
 });
@@ -2911,14 +2911,14 @@ router.put('/:eventId/registrations/:registrationId/image', protect, [
 // @access  Private (admin)
 router.delete('/:eventId/registrations/:registrationId', protect, async (req, res) => {
   const transaction = await sequelize.transaction();
-  
+
   try {
     const { eventId, registrationId } = req.params;
     const { refundAmount, reason } = req.body; // Optional refund amount and reason
 
     // Find the registration
     const registration = await EventRegistration.findOne({
-      where: { 
+      where: {
         id: registrationId,
         eventId: eventId
       },
@@ -2928,32 +2928,32 @@ router.delete('/:eventId/registrations/:registrationId', protect, async (req, re
 
     if (!registration) {
       await transaction.rollback();
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Registration not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Registration not found'
       });
     }
 
     // Check if already cancelled
     if (registration.status === 'cancelled') {
       await transaction.rollback();
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Registration is already cancelled' 
+      return res.status(400).json({
+        success: false,
+        message: 'Registration is already cancelled'
       });
     }
 
     let refundResult = null;
-    
+
     // Process refund if requested and payment exists
     if (refundAmount && registration.paymentId && registration.paymentStatus === 'paid') {
       try {
         const paymentService = require('../services/paymentService');
-        
+
         // Validate refund amount doesn't exceed paid amount
         const maxRefundAmount = parseFloat(registration.amountPaid || 0);
         const requestedRefundAmount = parseFloat(refundAmount);
-        
+
         if (requestedRefundAmount > maxRefundAmount) {
           await transaction.rollback();
           return res.status(400).json({
@@ -2961,7 +2961,7 @@ router.delete('/:eventId/registrations/:registrationId', protect, async (req, re
             message: `Refund amount (${requestedRefundAmount}) cannot exceed paid amount (${maxRefundAmount})`
           });
         }
-        
+
         refundResult = await paymentService.processRefund(
           registration.paymentId,
           requestedRefundAmount,
@@ -2973,13 +2973,13 @@ router.delete('/:eventId/registrations/:registrationId', protect, async (req, re
             reason: reason || 'Registration cancelled by admin'
           }
         );
-        
+
         // Update payment status to refunded
         await registration.update({
           paymentStatus: 'refunded',
           notes: (registration.notes || '') + `\nRefunded: ₹${requestedRefundAmount} on ${new Date().toISOString()}. Reason: ${reason || 'Admin cancellation'}`
         }, { transaction });
-        
+
       } catch (refundError) {
         await transaction.rollback();
         Logger.error('Refund failed during registration cancellation', refundError, {
@@ -2987,7 +2987,7 @@ router.delete('/:eventId/registrations/:registrationId', protect, async (req, re
           paymentId: registration.paymentId,
           refundAmount
         });
-        
+
         return res.status(400).json({
           success: false,
           message: `Registration cancelled but refund failed: ${refundError.message}`,
@@ -3031,11 +3031,11 @@ router.delete('/:eventId/registrations/:registrationId', protect, async (req, re
       refundAmount: refundResult ? refundResult.amount / 100 : null
     });
 
-    res.json({ 
-      success: true, 
-      message: refundResult 
-        ? 'Registration cancelled and refund processed successfully' 
-        : (registration.paymentStatus === 'paid' 
+    res.json({
+      success: true,
+      message: refundResult
+        ? 'Registration cancelled and refund processed successfully'
+        : (registration.paymentStatus === 'paid'
           ? 'Registration cancelled successfully (no refund requested)'
           : 'Registration cancelled successfully (free event - no payment to refund)'),
       registration: {
@@ -3061,9 +3061,9 @@ router.delete('/:eventId/registrations/:registrationId', protect, async (req, re
       error: error.message
     });
     console.error('Cancel registration error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error while cancelling registration' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error while cancelling registration'
     });
   }
 });
@@ -3086,7 +3086,7 @@ router.post('/:eventId/registrations/:registrationId/refund', protect, async (re
 
     // Find the registration
     const registration = await EventRegistration.findOne({
-      where: { 
+      where: {
         id: registrationId,
         eventId: eventId
       },
@@ -3094,9 +3094,9 @@ router.post('/:eventId/registrations/:registrationId/refund', protect, async (re
     });
 
     if (!registration) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Registration not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Registration not found'
       });
     }
 
@@ -3119,7 +3119,7 @@ router.post('/:eventId/registrations/:registrationId/refund', protect, async (re
     // Validate refund amount doesn't exceed paid amount
     const maxRefundAmount = parseFloat(registration.amountPaid || 0);
     const requestedRefundAmount = parseFloat(refundAmount);
-    
+
     if (requestedRefundAmount > maxRefundAmount) {
       return res.status(400).json({
         success: false,
@@ -3180,10 +3180,10 @@ router.post('/:eventId/registrations/:registrationId/refund', protect, async (re
       error: error.message
     });
     console.error('Refund error:', error);
-    
-    res.status(500).json({ 
-      success: false, 
-      message: error.message || 'Server error while processing refund' 
+
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Server error while processing refund'
     });
   }
 });
@@ -3193,14 +3193,14 @@ router.post('/:eventId/registrations/:registrationId/refund', protect, async (re
 // @access  Private (admin)
 router.delete('/:eventId/registrations/:registrationId/cancel-smart', protect, async (req, res) => {
   const transaction = await sequelize.transaction();
-  
+
   try {
     const { eventId, registrationId } = req.params;
     const { refundAmount, reason } = req.body; // Optional refund amount and reason
 
     // Find the registration
     const registration = await EventRegistration.findOne({
-      where: { 
+      where: {
         id: registrationId,
         eventId: eventId
       },
@@ -3210,34 +3210,34 @@ router.delete('/:eventId/registrations/:registrationId/cancel-smart', protect, a
 
     if (!registration) {
       await transaction.rollback();
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Registration not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Registration not found'
       });
     }
 
     // Check if already cancelled
     if (registration.status === 'cancelled') {
       await transaction.rollback();
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Registration is already cancelled' 
+      return res.status(400).json({
+        success: false,
+        message: 'Registration is already cancelled'
       });
     }
 
     let refundResult = null;
     const isPaidEvent = registration.paymentId && registration.paymentStatus === 'paid';
-    
+
     // Auto-handle refund logic
     if (refundAmount && isPaidEvent) {
       // Process refund for paid events if amount specified
       try {
         const paymentService = require('../services/paymentService');
-        
+
         // Validate refund amount doesn't exceed paid amount
         const maxRefundAmount = parseFloat(registration.amountPaid || 0);
         const requestedRefundAmount = parseFloat(refundAmount);
-        
+
         if (requestedRefundAmount > maxRefundAmount) {
           await transaction.rollback();
           return res.status(400).json({
@@ -3245,7 +3245,7 @@ router.delete('/:eventId/registrations/:registrationId/cancel-smart', protect, a
             message: `Refund amount (${requestedRefundAmount}) cannot exceed paid amount (${maxRefundAmount})`
           });
         }
-        
+
         refundResult = await paymentService.processRefund(
           registration.paymentId,
           requestedRefundAmount,
@@ -3257,13 +3257,13 @@ router.delete('/:eventId/registrations/:registrationId/cancel-smart', protect, a
             reason: reason || 'Registration cancelled by admin'
           }
         );
-        
+
         // Update payment status to refunded
         await registration.update({
           paymentStatus: 'refunded',
           notes: (registration.notes || '') + `\nRefunded: ₹${requestedRefundAmount} on ${new Date().toISOString()}. Reason: ${reason || 'Admin cancellation'}`
         }, { transaction });
-        
+
       } catch (refundError) {
         await transaction.rollback();
         Logger.error('Refund failed during registration cancellation', refundError, {
@@ -3271,7 +3271,7 @@ router.delete('/:eventId/registrations/:registrationId/cancel-smart', protect, a
           paymentId: registration.paymentId,
           refundAmount
         });
-        
+
         return res.status(400).json({
           success: false,
           message: `Registration cancelled but refund failed: ${refundError.message}`,
@@ -3323,8 +3323,8 @@ router.delete('/:eventId/registrations/:registrationId/cancel-smart', protect, a
       message = 'Registration cancelled successfully (free event)';
     }
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message,
       registration: {
         id: registration.id,
@@ -3351,9 +3351,9 @@ router.delete('/:eventId/registrations/:registrationId/cancel-smart', protect, a
       error: error.message
     });
     console.error('Cancel registration error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error while cancelling registration' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error while cancelling registration'
     });
   }
 });
