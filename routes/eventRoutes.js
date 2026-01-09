@@ -2611,6 +2611,22 @@ router.post('/checkin', [
       return res.status(404).json({ success: false, message: 'Registration not found' });
     }
 
+    // Check if registration is cancelled or refunded
+    if (registration.status === 'cancelled' || registration.paymentStatus === 'refunded') {
+      Logger.qrCheckin('WARN', 'Registration cancelled or refunded', {
+        requestId,
+        registrationId,
+        status: registration.status,
+        paymentStatus: registration.paymentStatus
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'Registration cancelled',
+        status: registration.status,
+        paymentStatus: registration.paymentStatus
+      });
+    }
+
     // Fetch member data for name and profile image
     const member = await Member.findByPk(memberId);
     const baseUrl = req.protocol + '://' + req.get('host');
