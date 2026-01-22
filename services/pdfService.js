@@ -554,11 +554,273 @@ function deletePDFFile(filePath) {
   }
 }
 
+/**
+ * Generate event registrations PDF as a buffer (table format for multiple registrations)
+ * @param {Object} event - Event object
+ * @param {Array} registrations - Array of registration objects with member details
+ * @returns {Promise<Buffer>} PDF buffer
+ */
+async function generateEventRegistrationsPDF(event, registrations) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      console.log(`[PDF Service] Generating PDF for event: ${event?.title || event?.name || event?.id}`);
+      console.log(`[PDF Service] Total registrations: ${registrations.length}`);
+      
+      const doc = new PDFDocument({
+        size: 'A4',
+        margin: 50,
+        autoFirstPage: true
+      });
+      
+      // Register Devanagari fonts if they exist
+      const hasDevanagariRegular = fs.existsSync(DEVANAGARI_REGULAR);
+      const hasDevanagariBold = fs.existsSync(DEVANAGARI_BOLD);
+      
+      if (hasDevanagariRegular) {
+        doc.registerFont('Devanagari', DEVANAGARI_REGULAR);
+      }
+      if (hasDevanagariBold) {
+        doc.registerFont('Devanagari-Bold', DEVANAGARI_BOLD);
+      }
+      
+      // Helper function to select appropriate font
+      const selectFont = (text, isBold = false) => {
+        if (containsDevanagari(text)) {
+          if (isBold && hasDevanagariBold) return 'Devanagari-Bold';
+          if (hasDevanagariRegular) return 'Devanagari';
+        }
+        return isBold ? 'Helvetica-Bold' : 'Helvetica';
+      };
+      
+      // Collect PDF data into buffer
+      const buffers = [];
+      doc.on('data', buffers.push.bind(buffers));
+      doc.on('end', () => {
+        const pdfBuffer = Buffer.concat(buffers);
+        resolve(pdfBuffer);
+      });
+      doc.on('error', reject);
+      
+      const pageWidth = doc.page.width;
+      const pageHeight = doc.page.height;
+      const marginX = 50;
+      const marginY = 50;
+      let cursorY = marginY;
+      
+      // Add logo if available
+      try {
+        const possibleLogoPaths = [
+          path.join(__dirname, '..', '..', 'Mandap-Web-Frontend', 'public', 'mandapam-logo.png'),
+          path.join(process.cwd(), 'public', 'mandapam-logo.png'),
+          path.join(process.cwd(), 'mandapam-logo.png'),
+          path.join(__dirname, '..', 'public', 'mandapam-logo.png'),
+          path.join(process.cwd(), '..', 'Mandap-Web-Frontend', 'public', 'mandapam-logo.png')
+        ];
+        
+        for (const logoPath of possibleLogoPaths) {
+          if (fs.existsSync(logoPath)) {
+            try {
+              const logoWidth = 150;
+              const logoHeight = 66;
+              doc.image(logoPath, (pageWidth - logoWidth) / 2, cursorY, { width: logoWidth, height: logoHeight });
+              cursorY += logoHeight + 20;
+              break;
+            } catch (imgError) {
+              continue;
+            }
+          }
+        }
+      } catch (logoError) {
+        // Continue without logo
+      }
+      
+      // Event Title
+      const eventTitle = event?.title || event?.name || `Event #${event?.id || ''}`;
+      const eventFont = selectFont(eventTitle, true);
+      doc.font(eventFont)
+         .fontSize(20)
+         .fillColor('#111827')
+         .text(eventTitle, marginX, cursorY, { width: pageWidth - marginX * 2, align: 'center' });
+      cursorY += 30;
+      
+      // Subtitle
+      doc.font('Helvetica')
+         .fontSize(14)
+         .fillColor('#2563eb')
+         .text('Event Registrations Report', marginX, cursorY, { width: pageWidth - marginX * 2, align: 'center' });
+      cursorY += 20;
+      
+      // Event details
+      doc.font('Helvetica')
+         .fontSize(10)
+         .fillColor('#6b7280');
+      
+      if (event?.startDate) {
+        const eventDate = new Date(event.startDate).toLocaleDateString('en-IN', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+        doc.text(`Date: ${eventDate}`, marginX, cursorY);
+        cursorY += 15;
+      }
+      
+      if (event?.city) {
+        doc.text(`Location: ${event.city}`, marginX, cursorY);
+        cursorY += 15;
+      }
+      
+      doc.text(`Total Registrations: ${registrations.length}`, marginX, cursorY);
+      cursorY += 25;
+      
+      // Table headers
+      const tableStartY = cursorY;
+      const tableHeaders = [
+        { name: 'Name', width: 90 },
+        { name: 'Phone', width: 80 },
+        { name: 'Email', width: 90 },
+        { name: 'Business', width: 70 },
+        { name: 'Amount', width: 50 },
+        { name: 'Status', width: 50 },
+        { name: 'Attended', width: 50 }
+      ];
+      
+      // Draw header background
+      doc.fillColor('#f3f4f6')
+         .rect(marginX, cursorY, pageWidth - marginX * 2, 20)
+         .fill();
+      
+      // Draw header text
+      doc.fillColor('#111827')
+         .font('Helvetica-Bold')
+         .fontSize(9);
+      
+      let currentX = marginX + 5;
+      tableHeaders.forEach(header => {
+        doc.text(header.name, currentX, cursorY + 6, { width: header.width - 10 });
+        currentX += header.width;
+      });
+      
+      cursorY += 20;
+      
+      // Table rows
+      doc.font('Helvetica')
+         .fontSize(8)
+         .fillColor('#374151');
+      
+      registrations.forEach((registration, index) => {
+        console.log(`[PDF Service] Processing registration ${index + 1}/${registrations.length}:`, {
+          id: registration.id,
+          name: registration.member?.name || registration.name,
+          phone: registration.member?.phone || registration.phone
+        });
+        
+        // Check if we need a new page
+        if (cursorY > pageHeight - 100) {
+          console.log(`[PDF Service] Adding new page at registration ${index + 1}`);
+          doc.addPage();
+          cursorY = marginY;
+          
+          // Redraw headers on new page
+          doc.fillColor('#f3f4f6')
+             .rect(marginX, cursorY, pageWidth - marginX * 2, 20)
+             .fill();
+          
+          doc.fillColor('#111827')
+             .font('Helvetica-Bold')
+             .fontSize(9);
+          
+          currentX = marginX + 5;
+          tableHeaders.forEach(header => {
+            doc.text(header.name, currentX, cursorY + 6, { width: header.width - 10 });
+            currentX += header.width;
+          });
+          
+          cursorY += 20;
+          doc.font('Helvetica')
+             .fontSize(8)
+             .fillColor('#374151');
+        }
+        
+        // Row height calculation - ensure proper spacing
+        const rowHeight = 18; // Increased from 15 to 18
+        
+        // Alternate row background
+        if (index % 2 === 0) {
+          doc.fillColor('#f9fafb')
+             .rect(marginX, cursorY, pageWidth - marginX * 2, rowHeight)
+             .fill();
+        }
+        
+        // Row data
+        const member = registration.member || {};
+        const name = member.name || registration.name || registration.memberName || '';
+        const phone = member.phone || registration.phone || '';
+        const email = member.email || registration.email || '';
+        const business = member.businessName || registration.businessName || '';
+        const amount = registration.amountPaid || 0;
+        const status = registration.paymentStatus || 'pending';
+        const attended = registration.attendedAt ? 'Yes' : 'No';
+        
+        currentX = marginX + 5;
+        const textY = cursorY + 5; // Center text vertically in row
+        
+        // Name (with proper font handling)
+        const nameFont = selectFont(name, false);
+        doc.font(nameFont).text(name || '-', currentX, textY, { width: 85 });
+        currentX += 90;
+        
+        // Phone
+        doc.font('Helvetica').text(phone || '-', currentX, textY, { width: 75 });
+        currentX += 80;
+        
+        // Email
+        doc.text(email || '-', currentX, textY, { width: 85 });
+        currentX += 90;
+        
+        // Business
+        doc.text(business || '-', currentX, textY, { width: 65 });
+        currentX += 70;
+        
+        // Amount
+        doc.text(`₹${amount}`, currentX, textY, { width: 45 });
+        currentX += 50;
+        
+        // Status
+        doc.text(status || '-', currentX, textY, { width: 45 });
+        currentX += 50;
+        
+        // Attended
+        doc.text(attended, currentX, textY, { width: 45 });
+        
+        cursorY += rowHeight;
+      });
+      
+      // Footer
+      cursorY = pageHeight - 50;
+      doc.font('Helvetica')
+         .fontSize(8)
+         .fillColor('#9ca3af')
+         .text(`Generated on ${new Date().toLocaleString('en-IN')}`, marginX, cursorY, {
+           width: pageWidth - marginX * 2,
+           align: 'center'
+         });
+      
+      // End the document
+      doc.end();
+    } catch (error) {
+      console.error('[PDF Service] Error in generateEventRegistrationsPDF:', error);
+      reject(error);
+    }
+  });
+}
+
 module.exports = {
   generateVisitorPassPDF, // Returns buffer (stream-based internally, no temp files)
   generateVisitorPassPDFAsBuffer, // Alias for generateVisitorPassPDF
   generatePDFStream, // Alias for generateVisitorPassPDF
   generateAndSavePDF, // DEPRECATED - saves to temp file (use generateVisitorPassPDF instead)
+  generateEventRegistrationsPDF, // New method for multiple registrations
   deletePDFFile // Still needed for cleanup of any remaining temp files
 };
 

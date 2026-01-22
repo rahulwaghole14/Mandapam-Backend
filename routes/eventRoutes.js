@@ -2611,23 +2611,7 @@ router.post('/checkin', [
       return res.status(404).json({ success: false, message: 'Registration not found' });
     }
 
-    // Check if registration is cancelled or refunded
-    if (registration.status === 'cancelled' || registration.paymentStatus === 'refunded') {
-      Logger.qrCheckin('WARN', 'Registration cancelled or refunded', {
-        requestId,
-        registrationId,
-        status: registration.status,
-        paymentStatus: registration.paymentStatus
-      });
-      return res.status(400).json({
-        success: false,
-        message: 'Registration cancelled',
-        status: registration.status,
-        paymentStatus: registration.paymentStatus
-      });
-    }
-
-    // Fetch member data for name and profile image
+    // Fetch member data for name and profile image (needed for both success and cancelled cases)
     const member = await Member.findByPk(memberId);
     const baseUrl = req.protocol + '://' + req.get('host');
 
@@ -2646,6 +2630,27 @@ router.post('/checkin', [
           memberImageURL = getFileUrl(member.profileImage, baseUrl, 'profile-images');
         }
       }
+    }
+
+    // Check if registration is cancelled or refunded
+    if (registration.status === 'cancelled' || registration.paymentStatus === 'refunded') {
+      Logger.qrCheckin('WARN', 'Registration cancelled or refunded', {
+        requestId,
+        registrationId,
+        status: registration.status,
+        paymentStatus: registration.paymentStatus
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'Registration cancelled',
+        status: registration.status,
+        paymentStatus: registration.paymentStatus,
+        cancelledAt: registration.cancelledAt,
+        member: {
+          name: memberName,
+          profileImageURL: memberImageURL
+        }
+      });
     }
 
     if (registration.status === 'attended') {
@@ -3371,6 +3376,155 @@ router.delete('/:eventId/registrations/:registrationId/cancel-smart', protect, a
       success: false,
       message: 'Server error while cancelling registration'
     });
+  }
+});
+
+// Export event registrations as CSV - Manager access
+router.get('/manager/:eventId/export/registrations/csv', [
+  protect,
+  authorize('manager', 'admin'),
+  query('eventId').isUUID().withMessage('Invalid event ID')
+], async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    
+    // Verify event exists and user has access
+    const event = await Event.findByPk(eventId);
+    if (!event) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+
+    // Get registrations with member details
+    const registrations = await EventRegistration.findAll({
+      where: { eventId },
+      include: [
+        {
+          model: Member,
+          as: 'member',
+          attributes: ['id', 'name', 'phone', 'email', 'businessName', 'businessType', 'city']
+        }
+      ],
+      order: [['registeredAt', 'DESC']]
+    });
+
+    if (registrations.length === 0) {
+      return res.status(404).json({ message: 'No registrations found for this event' });
+    }
+
+    // Create CSV content
+    const headers = [
+      'Registration ID',
+      'Member Name',
+      'Phone',
+      'Email',
+      'Business Name',
+      'Business Type',
+      'City',
+      'Amount Paid',
+      'Payment Status',
+      'Registration Status',
+      'Registered At',
+      'Attended At'
+    ];
+
+    const csvRows = registrations.map(reg => [
+      reg.id,
+      `"${reg.member?.name || reg.name || ''}"`,
+      `"${reg.member?.phone || reg.phone || ''}"`,
+      `"${reg.member?.email || reg.email || ''}"`,
+      `"${reg.member?.businessName || reg.businessName || ''}"`,
+      `"${reg.member?.businessType || reg.businessType || ''}"`,
+      `"${reg.member?.city || reg.city || ''}"`,
+      reg.amountPaid || 0,
+      reg.paymentStatus || 'pending',
+      reg.status || 'registered',
+      reg.registeredAt ? new Date(reg.registeredAt).toLocaleString('en-IN') : '',
+      reg.attendedAt ? new Date(reg.attendedAt).toLocaleString('en-IN') : ''
+    ]);
+
+    const csvContent = [headers.join(','), ...csvRows.map(row => row.join(','))].join('\n');
+
+    // Set headers for CSV download
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="event-${eventId}-registrations.csv"`);
+
+    res.send(csvContent);
+  } catch (error) {
+    Logger.error('Error exporting registrations to CSV', {
+      eventId: req.params.eventId,
+      error: error.message
+    });
+    res.status(500).json({ message: 'Error exporting registrations' });
+  }
+});
+
+// Export event registrations as Excel - Manager access
+router.get('/manager/:eventId/export/registrations/excel', [
+  protect,
+  authorize('manager', 'admin'),
+  query('eventId').isUUID().withMessage('Invalid event ID')
+], async (req, res) => {
+  try {
+    const XLSX = require('xlsx');
+    const { eventId } = req.params;
+    
+    // Verify event exists and user has access
+    const event = await Event.findByPk(eventId);
+    if (!event) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+
+    // Get registrations with member details
+    const registrations = await EventRegistration.findAll({
+      where: { eventId },
+      include: [
+        {
+          model: Member,
+          as: 'member',
+          attributes: ['id', 'name', 'phone', 'email', 'businessName', 'businessType', 'city']
+        }
+      ],
+      order: [['registeredAt', 'DESC']]
+    });
+
+    if (registrations.length === 0) {
+      return res.status(404).json({ message: 'No registrations found for this event' });
+    }
+
+    // Create worksheet data
+    const worksheetData = registrations.map(reg => ({
+      'Registration ID': reg.id,
+      'Member Name': reg.member?.name || reg.name || '',
+      'Phone': reg.member?.phone || reg.phone || '',
+      'Email': reg.member?.email || reg.email || '',
+      'Business Name': reg.member?.businessName || reg.businessName || '',
+      'Business Type': reg.member?.businessType || reg.businessType || '',
+      'City': reg.member?.city || reg.city || '',
+      'Amount Paid': reg.amountPaid || 0,
+      'Payment Status': reg.paymentStatus || 'pending',
+      'Registration Status': reg.status || 'registered',
+      'Registered At': reg.registeredAt ? new Date(reg.registeredAt).toLocaleString('en-IN') : '',
+      'Attended At': reg.attendedAt ? new Date(reg.attendedAt).toLocaleString('en-IN') : ''
+    }));
+
+    // Create workbook
+    const ws = XLSX.utils.json_to_sheet(worksheetData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Registrations');
+
+    // Set headers for Excel download
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="event-${eventId}-registrations.xlsx"`);
+
+    // Write file to response
+    const excelBuffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.send(excelBuffer);
+  } catch (error) {
+    Logger.error('Error exporting registrations to Excel', {
+      eventId: req.params.eventId,
+      error: error.message
+    });
+    res.status(500).json({ message: 'Error exporting registrations' });
   }
 });
 
