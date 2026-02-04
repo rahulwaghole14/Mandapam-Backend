@@ -596,13 +596,16 @@ router.post('/', protect, [
       // Handle formats like "2025-11-01T12:52" or full ISO
       let dtStr = req.body.startDateTime;
       if (dtStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)) {
-        // Format: YYYY-MM-DDTHH:MM - add seconds
-        dtStr = dtStr + ':00';
+        // Format: YYYY-MM-DDTHH:MM - add seconds and treat as UTC
+        dtStr = dtStr + ':00Z'; // Add Z to treat as UTC
       }
       const dt = new Date(dtStr);
       if (!isNaN(dt.getTime())) {
         req.body.startDate = dt.toISOString().split('T')[0];
-        const timeStr = dt.toTimeString().split(' ')[0].slice(0, 5); // HH:MM
+        // Use UTC methods to preserve exact time
+        const hours = String(dt.getUTCHours()).padStart(2, '0');
+        const minutes = String(dt.getUTCMinutes()).padStart(2, '0');
+        const timeStr = `${hours}:${minutes}`;
         if (timeStr !== '00:00') {
           req.body.startTime = timeStr;
         }
@@ -612,13 +615,16 @@ router.post('/', protect, [
       // Handle formats like "2025-11-01T12:52" or full ISO
       let dtStr = req.body.endDateTime;
       if (dtStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)) {
-        // Format: YYYY-MM-DDTHH:MM - add seconds
-        dtStr = dtStr + ':00';
+        // Format: YYYY-MM-DDTHH:MM - add seconds and treat as UTC
+        dtStr = dtStr + ':00Z'; // Add Z to treat as UTC
       }
       const dt = new Date(dtStr);
       if (!isNaN(dt.getTime())) {
         req.body.endDate = dt.toISOString().split('T')[0];
-        const timeStr = dt.toTimeString().split(' ')[0].slice(0, 5); // HH:MM
+        // Use UTC methods to preserve exact time
+        const hours = String(dt.getUTCHours()).padStart(2, '0');
+        const minutes = String(dt.getUTCMinutes()).padStart(2, '0');
+        const timeStr = `${hours}:${minutes}`;
         if (timeStr !== '00:00') {
           req.body.endTime = timeStr;
         }
@@ -881,13 +887,16 @@ router.put('/:id', protect, [
       // Handle formats like "2025-11-01T12:52" or full ISO
       let dtStr = req.body.startDateTime;
       if (dtStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)) {
-        // Format: YYYY-MM-DDTHH:MM - add seconds
-        dtStr = dtStr + ':00';
+        // Format: YYYY-MM-DDTHH:MM - add seconds and treat as UTC
+        dtStr = dtStr + ':00Z'; // Add Z to treat as UTC
       }
       const dt = new Date(dtStr);
       if (!isNaN(dt.getTime())) {
         req.body.startDate = dt.toISOString().split('T')[0];
-        const timeStr = dt.toTimeString().split(' ')[0].slice(0, 5); // HH:MM
+        // Use UTC methods to preserve exact time
+        const hours = String(dt.getUTCHours()).padStart(2, '0');
+        const minutes = String(dt.getUTCMinutes()).padStart(2, '0');
+        const timeStr = `${hours}:${minutes}`;
         if (timeStr !== '00:00') {
           req.body.startTime = timeStr;
         }
@@ -897,13 +906,16 @@ router.put('/:id', protect, [
       // Handle formats like "2025-11-01T12:52" or full ISO
       let dtStr = req.body.endDateTime;
       if (dtStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)) {
-        // Format: YYYY-MM-DDTHH:MM - add seconds
-        dtStr = dtStr + ':00';
+        // Format: YYYY-MM-DDTHH:MM - add seconds and treat as UTC
+        dtStr = dtStr + ':00Z'; // Add Z to treat as UTC
       }
       const dt = new Date(dtStr);
       if (!isNaN(dt.getTime())) {
         req.body.endDate = dt.toISOString().split('T')[0];
-        const timeStr = dt.toTimeString().split(' ')[0].slice(0, 5); // HH:MM
+        // Use UTC methods to preserve exact time
+        const hours = String(dt.getUTCHours()).padStart(2, '0');
+        const minutes = String(dt.getUTCMinutes()).padStart(2, '0');
+        const timeStr = `${hours}:${minutes}`;
         if (timeStr !== '00:00') {
           req.body.endTime = timeStr;
         }
