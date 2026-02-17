@@ -1773,12 +1773,8 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
       businessType: req.body.businessType,
       city: req.body.city,
       associationId: req.body.associationId,
-<<<<<<< HEAD
-      hasPhoto: !!req.body.photo
-=======
       hasPhoto: !!req.body.photo,
       cashReceiptNumber: req.body.cashReceiptNumber ? '***' : null
->>>>>>> master
     }
   });
 
@@ -1794,11 +1790,7 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
     }
 
     const eventId = parseInt(req.params.id, 10);
-<<<<<<< HEAD
-    const { name, phone, email, businessName, businessType, city, associationId, photo } = req.body;
-=======
     const { name, phone, email, businessName, businessType, city, associationId, photo, cashReceiptNumber } = req.body;
->>>>>>> master
 
     Logger.info('Manual Registration: Request data parsed', {
       eventId,
@@ -1809,12 +1801,8 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
       businessType,
       city,
       associationId,
-<<<<<<< HEAD
-      hasPhoto: !!photo
-=======
       hasPhoto: !!photo,
       hasCashReceiptNumber: !!cashReceiptNumber
->>>>>>> master
     });
 
     if (isNaN(eventId)) {
@@ -1934,10 +1922,7 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
         paymentStatus: 'paid',
         // paymentMethod: 'cash', // Column doesn't exist in DB yet
         amountPaid: fee,
-<<<<<<< HEAD
-=======
         cashReceiptNumber: cashReceiptNumber || null,
->>>>>>> master
         registeredAt: new Date()
       }, { transaction: registrationTransaction });
 
@@ -1946,12 +1931,8 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
         eventId: registration.eventId,
         memberId: registration.memberId,
         paymentStatus: registration.paymentStatus,
-<<<<<<< HEAD
-        amountPaid: registration.amountPaid
-=======
         amountPaid: registration.amountPaid,
         cashReceiptNumber: registration.cashReceiptNumber ? '***' : null
->>>>>>> master
       });
 
       // Update event attendee count
