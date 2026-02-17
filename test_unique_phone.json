@@ -1,0 +1,12 @@
+{
+  "name": "Unique Test User",
+  "businessName": "Unique Test Business",
+  "businessType": "sound",
+  "phone": "9999999999",
+  "city": "Mumbai",
+  "pincode": "400001",
+  "associationName": "Mumbai Mandap Association",
+  "state": "Maharashtra",
+  "email": "unique999@example.com",
+  "birthDate": "1990-01-01"
+}

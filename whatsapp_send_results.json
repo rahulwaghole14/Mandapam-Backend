@@ -1,0 +1,444 @@
+{
+  "total": 539,
+  "success": 15,
+  "failed": 1,
+  "startTime": "2025-12-22T08:44:09.367Z",
+  "endTime": null,
+  "details": [
+    {
+      "registrationId": 8524,
+      "memberId": 15,
+      "memberName": "rahul waghole",
+      "phone": "9881976526",
+      "formattedPhone": "919881976526",
+      "timestamp": "2025-12-22T08:44:15.614Z",
+      "status": "success",
+      "details": {
+        "success": true,
+        "message": "Image sent and delivered successfully",
+        "data": {
+          "status": "success",
+          "message": "Files sent successfully",
+          "deliveryReports": [
+            {
+              "status": "Success",
+              "from": "919284820259",
+              "to": "919881976526",
+              "fileU": "WhatsApp Image 2025-12-19 at 14.59.35.jpeg",
+              "file": "/app/uploads/32172f69fd4629f4007246b85.59.35.jpeg",
+              "id": "a8bec8c820614d8ba084a55429716a78"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "registrationId": 8525,
+      "memberId": 4867,
+      "memberName": "Bhagyashri Jadhav",
+      "phone": "9604253122",
+      "formattedPhone": "919604253122",
+      "timestamp": "2025-12-22T08:44:19.670Z",
+      "status": "success",
+      "details": {
+        "success": true,
+        "message": "Image sent and delivered successfully",
+        "data": {
+          "status": "success",
+          "message": "Files sent successfully",
+          "deliveryReports": [
+            {
+              "status": "Success",
+              "from": "919284820259",
+              "to": "919604253122",
+              "fileU": "WhatsApp Image 2025-12-19 at 14.59.35.jpeg",
+              "file": "/app/uploads/32172f69fd4629f4007246b87.59.35.jpeg",
+              "id": "a8bec8c820614d8ba084a55429716a78"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "registrationId": 8526,
+      "memberId": 18,
+      "memberName": "Sushil",
+      "phone": "9698745623",
+      "formattedPhone": "919698745623",
+      "timestamp": "2025-12-22T08:44:23.726Z",
+      "status": "success",
+      "details": {
+        "success": true,
+        "message": "Image sent and delivered successfully",
+        "data": {
+          "status": "success",
+          "message": "Files sent successfully",
+          "deliveryReports": [
+            {
+              "status": "Success",
+              "from": "919284820259",
+              "to": "919698745623",
+              "fileU": "WhatsApp Image 2025-12-19 at 14.59.35.jpeg",
+              "file": "/app/uploads/32172f69fd4629f4007246b88.59.35.jpeg",
+              "id": "a8bec8c820614d8ba084a55429716a78"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "registrationId": 8527,
+      "memberId": 16,
+      "memberName": "Rupesh munot",
+      "phone": "9096041415",
+      "formattedPhone": "919096041415",
+      "timestamp": "2025-12-22T08:44:27.687Z",
+      "status": "success",
+      "details": {
+        "success": true,
+        "message": "Image sent and delivered successfully",
+        "data": {
+          "status": "success",
+          "message": "Files sent successfully",
+          "deliveryReports": [
+            {
+              "status": "Success",
+              "from": "919284820259",
+              "to": "919096041415",
+              "fileU": "WhatsApp Image 2025-12-19 at 14.59.35.jpeg",
+              "file": "/app/uploads/32172f69fd4629f4007246b8b.59.35.jpeg",
+              "id": "a8bec8c820614d8ba084a55429716a78"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "registrationId": 8530,
+      "memberId": 10314,
+      "memberName": "Pooja Kale",
+      "phone": "9834391592",
+      "formattedPhone": "919834391592",
+      "timestamp": "2025-12-22T08:44:31.993Z",
+      "status": "success",
+      "details": {
+        "success": true,
+        "message": "Image sent and delivered successfully",
+        "data": {
+          "status": "success",
+          "message": "Files sent successfully",
+          "deliveryReports": [
+            {
+              "status": "Success",
+              "from": "919284820259",
+              "to": "919834391592",
+              "fileU": "WhatsApp Image 2025-12-19 at 14.59.35.jpeg",
+              "file": "/app/uploads/32172f69fd4629f4007246b8c.59.35.jpeg",
+              "id": "a8bec8c820614d8ba084a55429716a78"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "registrationId": 8536,
+      "memberId": 654,
+      "memberName": "Test Member 1",
+      "phone": "9876543210",
+      "formattedPhone": "919876543210",
+      "timestamp": "2025-12-22T08:44:36.014Z",
+      "status": "success",
+      "details": {
+        "success": true,
+        "message": "Image sent and delivered successfully",
+        "data": {
+          "status": "success",
+          "message": "Files sent successfully",
+          "deliveryReports": [
+            {
+              "status": "Success",
+              "from": "919284820259",
+              "to": "919876543210",
+              "fileU": "WhatsApp Image 2025-12-19 at 14.59.35.jpeg",
+              "file": "/app/uploads/32172f69fd4629f4007246b8e.59.35.jpeg",
+              "id": "a8bec8c820614d8ba084a55429716a78"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "registrationId": 8537,
+      "memberId": 10320,
+      "memberName": "Vaibhavi",
+      "phone": "9356602393",
+      "formattedPhone": "919356602393",
+      "timestamp": "2025-12-22T08:44:39.673Z",
+      "status": "success",
+      "details": {
+        "success": true,
+        "message": "Image sent and delivered successfully",
+        "data": {
+          "status": "success",
+          "message": "Files sent successfully",
+          "deliveryReports": [
+            {
+              "status": "Success",
+              "from": "919284820259",
+              "to": "919356602393",
+              "fileU": "WhatsApp Image 2025-12-19 at 14.59.35.jpeg",
+              "file": "/app/uploads/32172f69fd4629f4007246b8f.59.35.jpeg",
+              "id": "a8bec8c820614d8ba084a55429716a78"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "registrationId": 8531,
+      "memberId": 10315,
+      "memberName": "Shivarth",
+      "phone": "9552237869",
+      "formattedPhone": "919552237869",
+      "timestamp": "2025-12-22T08:44:43.386Z",
+      "status": "success",
+      "details": {
+        "success": true,
+        "message": "Image sent and delivered successfully",
+        "data": {
+          "status": "success",
+          "message": "Files sent successfully",
+          "deliveryReports": [
+            {
+              "status": "Success",
+              "from": "919284820259",
+              "to": "919552237869",
+              "fileU": "WhatsApp Image 2025-12-19 at 14.59.35.jpeg",
+              "file": "/app/uploads/32172f69fd4629f4007246b90.59.35.jpeg",
+              "id": "a8bec8c820614d8ba084a55429716a78"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "registrationId": 8528,
+      "memberId": 10312,
+      "memberName": "Jayshree Nawale",
+      "phone": "9605348155",
+      "formattedPhone": "919605348155",
+      "timestamp": "2025-12-22T08:44:46.314Z",
+      "status": "failed",
+      "error": "WhatsApp device not connected or message failed",
+      "details": {
+        "success": false,
+        "message": "WhatsApp device not connected or message failed",
+        "error": "Your device is not connected. Please reconnect.",
+        "data": {
+          "status": "error",
+          "message": "Your device is not connected. Please reconnect.",
+          "deliveryReports": [
+            {
+              "status": "Error",
+              "from": null,
+              "to": "919605348155",
+              "fileU": "WhatsApp Image 2025-12-19 at 14.59.35.jpeg",
+              "file": "/app/uploads/32172f69fd4629f4007246b91.59.35.jpeg",
+              "id": "a8bec8c820614d8ba084a55429716a78"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "registrationId": 8534,
+      "memberId": 10319,
+      "memberName": "Hrishikesh Jadhav",
+      "phone": "7757996648",
+      "formattedPhone": "917757996648",
+      "timestamp": "2025-12-22T08:44:48.979Z",
+      "status": "success",
+      "details": {
+        "success": true,
+        "message": "Image sent and delivered successfully",
+        "data": {
+          "status": "success",
+          "message": "Files sent successfully",
+          "deliveryReports": [
+            {
+              "status": "Success",
+              "from": "919284820259",
+              "to": "917757996648",
+              "fileU": "WhatsApp Image 2025-12-19 at 14.59.35.jpeg",
+              "file": "/app/uploads/32172f69fd4629f4007246b92.59.35.jpeg",
+              "id": "a8bec8c820614d8ba084a55429716a78"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "registrationId": 8532,
+      "memberId": 10317,
+      "memberName": "Mayur",
+      "phone": "8985674534",
+      "formattedPhone": "918985674534",
+      "timestamp": "2025-12-22T08:44:52.912Z",
+      "status": "success",
+      "details": {
+        "success": true,
+        "message": "Image sent and delivered successfully",
+        "data": {
+          "status": "success",
+          "message": "Files sent successfully",
+          "deliveryReports": [
+            {
+              "status": "Success",
+              "from": "919284820259",
+              "to": "918985674534",
+              "fileU": "WhatsApp Image 2025-12-19 at 14.59.35.jpeg",
+              "file": "/app/uploads/32172f69fd4629f4007246b93.59.35.jpeg",
+              "id": "a8bec8c820614d8ba084a55429716a78"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "registrationId": 8533,
+      "memberId": 10318,
+      "memberName": "Gaurang Ushir",
+      "phone": "8446392101",
+      "formattedPhone": "918446392101",
+      "timestamp": "2025-12-22T08:44:56.795Z",
+      "status": "success",
+      "details": {
+        "success": true,
+        "message": "Image sent and delivered successfully",
+        "data": {
+          "status": "success",
+          "message": "Files sent successfully",
+          "deliveryReports": [
+            {
+              "status": "Success",
+              "from": "919284820259",
+              "to": "918446392101",
+              "fileU": "WhatsApp Image 2025-12-19 at 14.59.35.jpeg",
+              "file": "/app/uploads/32172f69fd4629f4007246b94.59.35.jpeg",
+              "id": "a8bec8c820614d8ba084a55429716a78"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "registrationId": 8529,
+      "memberId": 10313,
+      "memberName": "Shreyas Vinod Kau",
+      "phone": "9561606066",
+      "formattedPhone": "919561606066",
+      "timestamp": "2025-12-22T08:45:00.999Z",
+      "status": "success",
+      "details": {
+        "success": true,
+        "message": "Image sent and delivered successfully",
+        "data": {
+          "status": "success",
+          "message": "Files sent successfully",
+          "deliveryReports": [
+            {
+              "status": "Success",
+              "from": "919284820259",
+              "to": "919561606066",
+              "fileU": "WhatsApp Image 2025-12-19 at 14.59.35.jpeg",
+              "file": "/app/uploads/32172f69fd4629f4007246b95.59.35.jpeg",
+              "id": "a8bec8c820614d8ba084a55429716a78"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "registrationId": 8535,
+      "memberId": 657,
+      "memberName": "Akshay Patil",
+      "phone": "9503109635",
+      "formattedPhone": "919503109635",
+      "timestamp": "2025-12-22T08:45:05.240Z",
+      "status": "success",
+      "details": {
+        "success": true,
+        "message": "Image sent and delivered successfully",
+        "data": {
+          "status": "success",
+          "message": "Files sent successfully",
+          "deliveryReports": [
+            {
+              "status": "Success",
+              "from": "919284820259",
+              "to": "919503109635",
+              "fileU": "WhatsApp Image 2025-12-19 at 14.59.35.jpeg",
+              "file": "/app/uploads/32172f69fd4629f4007246b96.59.35.jpeg",
+              "id": "a8bec8c820614d8ba084a55429716a78"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "registrationId": 8539,
+      "memberId": 10441,
+      "memberName": "OMKAR SANTOSH YADAV",
+      "phone": "9422454534",
+      "formattedPhone": "919422454534",
+      "timestamp": "2025-12-22T08:45:08.916Z",
+      "status": "success",
+      "details": {
+        "success": true,
+        "message": "Image sent and delivered successfully",
+        "data": {
+          "status": "success",
+          "message": "Files sent successfully",
+          "deliveryReports": [
+            {
+              "status": "Success",
+              "from": "919284820259",
+              "to": "919422454534",
+              "fileU": "WhatsApp Image 2025-12-19 at 14.59.35.jpeg",
+              "file": "/app/uploads/32172f69fd4629f4007246b97.59.35.jpeg",
+              "id": "a8bec8c820614d8ba084a55429716a78"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "registrationId": 8541,
+      "memberId": 367,
+      "memberName": "SACHITANAND RAMCHANDRA MANGULKAR",
+      "phone": "7745006627",
+      "formattedPhone": "917745006627",
+      "timestamp": "2025-12-22T08:45:13.161Z",
+      "status": "success",
+      "details": {
+        "success": true,
+        "message": "Image sent and delivered successfully",
+        "data": {
+          "status": "success",
+          "message": "Files sent successfully",
+          "deliveryReports": [
+            {
+              "status": "Success",
+              "from": "919284820259",
+              "to": "917745006627",
+              "fileU": "WhatsApp Image 2025-12-19 at 14.59.35.jpeg",
+              "file": "/app/uploads/32172f69fd4629f4007246b99.59.35.jpeg",
+              "id": "a8bec8c820614d8ba084a55429716a78"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "duration": "In progress"
+}

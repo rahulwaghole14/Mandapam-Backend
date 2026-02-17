@@ -1,0 +1,668 @@
+{
+  "info": {
+    "name": "Mandap Mobile App API Collection",
+    "description": "Complete API collection for mobile app with dual format support, correct field names, and new Association BOD endpoint",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "2.1.0"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{mobileAuthToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://your-production-domain.com",
+      "type": "string",
+      "description": "Update with your production server URL"
+    },
+    {
+      "key": "mobileAuthToken",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTUsInBob25lIjoiOTg4MTk3NjUyNiIsIm5hbWUiOiJyYWh1bCB3YWdob2xlIiwiYnVzaW5lc3NOYW1lIjoiUlNMIFNvbHV0aW9uIFB2dCBMdGQiLCJidXNpbmVzc1R5cGUiOiJjYXRlcmluZyIsImNpdHkiOiJQdW5lIiwiYXNzb2NpYXRpb25OYW1lIjoiUmFpZ2FkIEFzc29jaWF0aW9uIiwiaXNBY3RpdmUiOnRydWUsInVzZXJUeXBlIjoibWVtYmVyIiwiaWF0IjoxNzU3NjU1MjcyLCJleHAiOjE3NTc3NDE2NzJ9.k2igVN3PdOlVBOHvvU8ZDQNOYf6wPsE6eJsjvbByWAc",
+      "type": "string",
+      "description": "Mobile app authentication token"
+    },
+    {
+      "key": "associationId",
+      "value": "8",
+      "type": "string"
+    },
+    {
+      "key": "memberId",
+      "value": "15",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "🔐 Authentication",
+      "item": [
+        {
+          "name": "Mobile Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9881976526\",\n  \"password\": \"your_password\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "auth", "login"]
+            },
+            "description": "Login for mobile app users (members)"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"phone\": \"9881976526\",\n  \"password\": \"your_password\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/auth/login",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "auth", "login"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n  \"member\": {\n    \"id\": 15,\n    \"name\": \"rahul waghole\",\n    \"phone\": \"9881976526\",\n    \"businessName\": \"RSL Solution Pvt Ltd\",\n    \"businessType\": \"catering\",\n    \"city\": \"Pune\",\n    \"associationName\": \"Raigad Association\"\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "👥 Board of Directors (BOD)",
+      "item": [
+        {
+          "name": "Get All BOD Members (Mobile Format)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bod?page=1&limit=50&designation=President",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bod"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number"
+                },
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Items per page"
+                },
+                {
+                  "key": "designation",
+                  "value": "President",
+                  "description": "Filter by designation (optional)"
+                }
+              ]
+            },
+            "description": "Get BOD members with both web and mobile field formats. Mobile app should use _id, designation, contactNumber, associationName fields."
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/bod?page=1&limit=50",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "bod"],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "50"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"bods\": [\n    {\n      \"id\": 32,\n      \"name\": \"Dr. Rajesh Kumar\",\n      \"position\": \"Vice President\",\n      \"phone\": \"9881976526\",\n      \"email\": \"president@mandapassociation.com\",\n      \"isActive\": true,\n      \"associationId\": 1,\n      \"created_at\": \"2024-01-01T00:00:00.000Z\",\n      \"updated_at\": \"2024-01-01T00:00:00.000Z\",\n      \"_id\": \"32\",\n      \"designation\": \"Vice President\",\n      \"contactNumber\": \"9881976526\",\n      \"associationName\": \"National Board\"\n    }\n  ],\n  \"total\": 10,\n  \"page\": 1,\n  \"hasNextPage\": false\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get BOD by Association",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bod/association/{{associationId}}?page=1&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bod", "association", "{{associationId}}"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Get BOD members for a specific association"
+          }
+        },
+        {
+          "name": "Get National BOD",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bod/national?page=1&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bod", "national"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Get national BOD members"
+          }
+        },
+        {
+          "name": "Get Association BOD Members (Mobile)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/associations/{{associationId}}/bod?page=1&limit=50&designation=President&search=rajesh",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "associations", "{{associationId}}", "bod"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number"
+                },
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Items per page"
+                },
+                {
+                  "key": "designation",
+                  "value": "President",
+                  "description": "Filter by designation (optional)"
+                },
+                {
+                  "key": "search",
+                  "value": "rajesh",
+                  "description": "Search by name, position, or email (optional)"
+                }
+              ]
+            },
+            "description": "Get BOD members for a specific association with mobile format. Returns _id, designation, contactNumber, associationName fields."
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/associations/8/bod?page=1&limit=50",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "associations", "8", "bod"],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "50"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"association\": {\n    \"id\": 8,\n    \"name\": \"Ahmednagar Association\",\n    \"city\": \"Ahmednagar\",\n    \"state\": \"Maharashtra\"\n  },\n  \"count\": 3,\n  \"total\": 3,\n  \"page\": 1,\n  \"limit\": 50,\n  \"hasNextPage\": false,\n  \"bods\": [\n    {\n      \"_id\": \"32\",\n      \"name\": \"Dr. Rajesh Kumar\",\n      \"designation\": \"President\",\n      \"profileImage\": \"https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face&sig=32\",\n      \"contactNumber\": \"9881976526\",\n      \"email\": \"president@ahmednagarassociation.com\",\n      \"isActive\": true,\n      \"associationName\": \"Ahmednagar Association\"\n    },\n    {\n      \"_id\": \"33\",\n      \"name\": \"Mrs. Priya Sharma\",\n      \"designation\": \"Vice President\",\n      \"profileImage\": \"https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face&sig=33\",\n      \"contactNumber\": \"9876543210\",\n      \"email\": \"vicepresident@ahmednagarassociation.com\",\n      \"isActive\": true,\n      \"associationName\": \"Ahmednagar Association\"\n    }\n  ]\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "👤 Members",
+      "item": [
+        {
+          "name": "Get All Members (Mobile Format)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/members?page=1&limit=50&businessType=catering&paymentStatus=Paid",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "members"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number"
+                },
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Items per page"
+                },
+                {
+                  "key": "businessType",
+                  "value": "catering",
+                  "description": "Filter by business type (optional)"
+                },
+                {
+                  "key": "paymentStatus",
+                  "value": "Paid",
+                  "description": "Filter by payment status (optional)"
+                },
+                {
+                  "key": "city",
+                  "value": "Mumbai",
+                  "description": "Filter by city (optional)"
+                }
+              ]
+            },
+            "description": "Get members with mobile-optimized format. Returns _id, associationName, paymentStatus, isMobileVerified fields."
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/members?page=1&limit=50",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "members"],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "50"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"members\": [\n    {\n      \"_id\": \"15\",\n      \"name\": \"rahul waghole\",\n      \"businessName\": \"RSL Solution Pvt Ltd\",\n      \"businessType\": \"catering\",\n      \"phone\": \"9881976526\",\n      \"city\": \"Pune\",\n      \"state\": \"Maharashtra\",\n      \"pincode\": \"411001\",\n      \"associationName\": \"Raigad Association\",\n      \"profileImage\": \"https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face&sig=15\",\n      \"isActive\": true,\n      \"isMobileVerified\": true,\n      \"paymentStatus\": \"Paid\",\n      \"createdAt\": \"2024-01-01T00:00:00.000Z\",\n      \"updatedAt\": \"2024-01-01T00:00:00.000Z\"\n    }\n  ],\n  \"total\": 25,\n  \"page\": 1,\n  \"limit\": 50,\n  \"hasNextPage\": false\n}"
+            }
+          ]
+        },
+        {
+          "name": "Search Members",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/members/search?q=rahul&businessType=catering&city=Pune",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "members", "search"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "rahul",
+                  "description": "Search query"
+                },
+                {
+                  "key": "businessType",
+                  "value": "catering",
+                  "description": "Filter by business type"
+                },
+                {
+                  "key": "city",
+                  "value": "Pune",
+                  "description": "Filter by city"
+                }
+              ]
+            },
+            "description": "Search members with filters"
+          }
+        },
+        {
+          "name": "Get Member Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/members/{{memberId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "members", "{{memberId}}"]
+            },
+            "description": "Get specific member details"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏢 Associations",
+      "item": [
+        {
+          "name": "Get All Associations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/associations?page=1&limit=20&state=Maharashtra",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "associations"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "state",
+                  "value": "Maharashtra",
+                  "description": "Filter by state"
+                }
+              ]
+            },
+            "description": "Get all associations with member counts"
+          }
+        },
+        {
+          "name": "Get Association Details (with memberCount)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/associations/{{associationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "associations", "{{associationId}}"]
+            },
+            "description": "Get specific association details including memberCount field"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mobile/associations/8",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "mobile", "associations", "8"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"association\": {\n    \"id\": 8,\n    \"name\": \"Ahmednagar Association\",\n    \"description\": null,\n    \"address\": \"\",\n    \"city\": \"Ahmednagar\",\n    \"district\": \"Ahmednagar\",\n    \"state\": \"Maharashtra\",\n    \"pincode\": \"414001\",\n    \"phone\": null,\n    \"email\": null,\n    \"website\": null,\n    \"registrationNumber\": null,\n    \"establishedYear\": 2024,\n    \"logo\": null,\n    \"isActive\": true,\n    \"totalMembers\": 0,\n    \"totalVendors\": 0,\n    \"created_at\": \"2025-09-09T11:36:42.936Z\",\n    \"updated_at\": \"2025-09-11T10:38:57.810Z\",\n    \"memberCount\": 12\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Association Members",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/associations/{{associationId}}/members?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "associations", "{{associationId}}", "members"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get members for a specific association"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🎉 Events",
+      "item": [
+        {
+          "name": "Get All Events",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/events?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "events"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get all events"
+          }
+        },
+        {
+          "name": "Get Upcoming Events",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/events/upcoming?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "events", "upcoming"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Get upcoming events"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🎂 Birthdays",
+      "item": [
+        {
+          "name": "Get Today's Birthdays",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/birthdays/today",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "birthdays", "today"]
+            },
+            "description": "Get members celebrating birthday today"
+          }
+        },
+        {
+          "name": "Get Upcoming Birthdays",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/birthdays/upcoming",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "birthdays", "upcoming"]
+            },
+            "description": "Get members with upcoming birthdays (next 7 days)"
+          }
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Auto-set mobile auth token if not set",
+          "if (!pm.collectionVariables.get('mobileAuthToken')) {",
+          "    pm.collectionVariables.set('mobileAuthToken', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTUsInBob25lIjoiOTg4MTk3NjUyNiIsIm5hbWUiOiJyYWh1bCB3YWdob2xlIiwiYnVzaW5lc3NOYW1lIjoiUlNMIFNvbHV0aW9uIFB2dCBMdGQiLCJidXNpbmVzc1R5cGUiOiJjYXRlcmluZyIsImNpdHkiOiJQdW5lIiwiYXNzb2NpYXRpb25OYW1lIjoiUmFpZ2FkIEFzc29jaWF0aW9uIiwiaXNBY3RpdmUiOnRydWUsInVzZXJUeXBlIjoibWVtYmVyIiwiaWF0IjoxNzU3NjU1MjcyLCJleHAiOjE3NTc3NDE2NzJ9.k2igVN3PdOlVBOHvvU8ZDQNOYf6wPsE6eJsjvbByWAc');",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Test response structure",
+          "pm.test('Response is successful', function () {",
+          "    pm.response.to.have.status(200);",
+          "});",
+          "",
+          "pm.test('Response has success field', function () {",
+          "    const jsonData = pm.response.json();",
+          "    pm.expect(jsonData).to.have.property('success', true);",
+          "});",
+          "",
+          "// Test BOD API specific fields",
+          "if (pm.request.url.path.includes('api/bod')) {",
+          "    pm.test('BOD response has bods array', function () {",
+          "        const jsonData = pm.response.json();",
+          "        pm.expect(jsonData).to.have.property('bods');",
+          "        pm.expect(jsonData.bods).to.be.an('array');",
+          "    });",
+          "    ",
+          "    pm.test('BOD members have mobile fields', function () {",
+          "        const jsonData = pm.response.json();",
+          "        if (jsonData.bods && jsonData.bods.length > 0) {",
+          "            const firstBod = jsonData.bods[0];",
+          "            pm.expect(firstBod).to.have.property('_id');",
+          "            pm.expect(firstBod).to.have.property('designation');",
+          "            pm.expect(firstBod).to.have.property('contactNumber');",
+          "            pm.expect(firstBod).to.have.property('associationName');",
+          "        }",
+          "    });",
+          "}",
+          "",
+          "// Test Members API specific fields",
+          "if (pm.request.url.path.includes('api/mobile/members')) {",
+          "    pm.test('Members response has members array', function () {",
+          "        const jsonData = pm.response.json();",
+          "        pm.expect(jsonData).to.have.property('members');",
+          "        pm.expect(jsonData.members).to.be.an('array');",
+          "    });",
+          "    ",
+          "    pm.test('Members have mobile fields', function () {",
+          "        const jsonData = pm.response.json();",
+          "        if (jsonData.members && jsonData.members.length > 0) {",
+          "            const firstMember = jsonData.members[0];",
+          "            pm.expect(firstMember).to.have.property('_id');",
+          "            pm.expect(firstMember).to.have.property('associationName');",
+          "            pm.expect(firstMember).to.have.property('paymentStatus');",
+          "        }",
+          "    });",
+          "}",
+          "",
+          "// Test Association API specific fields",
+          "if (pm.request.url.path.includes('api/mobile/associations') && !pm.request.url.path.includes('/members') && !pm.request.url.path.includes('/bod')) {",
+          "    pm.test('Association has memberCount field', function () {",
+          "        const jsonData = pm.response.json();",
+          "        if (jsonData.association) {",
+          "            pm.expect(jsonData.association).to.have.property('memberCount');",
+          "            pm.expect(jsonData.association.memberCount).to.be.a('number');",
+          "        }",
+          "    });",
+          "}",
+          "",
+          "// Test Association BOD API specific fields",
+          "if (pm.request.url.path.includes('api/mobile/associations') && pm.request.url.path.includes('/bod')) {",
+          "    pm.test('Association BOD response has bods array', function () {",
+          "        const jsonData = pm.response.json();",
+          "        pm.expect(jsonData).to.have.property('bods');",
+          "        pm.expect(jsonData.bods).to.be.an('array');",
+          "    });",
+          "    ",
+          "    pm.test('Association BOD response has association info', function () {",
+          "        const jsonData = pm.response.json();",
+          "        pm.expect(jsonData).to.have.property('association');",
+          "        pm.expect(jsonData.association).to.have.property('id');",
+          "        pm.expect(jsonData.association).to.have.property('name');",
+          "    });",
+          "    ",
+          "    pm.test('Association BOD members have mobile fields', function () {",
+          "        const jsonData = pm.response.json();",
+          "        if (jsonData.bods && jsonData.bods.length > 0) {",
+          "            const firstBod = jsonData.bods[0];",
+          "            pm.expect(firstBod).to.have.property('_id');",
+          "            pm.expect(firstBod).to.have.property('designation');",
+          "            pm.expect(firstBod).to.have.property('contactNumber');",
+          "            pm.expect(firstBod).to.have.property('associationName');",
+          "        }",
+          "    });",
+          "}"
+        ]
+      }
+    }
+  ]
+}

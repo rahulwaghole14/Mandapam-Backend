@@ -1,0 +1,12 @@
+{
+  "name": "Test Mobile User",
+  "businessName": "Test Business",
+  "businessType": "sound",
+  "phone": "9876543999",
+  "city": "Mumbai",
+  "pincode": "400001",
+  "associationName": "Mumbai Mandap Association",
+  "state": "Maharashtra",
+  "email": "test999@example.com",
+  "birthDate": "1990-01-01"
+}

@@ -1,0 +1,5 @@
+name,businessName,businessType,phone,email,city,state,district,associationName,birthDate,address,pincode,gstNumber,description,experience
+Rahul Waghole,RSL Solution PVT LTD,mandap,9881976526,test@example.com,Mumbai,Maharashtra,Mumbai,Other Association,01-01-1990,123 Main Street,400001,,,
+Vedang Pawar,Vedang Solutions,mandap,9405953361,test@example.com,Mumbai,Maharashtra,Mumbai,Other Association,02-01-1990,124 Main Street,400001,,,
+Akshay Patil,Akshay multicorp,mandap,9503109635,test@example.com,Mumbai,Maharashtra,Mumbai,Other Association,03-01-1990,125 Main Street,400001,,,
+Dhanajay Paturkar,DP events,mandap,9075076647,test@example.com,Mumbai,Maharashtra,Mumbai,Other Association,04-01-1990,126 Main Street,400001,,,
