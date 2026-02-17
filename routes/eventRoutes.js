@@ -136,13 +136,7 @@ async function findOrCreateMember(memberData, transaction = null) {
     throw new Error('Business name must be at least 2 characters');
   }
 
-<<<<<<< HEAD
-  if (!businessType) {
-    throw new Error('Business type is required');
-  }
-=======
   // businessType is now optional, so no validation needed
->>>>>>> master
 
   // Check if member exists
   let member = await Member.findOne({
