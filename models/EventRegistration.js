@@ -102,6 +102,11 @@ const EventRegistration = sequelize.define('EventRegistration', {
     type: DataTypes.DATE,
     allowNull: true,
     field: 'pdf_sent_at'
+  },
+  cashReceiptNumber: {
+    type: DataTypes.STRING(100),
+    allowNull: true,
+    field: 'cash_receipt_number'
   }
 }, {
   tableName: 'event_registrations',

@@ -136,9 +136,13 @@ async function findOrCreateMember(memberData, transaction = null) {
     throw new Error('Business name must be at least 2 characters');
   }
 
+<<<<<<< HEAD
   if (!businessType) {
     throw new Error('Business type is required');
   }
+=======
+  // businessType is now optional, so no validation needed
+>>>>>>> master
 
   // Check if member exists
   let member = await Member.findOne({
@@ -1742,20 +1746,23 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
   body('name', 'Name is required').notEmpty().trim(),
   body('phone', 'Phone number is required').notEmpty().matches(/^[0-9]{10}$/).withMessage('Phone must be 10 digits'),
   body('businessName', 'Business name is required').notEmpty().trim(),
-  body('businessType', 'Business type is required')
+  body('businessType').optional({ checkFalsy: true })
     .customSanitizer((value) => {
       // Normalize 'madap' to 'mandap' (common typo from frontend)
       return value === 'madap' ? 'mandap' : value;
     })
     .isIn(['catering', 'sound', 'mandap', 'light', 'decorator', 'photography', 'videography', 'transport', 'other']),
+  body('email').optional({ checkFalsy: true }).isEmail().withMessage('Email must be valid'),
+  body('city').optional({ checkFalsy: true }).trim(),
   body('associationId').optional({ checkFalsy: true }).isInt({ min: 1 }).withMessage('Association ID must be a valid positive integer'),
-  body('photo').optional().custom((value) => {
+  body('photo').optional({ checkFalsy: true }).custom((value) => {
     if (!value || value === '' || value === null || value === undefined) return true;
     if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
       return value.length <= 500;
     }
     return false;
-  }).withMessage('Photo must be a valid Cloudinary URL')
+  }).withMessage('Photo must be a valid Cloudinary URL'),
+  body('cashReceiptNumber').optional({ checkFalsy: true }).trim().isLength({ max: 100 }).withMessage('Cash receipt number must be less than 100 characters')
 ], async (req, res) => {
   const requestStartTime = new Date();
   Logger.info('Manual Registration: ========== REQUEST START ==========', {
@@ -1772,7 +1779,12 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
       businessType: req.body.businessType,
       city: req.body.city,
       associationId: req.body.associationId,
+<<<<<<< HEAD
       hasPhoto: !!req.body.photo
+=======
+      hasPhoto: !!req.body.photo,
+      cashReceiptNumber: req.body.cashReceiptNumber ? '***' : null
+>>>>>>> master
     }
   });
 
@@ -1788,7 +1800,11 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
     }
 
     const eventId = parseInt(req.params.id, 10);
+<<<<<<< HEAD
     const { name, phone, email, businessName, businessType, city, associationId, photo } = req.body;
+=======
+    const { name, phone, email, businessName, businessType, city, associationId, photo, cashReceiptNumber } = req.body;
+>>>>>>> master
 
     Logger.info('Manual Registration: Request data parsed', {
       eventId,
@@ -1799,7 +1815,12 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
       businessType,
       city,
       associationId,
+<<<<<<< HEAD
       hasPhoto: !!photo
+=======
+      hasPhoto: !!photo,
+      hasCashReceiptNumber: !!cashReceiptNumber
+>>>>>>> master
     });
 
     if (isNaN(eventId)) {
@@ -1919,6 +1940,10 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
         paymentStatus: 'paid',
         // paymentMethod: 'cash', // Column doesn't exist in DB yet
         amountPaid: fee,
+<<<<<<< HEAD
+=======
+        cashReceiptNumber: cashReceiptNumber || null,
+>>>>>>> master
         registeredAt: new Date()
       }, { transaction: registrationTransaction });
 
@@ -1927,7 +1952,12 @@ router.post('/:id/manual-registration', protect, authorize(['admin', 'manager', 
         eventId: registration.eventId,
         memberId: registration.memberId,
         paymentStatus: registration.paymentStatus,
+<<<<<<< HEAD
         amountPaid: registration.amountPaid
+=======
+        amountPaid: registration.amountPaid,
+        cashReceiptNumber: registration.cashReceiptNumber ? '***' : null
+>>>>>>> master
       });
 
       // Update event attendee count
