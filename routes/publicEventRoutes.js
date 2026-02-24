@@ -2190,61 +2190,68 @@ router.post('/events/:id/registrations/:registrationId/send-whatsapp',
       });
 
       try {
-        // Send synchronously to get actual result before responding
+        // Send asynchronously - fire and forget
         const result = await whatsappService.sendPdfViaWhatsApp(
           cleanPhone,
           pdfBuffer,
-          memberName
+          memberName,
+          (status, message) => {
+            // Progress callback for background updates
+            Logger.info('WhatsApp Send: Progress update', {
+              registrationId,
+              status,
+              message,
+              timestamp: new Date().toISOString()
+            });
+          }
         );
 
-        const sendEndTime = new Date();
-        const sendDuration = sendEndTime.getTime() - sendStartTime.getTime();
-
-        if (result.success) {
-          Logger.info('WhatsApp Send: Sent successfully', {
+        if (result.success && result.isAsync) {
+          // Async send started successfully - update lock to sent time immediately
+          Logger.info('WhatsApp Send: Async send started', {
             registrationId,
-            durationMs: sendDuration,
-            timestamp: sendEndTime.toISOString()
+            durationMs: Date.now() - sendStartTime.getTime(),
+            timestamp: new Date().toISOString()
           });
 
+          // Update lock to sent time immediately (releases lock)
           const updateResult = await updateLockToSentTime(registrationId);
 
           if (!updateResult.updated) {
             Logger.warn('WhatsApp Send: Lock was released by another process', { registrationId });
           } else {
-            Logger.info('WhatsApp Send: pdfSentAt updated', {
+            Logger.info('WhatsApp Send: pdfSentAt updated (async)', {
               registrationId,
               pdfSentAt: updateResult.actualSentTime.toISOString()
             });
           }
 
-          await notifyManagerOnWhatsAppSent(authenticatedUserId, registration, registration.event, registration.member);
-
           return res.status(200).json({
             success: true,
-            message: 'Visitor pass sent via WhatsApp successfully',
+            message: 'WhatsApp send started in background',
+            isAsync: true,
+            registrationId,
             phone: cleanPhone,
-            registrationId: registrationId
+            memberName
           });
         } else {
-          Logger.error('WhatsApp Send: Failed', null, {
+          // Failed to start async send
+          Logger.error('WhatsApp Send: Failed to start async send', {
             registrationId,
-            durationMs: sendDuration,
-            error: result.error || 'Unknown error'
+            error: result.error,
+            durationMs: Date.now() - sendStartTime.getTime()
           });
 
-          // Don't update pdfSentAt if send failed - allow retry
+          // Release lock on failure
           await releaseWhatsAppLock(registrationId);
 
-          // Return error response to frontend so user knows what happened
           return res.status(500).json({
             success: false,
-            message: result.error || 'Failed to send WhatsApp message. Please try again.',
-            error: result.error,
-            phone: cleanPhone,
+            message: result.error || 'Failed to start WhatsApp send',
             canRetry: true
           });
         }
+
       } catch (whatsappError) {
         const sendEndTime = new Date();
         const sendDuration = sendEndTime.getTime() - sendStartTime.getTime();
