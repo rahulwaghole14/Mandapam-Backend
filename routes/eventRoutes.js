@@ -35,6 +35,27 @@ const {
 
 const router = express.Router();
 
+// Helper function to determine payment method from existing fields
+const getPaymentMethod = (registration) => {
+  // Free event (no payment required)
+  if (!registration.amountPaid || registration.amountPaid === 0) {
+    return 'free';
+  }
+  
+  // Razorpay payment (has payment_id starting with 'razorpay_')
+  if (registration.paymentId && registration.paymentId.startsWith('razorpay_')) {
+    return 'razorpay';
+  }
+  
+  // Cash payment (has cash receipt number or no payment_id but amount paid)
+  if (registration.cashReceiptNumber || (registration.amountPaid > 0 && !registration.paymentId)) {
+    return 'cash';
+  }
+  
+  // Default fallback
+  return 'cash';
+};
+
 const ensureProfileImageUrl = (value, baseUrl) => {
   if (!value) {
     return { url: null, stored: null };
@@ -1368,6 +1389,7 @@ router.get('/:id/registrations', protect, async (req, res) => {
         city: fullMember?.city || null,
         amountPaid: registration.amountPaid,
         paymentStatus: registration.paymentStatus,
+        paymentMethod: getPaymentMethod(registration),
         status: registration.status,
         registeredAt: registration.registeredAt,
         attendedAt: registration.attendedAt,
@@ -2414,6 +2436,7 @@ router.get('/my/registrations', protect, async (req, res) => {
       event: r.event,
       status: r.status,
       paymentStatus: r.paymentStatus,
+      paymentMethod: getPaymentMethod(r),
       amountPaid: r.amountPaid,
       registeredAt: r.registeredAt,
       attendedAt: r.attendedAt,
