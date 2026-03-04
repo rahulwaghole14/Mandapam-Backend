@@ -1,28 +1,41 @@
 # Payment Method Field Implementation (No Database Changes)
 
 ## Overview
-Added `paymentMethod` field to event registration responses across all endpoints **without requiring database modifications**. The payment method is calculated dynamically based on existing registration data.
+Added `paymentMethod` field to event registration responses across all endpoints **without requiring database modifications**. The payment method is calculated dynamically based on existing registration data with improved detection logic.
 
 ## Changes Made
 
 ### 1. Helper Function Implementation
 - **Files**: `routes/eventRoutes.js` and `routes/mobileEventRoutes.js`
 - **Action**: Added `getPaymentMethod()` helper function
-- **Logic**: Calculates payment method based on existing fields:
+- **Logic**: Calculates payment method based on existing fields with enhanced pattern detection:
   ```javascript
   const getPaymentMethod = (registration) => {
+    // Convert amountPaid to number for proper comparison
+    const amountPaid = parseFloat(registration.amountPaid) || 0;
+    
     // Free event (no payment required)
-    if (!registration.amountPaid || registration.amountPaid === 0) {
+    if (amountPaid === 0) {
       return 'free';
     }
     
-    // Razorpay payment (has payment_id starting with 'razorpay_')
-    if (registration.paymentId && registration.paymentId.startsWith('razorpay_')) {
-      return 'razorpay';
+    // Razorpay payment detection - handle various patterns
+    if (registration.paymentId) {
+      const paymentId = registration.paymentId.toString();
+      
+      // Check for razorpay patterns
+      if (
+        paymentId.startsWith('razorpay_') || 
+        paymentId.startsWith('pay_') || 
+        paymentId.startsWith('order_') ||
+        paymentId.match(/^[a-zA-Z0-9]{10,}$/) // Long alphanumeric IDs
+      ) {
+        return 'razorpay';
+      }
     }
     
     // Cash payment (has cash receipt number or no payment_id but amount paid)
-    if (registration.cashReceiptNumber || (registration.amountPaid > 0 && !registration.paymentId)) {
+    if (registration.cashReceiptNumber || (amountPaid > 0 && !registration.paymentId)) {
       return 'cash';
     }
     
@@ -53,9 +66,17 @@ Added `paymentMethod` field to event registration responses across all endpoints
 
 | Value | Description | Detection Logic |
 |-------|-------------|------------------|
-| `free` | Free event | `amountPaid` is 0 or null |
-| `razorpay` | Online payment via Razorpay | `paymentId` starts with 'razorpay_' |
+| `free` | Free event | `amountPaid` is 0 or null (after parseFloat conversion) |
+| `razorpay` | Online payment via Razorpay | `paymentId` starts with 'razorpay_', 'pay_', 'order_', OR is long alphanumeric (10+ chars) |
 | `cash` | Cash payment at venue | `cashReceiptNumber` exists OR `amountPaid` > 0 with no `paymentId` |
+
+## Enhanced Razorpay Detection
+
+The improved logic now handles various Razorpay payment ID patterns:
+- `razorpay_pay_1234567890` - Standard Razorpay format
+- `pay_1234567890` - Short Razorpay format  
+- `order_1234567890` - Razorpay order format
+- `raz123abc456def789` - Long alphanumeric IDs (10+ characters)
 
 ## API Response Examples
 
@@ -110,7 +131,7 @@ Test the following endpoints to verify the `paymentMethod` field appears in resp
 // Result: paymentMethod = 'free'
 ```
 
-### Example 2: Razorpay Payment
+### Example 2: Razorpay Payment (Standard)
 ```javascript
 {
   amountPaid: 500,
@@ -120,7 +141,17 @@ Test the following endpoints to verify the `paymentMethod` field appears in resp
 // Result: paymentMethod = 'razorpay'
 ```
 
-### Example 3: Cash Payment
+### Example 3: Razorpay Payment (Short Format)
+```javascript
+{
+  amountPaid: 500,
+  paymentId: 'pay_1234567890',
+  cashReceiptNumber: null
+}
+// Result: paymentMethod = 'razorpay'
+```
+
+### Example 4: Cash Payment
 ```javascript
 {
   amountPaid: 500,
@@ -130,7 +161,7 @@ Test the following endpoints to verify the `paymentMethod` field appears in resp
 // Result: paymentMethod = 'cash'
 ```
 
-### Example 4: Cash Payment (without receipt number)
+### Example 5: Cash Payment (without receipt number)
 ```javascript
 {
   amountPaid: 500,
@@ -140,6 +171,31 @@ Test the following endpoints to verify the `paymentMethod` field appears in resp
 // Result: paymentMethod = 'cash' (fallback)
 ```
 
+## Troubleshooting
+
+### If All Records Show as "cash"
+
+1. **Check paymentId patterns in your database**:
+   ```sql
+   SELECT DISTINCT payment_id FROM event_registrations WHERE payment_id IS NOT NULL LIMIT 10;
+   ```
+
+2. **Verify amountPaid values**:
+   ```sql
+   SELECT DISTINCT amount_paid FROM event_registrations LIMIT 10;
+   ```
+
+3. **Check for free events**:
+   ```sql
+   SELECT COUNT(*) as free_events FROM event_registrations WHERE amount_paid = 0 OR amount_paid IS NULL;
+   ```
+
+4. **Common issues and solutions**:
+   - **Issue**: paymentId doesn't match expected patterns
+   - **Solution**: Add new patterns to the detection logic
+   - **Issue**: amountPaid stored as string
+   - **Solution**: parseFloat conversion handles this automatically
+
 ## Benefits of This Approach
 
 1. **No Database Changes**: Works with existing database schema
@@ -147,6 +203,7 @@ Test the following endpoints to verify the `paymentMethod` field appears in resp
 3. **Immediate Implementation**: Can be deployed without migration
 4. **Flexible Logic**: Easy to modify detection rules if needed
 5. **Consistent**: Same logic applied across all endpoints
+6. **Enhanced Detection**: Handles various Razorpay payment ID formats
 
 ## Notes
 
@@ -154,3 +211,4 @@ Test the following endpoints to verify the `paymentMethod` field appears in resp
 - Logic can be easily modified in the helper function if business rules change
 - Frontend applications can now display payment method information to users
 - No migration required - implementation is ready to use immediately
+- Enhanced detection logic handles multiple Razorpay payment ID formats

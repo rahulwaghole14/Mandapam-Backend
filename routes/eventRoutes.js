@@ -37,22 +37,35 @@ const router = express.Router();
 
 // Helper function to determine payment method from existing fields
 const getPaymentMethod = (registration) => {
+  // Convert amountPaid to number for proper comparison
+  const amountPaid = parseFloat(registration.amountPaid) || 0;
+  
   // Free event (no payment required)
-  if (!registration.amountPaid || registration.amountPaid === 0) {
+  if (amountPaid === 0) {
     return 'free';
   }
   
-  // Razorpay payment (has payment_id starting with 'razorpay_')
-  if (registration.paymentId && registration.paymentId.startsWith('razorpay_')) {
-    return 'razorpay';
+  // Razorpay payment detection - handle various patterns
+  if (registration.paymentId && typeof registration.paymentId === 'string') {
+    const paymentId = registration.paymentId.toString();
+    
+    // Check for razorpay patterns
+    if (
+      paymentId.startsWith('razorpay_') || 
+      paymentId.startsWith('pay_') || 
+      paymentId.startsWith('order_') ||
+      paymentId.match(/^[a-zA-Z0-9]{10,}$/) // Long alphanumeric IDs
+    ) {
+      return 'razorpay';
+    }
   }
   
   // Cash payment (has cash receipt number or no payment_id but amount paid)
-  if (registration.cashReceiptNumber || (registration.amountPaid > 0 && !registration.paymentId)) {
+  if (registration.cashReceiptNumber || (amountPaid > 0 && !registration.paymentId)) {
     return 'cash';
   }
   
-  // Default fallback
+  // Default fallback (includes numeric paymentIds)
   return 'cash';
 };
 
